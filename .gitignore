@@ -1,0 +1,12 @@
+# Ignore the Rust build output by default.
+*
+
+# Keep only the user-facing release files.
+!.gitignore
+!.gitattributes
+!README.md
+!assets/
+!assets/**
+!bundle/
+!bundle/nsis/
+!bundle/nsis/OpenGalgame_0.1.0_x64-setup.exe
