@@ -16,12 +16,6 @@ OpenGalgame 是面向 Galgame、视觉小说和强剧情互动作品创作者的
 OpenGalgame_0.2.0_x64-setup.exe
 ```
 
-如果是在源码构建产物目录中查看本文件，安装包通常位于：
-
-```text
-bundle\nsis\OpenGalgame_0.2.0_x64-setup.exe
-```
-
 ## 安装
 
 1. 打开 GitHub Releases 页面，下载 `OpenGalgame_0.2.0_x64-setup.exe`。
@@ -62,7 +56,7 @@ bundle\nsis\OpenGalgame_0.2.0_x64-setup.exe
 | `Ctrl+C` | 复制资料栏当前选中的资源。 |
 | `Ctrl+V` | 把已复制或剪切的资源粘贴到当前资料分类。 |
 | `F2` | 重命名资料栏当前选中的资源。 |
-| `Delete` | 删除资料栏当前选中的资源，删除前会要求确认。 |
+| `删除` | 删除资料栏当前选中的资源，删除前会要求确认。 |
 | `Ctrl+Shift+C` | 复制资料栏当前资源的项目相对路径。 |
 | `Ctrl+K` 后再按 `Ctrl+Shift+C` | 复制资料栏当前资源在本机上的完整路径。 |
 | `Shift+Alt+R` | 在 Windows 文件资源管理器中显示当前资源。 |
