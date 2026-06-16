@@ -13,7 +13,7 @@ OpenGalgame 是面向 Galgame、视觉小说和强剧情互动作品创作者的
 当前 Windows x64 测试包文件名：
 
 ```text
-OpenGalgame_0.2.0_x64-setup.exe
+OpenGalgame_[版本名]_x64-setup.exe
 ```
 
 ## 安装
