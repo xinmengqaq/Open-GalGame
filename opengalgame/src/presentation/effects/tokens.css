@@ -1,0 +1,69 @@
+:root {
+  --ink: #3b365f;
+  --ink-strong: #2f2a4f;
+  --muted: #6f6584;
+  --muted-soft: #8b819c;
+  --line: #d7c8e8;
+  --line-soft: #e8def0;
+  --lav: #f6edf7;
+  --lav-deep: #eadcf0;
+  --purple: #8d67ab;
+  --purple-deep: #5a4477;
+  --purple-shadow: #65487f;
+  --purple-wash: #f2e6f6;
+  --teal: #4a9c9b;
+  --teal-deep: #357d76;
+  --mint: #cfe7df;
+  --mint-soft: #eaf5f0;
+  --cream: #fff6e3;
+  --cream-soft: #fffaef;
+  --paper: #fffcf7;
+  --paper-strong: #fffdfb;
+  --white: #fffdfb;
+  --rose: #b0627a;
+  --error: #8a3a3a;
+  --warning: #966721;
+  --success: #357d76;
+
+  --surface: var(--paper);
+  --surface-raised: var(--paper-strong);
+  --surface-selected: var(--purple-wash);
+  --surface-warning: var(--cream);
+  --surface-danger: #fbeef1;
+  --type-document: var(--teal-deep);
+  --type-image: var(--purple);
+  --type-audio: var(--warning);
+  --type-video: var(--rose);
+  --type-prompt: var(--warning);
+  --type-animation: var(--teal-deep);
+  --type-effect: var(--purple-deep);
+  --font-display: 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+  --workbench-wash:
+    radial-gradient(ellipse at 78% 47%, #fff6ce70 0%, #ead4f350 32%, transparent 60%),
+    linear-gradient(140deg, #fbf6ff 0%, #f3e8f5 42%, #cce3e3 100%);
+
+  --font-sans: 'Yu Gothic', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --font-mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius: 8px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  --shadow-paper: 0 1px 0 #ffffff inset, 0 10px 24px -18px #4a3e6e66;
+  --shadow-panel: 0 18px 48px -32px #4a3e6e70, 0 2px 8px -6px #4a3e6e33;
+  --shadow-float: 0 22px 60px -30px #4a3e6e88;
+
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 420ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}

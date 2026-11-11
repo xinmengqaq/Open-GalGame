@@ -1,0 +1,190 @@
+.trigger {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d7c8e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #3b365f;
+  text-align: left;
+  font: inherit;
+  font-weight: 500;
+}
+
+.trigger:focus-visible,
+.trigger[aria-expanded='true'] {
+  border-color: #9a5abd;
+  box-shadow: 0 0 0 3px #9a5abd33;
+  outline: none;
+}
+
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  transform-origin: center;
+}
+
+.trigger[aria-expanded='true'] .chevron {
+  transform: rotate(180deg);
+}
+
+.menu {
+  z-index: 12;
+  width: var(--radix-select-trigger-width);
+  border: 1px solid #d7c8e8;
+  border-radius: 8px;
+  background: #fffcf7;
+  box-shadow:
+    0 16px 36px #3b365f28,
+    3px 3px 0 #cbb6de;
+}
+
+.viewport {
+  max-height: min(240px, var(--radix-select-content-available-height));
+  overflow: auto;
+  padding: 6px;
+}
+
+.option {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: #3b365f;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.option[data-highlighted] {
+  background: #f3eaf8;
+  outline: none;
+}
+
+.option[data-state='checked'] {
+  color: #4a3e6e;
+  font-weight: 700;
+}
+
+/* 工作台弹层里的下拉：与表单同一套浅底控件、柔光焦点和无边框浮层菜单。 */
+:global([data-theme='workbench']) .trigger {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-color: transparent;
+  border-radius: var(--wb-radius-control);
+  background: var(--wb-wash-ink);
+  box-shadow: inset 0 0 0 1px var(--wb-hairline);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: 14.5px;
+  font-weight: 500;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease);
+}
+
+:global([data-theme='workbench']) .trigger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: inset 0 0 0 1px var(--wb-hairline-strong);
+}
+
+:global([data-theme='workbench']) .trigger:focus-visible,
+:global([data-theme='workbench']) .trigger[aria-expanded='true'] {
+  border-color: transparent;
+  background: var(--wb-surface-soft);
+  box-shadow: var(--wb-focus);
+  outline: none;
+}
+
+:global([data-theme='workbench']) .trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+:global([data-theme='workbench']) .chevron {
+  width: 15px;
+  height: 15px;
+  color: var(--wb-text-muted);
+  transition: transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+:global([data-theme='workbench']) .menu {
+  z-index: 12;
+  width: var(--radix-select-trigger-width);
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--paper-strong) 92%, var(--lav));
+  box-shadow: var(--wb-shadow-soft);
+  font-family: var(--wb-font);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: menuIn var(--wb-duration-fast) var(--wb-ease);
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+:global([data-theme='workbench']) .viewport {
+  max-height: min(240px, var(--radix-select-content-available-height));
+  padding: 6px;
+}
+
+:global([data-theme='workbench']) .option {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: 14px;
+  font-weight: 500;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+:global([data-theme='workbench']) .option[data-highlighted] {
+  background: var(--wb-wash-lilac);
+  color: var(--wb-text-strong);
+  outline: none;
+}
+
+:global([data-theme='workbench']) .option[data-state='checked'] {
+  color: var(--wb-accent-strong);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global([data-theme='workbench']) .menu {
+    animation: none;
+  }
+}

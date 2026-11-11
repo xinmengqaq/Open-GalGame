@@ -1,0 +1,10 @@
+{
+  "node_version": "24",
+  "graphs": {
+    "debug": "./scripts/langsmith-studio/dev-entry.ts:graph"
+  },
+  "env": {
+    "LANGSMITH_TRACING": "false",
+    "TSX_TSCONFIG_PATH": "./scripts/langsmith-studio/tsconfig.json"
+  }
+}

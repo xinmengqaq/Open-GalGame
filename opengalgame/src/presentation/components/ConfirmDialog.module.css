@@ -1,0 +1,265 @@
+.content {
+  display: grid;
+  gap: 14px;
+  color: var(--ink);
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.content p {
+  margin: 0;
+}
+
+.target {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #fffdfb 0%, #f7f0fa 100%);
+}
+
+.targetIcon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #ddc9ed;
+  border-radius: 8px;
+  background: var(--purple-wash);
+  color: var(--purple-deep);
+}
+
+.targetIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.targetCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.targetTitle {
+  color: var(--ink-strong);
+  font-size: 15.5px;
+  font-weight: 750;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.targetMeta {
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.message {
+  color: var(--ink);
+}
+
+.scope {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scope li {
+  position: relative;
+  padding-left: 17px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.scope li::before {
+  position: absolute;
+  top: 0.62em;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--purple);
+  content: '';
+}
+
+.caveat {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 13px;
+  border: 1px solid #e7c4ce;
+  border-radius: 8px;
+  background: #fdf1f4;
+  color: #7d2f3a;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.caveat[data-tone='neutral'] {
+  border-color: #cfe7df;
+  background: linear-gradient(135deg, #f0fbf7 0%, #fdfaf3 100%);
+  color: var(--teal-deep);
+}
+
+.caveatIcon {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin-top: 1px;
+}
+
+.caveatIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.failure {
+  padding: 10px 12px;
+  border: 1px solid #d9a9b4;
+  border-radius: 8px;
+  background: #fce9ed;
+  color: var(--error);
+  font-weight: 700;
+}
+
+.blocked {
+  padding: 10px 12px;
+  border: 1px solid #e6d3b0;
+  border-radius: 8px;
+  background: #fdf8ec;
+  color: var(--warning);
+  font-weight: 650;
+}
+
+/* 工作台确认框：目标和提示改成无边框洗光行，危险信息只保留柔光底和状态点。 */
+:global([data-theme='workbench']) .content {
+  gap: 13px;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+:global([data-theme='workbench']) .target {
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--wb-wash-lilac-soft);
+}
+
+:global([data-theme='workbench']) .targetIcon {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+:global([data-theme='workbench']) .targetIcon svg {
+  width: 19px;
+  height: 19px;
+}
+
+:global([data-theme='workbench']) .targetTitle {
+  color: var(--wb-text-strong);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+:global([data-theme='workbench']) .targetMeta {
+  color: var(--wb-text-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+:global([data-theme='workbench']) .message {
+  color: var(--wb-text);
+}
+
+:global([data-theme='workbench']) .scope {
+  gap: 7px;
+}
+
+:global([data-theme='workbench']) .scope li {
+  padding-left: 16px;
+  color: var(--wb-text);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+:global([data-theme='workbench']) .scope li::before {
+  top: 0.68em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--wb-accent);
+  opacity: 0.75;
+}
+
+:global([data-theme='workbench']) .caveat {
+  gap: 9px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+:global([data-theme='workbench']) .caveat[data-tone='neutral'] {
+  background: var(--wb-wash-mint);
+  color: var(--wb-positive-strong);
+}
+
+:global([data-theme='workbench']) .caveatIcon {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+:global([data-theme='workbench']) .failure,
+:global([data-theme='workbench']) .blocked {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 13px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+:global([data-theme='workbench']) .failure {
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+:global([data-theme='workbench']) .blocked {
+  background: var(--wb-wash-warning);
+  color: var(--wb-warning);
+}
+
+:global([data-theme='workbench']) .failure::before,
+:global([data-theme='workbench']) .blocked::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin-top: 0.55em;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}

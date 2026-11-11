@@ -1,0 +1,588 @@
+/*
+ * 只读游戏候选面板：审阅入口和“游戏候选”标签共用同一套身份、画面与状态行。
+ * 外层不加卡片、边框或第二层阴影；舞台是唯一的画面主体，状态行和问题入口
+ * 只用间距、字号和轻量底色分层。颜色、圆角、字体和动效全部取 --wb-* / tokens.css。
+ */
+
+.wb-candidate {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+/* ---------- 身份行 ---------- */
+.wb-candidate__head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.wb-candidate__label {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--wb-accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.wb-candidate__label svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-candidate__scene {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--wb-text-strong);
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-candidate__readonly {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.wb-candidate__readonly svg {
+  width: 11px;
+  height: 11px;
+}
+
+.wb-candidate__short {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: var(--wb-wash-ink);
+  color: var(--wb-text-faint);
+  font-family: var(--wb-font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 问题浮层（覆盖舞台，不挤压布局） ---------- */
+.wb-candidate__issues {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  max-height: 72%;
+  flex-direction: column;
+  gap: 4px;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgb(255 253 251 / 95%);
+  box-shadow:
+    inset 0 0 0 1px rgb(85 70 121 / 12%),
+    0 22px 44px -26px rgb(40 31 62 / 62%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition:
+    opacity 140ms ease,
+    transform 160ms ease,
+    visibility 160ms;
+  visibility: hidden;
+  backdrop-filter: blur(10px);
+}
+
+.wb-candidate__issues[data-open='true'] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  visibility: visible;
+}
+
+.wb-candidate__issues-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+  color: var(--wb-text-strong);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.wb-candidate__issues-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-candidate__issues-head svg {
+  width: 13px;
+  height: 13px;
+}
+
+.wb-candidate__issues-head button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--wb-text-faint);
+  cursor: pointer;
+}
+
+.wb-candidate__issues-head button:hover {
+  background: var(--wb-wash-ink);
+  color: var(--wb-text);
+}
+
+.wb-candidate__issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-candidate__issue {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 2px;
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.wb-candidate__issue + .wb-candidate__issue {
+  box-shadow: inset 0 1px 0 var(--wb-hairline);
+}
+
+.wb-candidate__issue-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 2px;
+  place-items: center;
+  color: var(--wb-warning);
+}
+
+.wb-candidate__issue-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-candidate__issue-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wb-candidate__issue-copy small {
+  color: var(--wb-text-faint);
+  font-size: 12px;
+}
+
+/* ---------- 声音提示 ---------- */
+/* 浏览器只在真实点击后允许播放声音；提示放在舞台下方，不遮挡画面。 */
+.wb-candidate__sound {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--wb-wash-ink);
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.wb-candidate__sound > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 2px;
+  color: var(--wb-accent-strong);
+}
+
+.wb-candidate__sound > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.wb-candidate__sound button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  margin-top: -1px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--wb-text-faint);
+  cursor: pointer;
+}
+
+.wb-candidate__sound button:hover {
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.wb-candidate__sound button svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---------- 状态行 ---------- */
+.wb-candidate__bar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.wb-candidate__phase {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.wb-candidate__phase i {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.wb-candidate__phase[data-tone='live'] {
+  color: var(--wb-accent);
+}
+
+.wb-candidate__phase[data-tone='ready'] {
+  color: var(--wb-positive-strong);
+}
+
+.wb-candidate__phase[data-tone='warn'] {
+  color: var(--wb-warning);
+}
+
+.wb-candidate__phase[data-tone='danger'] {
+  color: var(--wb-danger-strong);
+}
+
+.wb-candidate__phase[data-tone='muted'] {
+  color: var(--wb-text-faint);
+}
+
+.wb-candidate__read {
+  flex: none;
+  color: var(--wb-text-faint);
+  font-size: 12px;
+}
+
+.wb-candidate__issues-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-wash-warning);
+  color: var(--wb-warning);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  transition:
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.wb-candidate__issues-toggle:hover {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.wb-candidate__issues-toggle:active {
+  transform: translateY(1px);
+}
+
+.wb-candidate__issues-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+
+.wb-candidate__issues-toggle svg[data-open='true'] {
+  transform: rotate(180deg);
+}
+
+.wb-candidate__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wb-candidate__action {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-wash-ink);
+  color: var(--wb-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.wb-candidate__action:hover {
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.wb-candidate__action:active {
+  transform: translateY(1px);
+}
+
+.wb-candidate__action:disabled {
+  cursor: default;
+  opacity: 0.55;
+  transform: none;
+}
+
+.wb-candidate__action svg {
+  width: 13px;
+  height: 13px;
+}
+
+.wb-candidate__action--primary {
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.wb-candidate__pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wb-text-faint);
+  font-size: 12px;
+}
+
+.wb-candidate__pending svg {
+  width: 13px;
+  height: 13px;
+  animation: wb-candidate-spin 1.1s linear infinite;
+}
+
+/* 超过冻结阈值只提示等待较久：文字加图标，不改成失败色，也不继续旋转。 */
+.wb-candidate__pending[data-stalled='true'] {
+  color: var(--wb-warning);
+}
+
+.wb-candidate__pending[data-stalled='true'] svg {
+  animation: none;
+}
+
+.wb-candidate__action:focus-visible,
+.wb-candidate__issues-toggle:focus-visible,
+.wb-candidate__issues-head button:focus-visible,
+.wb-candidate__sound button:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+@keyframes wb-candidate-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-candidate__pending svg {
+    animation: none;
+  }
+
+  .wb-candidate__issues,
+  .wb-candidate__action,
+  .wb-candidate__issues-toggle {
+    transition-duration: 90ms;
+  }
+}
+
+/* ---------- 游戏候选标签 ---------- */
+/* 抽屉标签页给画面留出主要空间；身份行、状态行和问题入口仍由同一面板承担。 */
+.wb-candidate-tab {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 0 4px;
+}
+
+.wb-candidate-tab .wb-candidate {
+  flex: 1;
+  min-height: 0;
+}
+
+.wb-candidate-tab .wb-candidate [data-stage-status] {
+  flex: 0 1 auto;
+}
+
+.wb-candidate-tab__count {
+  display: inline-grid;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 5px;
+  padding: 0 4px;
+  place-items: center;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-wash-warning);
+  color: var(--wb-warning);
+  font-family: var(--wb-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.wb-candidate-tab__live {
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--wb-positive-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-positive-strong) 16%, transparent);
+}
+
+/* 审阅气泡里的候选入口：只负责切到只读标签，不在这里嵌第二份画面。 */
+.wb-gen-candidate-entry {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 16px;
+  background:
+    radial-gradient(90% 130% at 100% 0%, rgb(207 231 223 / 52%), transparent 62%),
+    linear-gradient(140deg, rgb(255 253 251 / 86%), rgb(246 237 247 / 74%));
+  box-shadow:
+    inset 0 0 0 1px rgb(141 103 171 / 14%),
+    inset 0 1px 0 rgb(255 255 255 / 92%),
+    var(--wb-shadow-chip, 0 8px 20px -14px rgb(40 31 62 / 42%));
+  color: var(--wb-text);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform var(--wb-duration-fast, 160ms) var(--wb-ease, ease),
+    box-shadow var(--wb-duration-fast, 160ms) var(--wb-ease, ease),
+    background var(--wb-duration-fast, 160ms) var(--wb-ease, ease);
+}
+
+.wb-gen-candidate-entry:hover {
+  background:
+    radial-gradient(90% 130% at 100% 0%, rgb(207 231 223 / 62%), transparent 62%),
+    linear-gradient(140deg, rgb(255 255 252 / 94%), rgb(246 237 247 / 86%));
+  box-shadow:
+    inset 0 0 0 1px rgb(141 103 171 / 22%),
+    inset 0 1px 0 rgb(255 255 255 / 96%),
+    0 18px 32px -26px rgb(74 62 110 / 62%);
+  transform: translateY(-1px);
+}
+
+.wb-gen-candidate-entry:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.wb-gen-candidate-entry__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--wb-wash-lilac);
+  box-shadow: inset 0 0 0 1px rgb(141 103 171 / 12%);
+  color: var(--wb-accent-strong);
+}
+
+.wb-gen-candidate-entry__icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.wb-gen-candidate-entry__copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.wb-gen-candidate-entry__copy strong {
+  color: var(--wb-text-strong);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.wb-gen-candidate-entry__copy small {
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.wb-gen-candidate-entry__arrow {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--wb-text-faint);
+  transition: transform var(--wb-duration-fast, 160ms) var(--wb-ease, ease);
+}
+
+.wb-gen-candidate-entry:hover .wb-gen-candidate-entry__arrow {
+  transform: translate(2px, -2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-gen-candidate-entry,
+  .wb-gen-candidate-entry__arrow {
+    transition-duration: 90ms;
+  }
+}

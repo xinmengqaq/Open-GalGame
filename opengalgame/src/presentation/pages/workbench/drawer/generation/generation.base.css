@@ -1,0 +1,386 @@
+/*
+ * 生成面板。选择器全部以 .wb-gen 前缀限定，只作用于 AI 内容区；
+ * 颜色、圆角、阴影和字体来自 --wb-* / tokens.css，不新增全局变量。
+ * 字号只用 12 / 14 / 16 / 18 / 20 / 24 六级：正文 14，元信息 12。
+ */
+
+/* ---------- 面板骨架 ---------- */
+.wb-gen-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.wb-gen-current {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+/* 当前生成自己的头部：工程 / 场景 / 状态 / Token，不放进抽屉顶栏。 */
+.wb-gen-head {
+  flex: none;
+}
+
+/* ---------- 头部：工程名 / 场景 / 状态 / Token ---------- */
+.wb-gen-header {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  gap: 18px;
+}
+
+.wb-gen-header__title {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+}
+
+.wb-gen-header__name {
+  margin: 0;
+  overflow: hidden;
+  color: var(--wb-text-strong);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-gen-header__subline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  margin: 0;
+  color: var(--wb-text-faint);
+  font-size: 14px;
+}
+
+.wb-gen-header__scene {
+  overflow: hidden;
+  color: var(--wb-text-muted);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-gen-header__dot {
+  width: 3px;
+  height: 3px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--wb-hairline-strong);
+}
+
+.wb-gen-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-surface-soft);
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.wb-gen-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.wb-gen-pill[data-tone='live'] {
+  background: var(--wb-wash-mint);
+  color: var(--wb-positive-strong);
+}
+
+.wb-gen-pill[data-tone='wait'] {
+  background: var(--wb-wash-warning);
+  color: var(--wb-warning);
+}
+
+.wb-gen-pill[data-tone='done'] {
+  background: var(--wb-wash-mint);
+  color: var(--wb-positive-strong);
+}
+
+.wb-gen-pill[data-tone='danger'] {
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.wb-gen-pill[data-tone='muted'] {
+  background: var(--wb-wash-ink);
+  color: var(--wb-text-muted);
+}
+
+.wb-gen-tokens {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 0;
+  padding: 7px 4px 8px;
+  border-radius: var(--wb-radius-control);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 70%), transparent 72%), var(--wb-surface-quiet);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 80%),
+    inset 0 0 0 1px var(--wb-hairline);
+}
+
+.wb-gen-tokens__cell {
+  display: grid;
+  gap: 0;
+  min-width: 54px;
+  padding: 0 12px;
+}
+
+.wb-gen-tokens__cell + .wb-gen-tokens__cell {
+  border-left: 1px solid var(--wb-hairline);
+}
+
+.wb-gen-tokens__cell span {
+  color: var(--wb-text-faint);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wb-gen-tokens__cell strong {
+  color: var(--wb-text);
+  font-family: var(--wb-font-mono);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.wb-gen-tokens__cell--total {
+  border-radius: 9px;
+  background: var(--wb-wash-lilac-soft);
+}
+
+.wb-gen-tokens__cell--total strong {
+  color: var(--wb-accent-strong);
+}
+
+.wb-gen-tokens__limit {
+  position: absolute;
+  top: -9px;
+  right: 9px;
+  padding: 1px 8px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-surface-solid);
+  color: var(--wb-text-faint);
+  font-family: var(--wb-font-mono);
+  font-size: 12px;
+  box-shadow: inset 0 0 0 1px var(--wb-hairline);
+}
+
+.wb-gen-tokens--idle {
+  display: grid;
+  flex: none;
+  gap: 2px;
+  padding: 8px 14px;
+  border-radius: var(--wb-radius-control);
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  box-shadow: inset 0 0 0 1px var(--wb-hairline);
+}
+
+.wb-gen-tokens--idle small {
+  color: var(--wb-text-faint);
+  font-size: 12px;
+}
+
+/* ---------- 对话 ---------- */
+.wb-gen-stage {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.wb-gen-conversation {
+  min-height: 0;
+  flex: 1;
+}
+
+.wb-gen-conversation__content {
+  gap: 18px;
+  padding: 8px 2px 14px;
+}
+
+.wb-gen-msg {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.wb-gen-msg--assistant {
+  padding-right: 22px;
+}
+
+.wb-gen-msg--user {
+  justify-content: flex-end;
+  padding-left: 96px;
+}
+
+.wb-gen-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+}
+
+.wb-gen-avatar--assistant {
+  position: relative;
+  background:
+    radial-gradient(circle at 32% 22%, rgb(255 255 255 / 72%), transparent 36%),
+    conic-gradient(from 210deg, #8d67ab, #4a9c9b, #f0cf8a, #8d67ab);
+  box-shadow:
+    0 10px 24px -14px rgb(74 62 110 / 80%),
+    inset 0 1px 0 rgb(255 255 255 / 55%);
+  color: var(--purple-deep);
+}
+
+.wb-gen-avatar--assistant::after {
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgb(255 255 255 / 40%);
+  border-radius: 50%;
+  content: '';
+}
+
+.wb-gen-avatar--assistant svg {
+  position: relative;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  color: #fff;
+}
+
+.wb-gen-avatar--user {
+  background:
+    radial-gradient(circle at 32% 20%, rgb(255 255 255 / 28%), transparent 40%),
+    linear-gradient(150deg, #8d67ab, #6b4a8c);
+  box-shadow:
+    3px 4px 0 rgb(101 72 127 / 18%),
+    0 12px 24px -16px rgb(74 62 110 / 65%);
+}
+
+.wb-gen-avatar--user svg {
+  width: 20px;
+  height: 20px;
+  color: rgb(255 253 251 / 92%);
+}
+
+.wb-gen-msg__stack {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wb-gen-msg--assistant .wb-gen-msg__stack {
+  width: 100%;
+}
+
+.wb-gen-msg--user .wb-gen-msg__stack {
+  align-items: flex-end;
+}
+
+.wb-gen-msg__meta {
+  padding: 0 3px;
+  color: var(--wb-text-faint);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.wb-gen-msg__root {
+  max-width: none;
+}
+
+.wb-gen-bubble {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 15px 18px;
+  border-radius: 22px 22px 22px 8px;
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgb(255 255 255 / 90%), transparent 60%),
+    linear-gradient(158deg, rgb(255 253 251 / 92%), rgb(250 244 253 / 76%));
+  box-shadow:
+    0 20px 44px -32px rgb(74 62 110 / 62%),
+    inset 0 1px 0 rgb(255 255 255 / 95%);
+  color: var(--wb-text);
+  font-size: 14px;
+  line-height: 1.7;
+  backdrop-filter: blur(12px);
+}
+
+.wb-gen-bubble::before {
+  position: absolute;
+  top: 0;
+  right: 14px;
+  left: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 95%), transparent);
+  content: '';
+}
+
+.wb-gen-bubble--wide {
+  width: 100%;
+}
+
+.wb-gen-bubble--user {
+  border-radius: 22px 22px 8px 22px;
+  background:
+    radial-gradient(110% 100% at 0% 0%, rgb(255 255 255 / 8%), transparent 46%),
+    linear-gradient(152deg, #7a5796 0%, #7b579c 52%, #6d4c8f 100%);
+  box-shadow:
+    4px 6px 0 rgb(101 72 127 / 17%),
+    0 24px 42px -28px rgb(74 62 110 / 60%);
+  color: var(--wb-surface-solid);
+}
+
+.wb-gen-bubble p {
+  margin: 0;
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.wb-gen-bubble strong {
+  color: var(--wb-text-strong);
+}
+
+/*
+ * 用户气泡的紫底需要近白正文：通用段落/强调色（muted/strong）在紫底上对比度不足，
+ * 这里只在用户气泡内恢复继承，不改全局 token 和 AI/系统气泡。
+ */
+.wb-gen-bubble--user p,
+.wb-gen-bubble--user strong {
+  color: inherit;
+}

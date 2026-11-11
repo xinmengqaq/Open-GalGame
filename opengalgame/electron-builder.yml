@@ -1,0 +1,28 @@
+appId: xyz.opengalgame.app
+productName: opengalgame
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!docs/*'
+  - '!prototypes/*'
+  - '!tests/*'
+  - '!scripts{,/**}'
+  - '!langgraph.json'
+  - '!.langgraph_api{,/**}'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!vite.renderer.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml}'
+  - '!{.env,.env.*,.npmrc}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts}'
+asarUnpack:
+  - resources/**
+win:
+  executableName: opengalgame
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+npmRebuild: false

@@ -1,0 +1,607 @@
+/* 提示词卡：一块会发亮的思考表面，没有纸纹、折角和左侧竖线。 */
+
+.promptCard {
+  position: relative;
+  display: flex;
+  min-height: 100%;
+  flex: 1;
+  flex-direction: column;
+  padding: 16px 17px 14px;
+  background:
+    radial-gradient(
+      ellipse 68% 58% at 102% -4%,
+      color-mix(in srgb, var(--wb-warning) 20%, transparent) 0%,
+      transparent 66%
+    ),
+    radial-gradient(
+      ellipse 82% 72% at -8% 106%,
+      color-mix(in srgb, var(--wb-accent) 14%, transparent) 0%,
+      transparent 70%
+    );
+}
+
+.promptCard[data-editing='true'] {
+  cursor: default;
+}
+
+.promptQuote {
+  position: absolute;
+  top: 2px;
+  right: 15px;
+  color: color-mix(in srgb, var(--wb-accent) 24%, transparent);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 54px;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 150ms var(--wb-ease);
+}
+
+.promptCard:not([data-editing='true']):hover .promptQuote,
+.promptCard:not([data-editing='true']):focus-within .promptQuote {
+  opacity: 0;
+}
+
+/* 展示态的编辑提示：悬停时替换右上角引号，不占正文位置，也不拦截拖动。 */
+
+.promptEditHint {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 7px 2px 6px;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-surface-solid) 88%, transparent);
+  box-shadow: var(--wb-shadow-chip);
+  color: var(--wb-text-muted);
+  font-family: var(--wb-font);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 150ms var(--wb-ease),
+    transform 150ms var(--wb-ease);
+}
+
+.promptEditHintIcon {
+  width: 11px;
+  height: 11px;
+  flex: none;
+}
+
+.promptCard:hover .promptEditHint,
+.promptCard:focus-within .promptEditHint {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.prompt {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.promptField {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.prompt::after {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 34px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--wb-accent) 82%, transparent),
+    transparent
+  );
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms var(--wb-ease);
+}
+
+.prompt[data-prompt-focused='true']::after {
+  opacity: 0.78;
+}
+
+.promptHalo {
+  position: absolute;
+  z-index: 0;
+  inset: -12px -11px -10px;
+  border-radius: 16px;
+  background: radial-gradient(
+    ellipse at 26% 18%,
+    color-mix(in srgb, var(--wb-accent) 15%, transparent) 0%,
+    transparent 70%
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+
+.promptArea {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 14px;
+  line-height: 1.9;
+  overflow: auto;
+  overscroll-behavior: contain;
+  resize: none;
+}
+
+.promptArea::placeholder {
+  color: var(--wb-text-faint);
+}
+
+.promptArea:focus-visible {
+  outline: 0;
+}
+
+/* 展示态正文：只读、不可选中，整卡拖动不受文字选择干扰；长文在卡内滚动。 */
+
+.promptDisplay {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 14px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: none;
+}
+
+.promptDisplay::-webkit-scrollbar {
+  display: none;
+}
+
+.promptDisplay[data-empty] {
+  color: var(--wb-text-faint);
+}
+
+.promptDisplay[data-fade] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent 100%);
+}
+
+.prompt:focus-within .promptQuote {
+  color: color-mix(in srgb, var(--wb-accent) 36%, transparent);
+}
+
+/* 引用条：标签按当前卡片解析；失效身份保留原位，不换成同名卡片。 */
+
+.promptRefs {
+  display: flex;
+  min-width: 0;
+  gap: 7px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--wb-hairline) 72%, transparent);
+}
+
+.promptRefsLabel {
+  flex: none;
+  color: var(--wb-text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+}
+
+.promptRefList {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 5px;
+  margin: 0;
+  padding: 0 1px 1px;
+  list-style: none;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.promptRefList::-webkit-scrollbar {
+  display: none;
+}
+
+.promptRefList li {
+  flex: none;
+}
+
+.promptRefChip {
+  display: inline-flex;
+  max-width: 100%;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 3px 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--wb-accent) 17%, transparent);
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-accent) 8%, transparent);
+  color: var(--wb-accent-strong);
+  font-family: var(--wb-font);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.promptRefChip[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--wb-warning) 24%, transparent);
+  background: color-mix(in srgb, var(--wb-warning) 9%, transparent);
+  color: var(--wb-warning);
+}
+
+.promptRefChip[data-tone='invalid'] {
+  border-color: color-mix(in srgb, var(--wb-danger) 28%, transparent);
+  background: color-mix(in srgb, var(--wb-danger) 8%, transparent);
+  color: var(--wb-danger-strong);
+}
+
+.promptRefAt {
+  flex: none;
+  color: color-mix(in srgb, currentColor 68%, transparent);
+  font-family: var(--wb-font-mono);
+  font-size: 10.5px;
+}
+
+.promptRefWarn {
+  width: 11px;
+  height: 11px;
+  flex: none;
+}
+
+.promptRefName {
+  max-width: 108px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.promptRefKind {
+  color: color-mix(in srgb, currentColor 66%, transparent);
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.promptRefRemove {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.54;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    opacity var(--wb-duration-fast) var(--wb-ease);
+}
+
+.promptRefRemove svg {
+  width: 10px;
+  height: 10px;
+}
+
+.promptRefRemove:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  opacity: 1;
+}
+
+.promptRefRemove:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+/* 校验失败留在提示词卡内，错误码和可执行动作都在这里，不依赖 Toast。 */
+
+.promptRefAlert {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--wb-danger) 7%, transparent);
+  color: var(--wb-danger-strong);
+  font-family: var(--wb-font);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.promptRefAlert[data-tone='warning'] {
+  background: color-mix(in srgb, var(--wb-warning) 8%, transparent);
+  color: var(--wb-warning);
+}
+
+.promptRefAlertIcon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  margin-top: 2px;
+}
+
+.promptRefAlertText {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.promptRefAlertAction {
+  flex: none;
+  align-self: center;
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: inherit;
+  font-family: var(--wb-font);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.promptRefAlertAction:hover {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.promptRefAlertAction:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 1px;
+}
+
+/* 候选浮层挂在 body，避开卡片 overflow；颜色从全局 token 回退，Portal 不继承工作台局部变量。 */
+
+.promptPicker {
+  --picker-text: var(--wb-text, var(--ink));
+  --picker-muted: var(--wb-text-muted, var(--muted));
+  --picker-faint: var(--wb-text-faint, var(--muted-soft));
+  --picker-accent: var(--wb-accent-strong, var(--purple-deep));
+  --picker-hairline: var(--wb-hairline, color-mix(in srgb, var(--ink) 9%, transparent));
+  position: fixed;
+  z-index: 90;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--picker-hairline) 72%, transparent);
+  border-radius: 16px;
+  background: var(--wb-surface-solid, var(--paper-strong));
+  box-shadow: var(--wb-shadow-float, var(--shadow-float));
+  color: var(--picker-text);
+  font-family: var(--wb-font, var(--font-sans));
+  animation: prompt-picker-in 160ms var(--wb-ease, var(--ease-out));
+}
+
+.promptPickerHead {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--picker-hairline) 62%, transparent);
+}
+
+.promptPickerTitle {
+  color: var(--picker-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.promptPickerQuery {
+  max-width: 55%;
+  overflow: hidden;
+  color: var(--picker-accent);
+  font-family: var(--wb-font-mono, var(--font-mono));
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promptPickerList {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 248px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.promptPickerOption {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--picker-text);
+  font-family: var(--wb-font, var(--font-sans));
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--wb-duration-fast, 140ms) var(--wb-ease, ease-out);
+}
+
+.promptPickerOption[data-active='true'] {
+  background: color-mix(in srgb, var(--purple) 9%, transparent);
+}
+
+.promptPickerOption:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--purple) 46%, transparent);
+  outline-offset: -2px;
+}
+
+.promptPickerOptionIcon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--purple) 9%, transparent);
+  color: var(--purple-deep);
+}
+
+.promptPickerOptionIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.promptPickerOptionIcon[data-kind='document'] {
+  background: color-mix(in srgb, var(--teal) 10%, transparent);
+  color: var(--teal-deep);
+}
+
+.promptPickerOptionIcon[data-kind='audio'] {
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+}
+
+.promptPickerOptionIcon[data-kind='video'] {
+  background: color-mix(in srgb, var(--rose) 9%, transparent);
+  color: var(--rose);
+}
+
+.promptPickerOptionIcon[data-kind='animation'] {
+  background: color-mix(in srgb, var(--teal) 10%, transparent);
+  color: var(--teal-deep);
+}
+
+.promptPickerOptionCopy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.promptPickerOptionName {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promptPickerOptionMeta {
+  overflow: hidden;
+  color: var(--picker-muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promptPickerOptionKind {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--wb-radius-pill, 999px);
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
+  color: var(--picker-faint);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.promptPickerEmpty {
+  margin: 0;
+  padding: 18px 14px;
+  color: var(--picker-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.promptPickerFoot {
+  display: flex;
+  gap: 10px;
+  padding: 7px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--picker-hairline) 58%, transparent);
+  color: var(--picker-faint);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
+@keyframes prompt-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt::after,
+  .promptPicker,
+  .promptRefRemove {
+    transition: none;
+  }
+
+  .promptEditHint,
+  .promptQuote {
+    /* 全局减少动态效果规则会压掉过渡；这里只保留一次短淡入。 */
+    transition: opacity 100ms linear !important;
+  }
+
+  .promptEditHint,
+  .promptCard:hover .promptEditHint,
+  .promptCard:focus-within .promptEditHint {
+    transform: none;
+  }
+
+  .promptPicker {
+    animation: none;
+  }
+}

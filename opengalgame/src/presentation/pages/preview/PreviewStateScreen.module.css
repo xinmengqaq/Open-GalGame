@@ -1,0 +1,104 @@
+/* 页面级加载、阻塞和失败状态：只说明事实和下一步。 */
+
+.screen {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  align-content: center;
+  justify-items: center;
+  padding: 4vh 24px 9vh;
+  text-align: center;
+  isolation: isolate;
+}
+
+.orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, 64vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 42% 38%, #fff6e39e 0%, transparent 58%),
+    radial-gradient(circle at 62% 62%, #8d67ab2e 0%, transparent 64%),
+    radial-gradient(circle at 30% 68%, #4a9c9b24 0%, transparent 60%);
+  filter: blur(8px);
+  opacity: 0.74;
+  transform: translate(-50%, -50%);
+  z-index: -1;
+}
+
+.mark {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 14px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--paper-strong) 72%, transparent);
+  box-shadow: 0 16px 34px -30px var(--purple-shadow);
+}
+
+.markLoading {
+  color: var(--purple);
+}
+
+.markBlocked {
+  color: var(--muted);
+}
+
+.markFailed {
+  background: color-mix(in srgb, var(--rose) 10%, transparent);
+  color: var(--error);
+}
+
+.kicker {
+  margin: 0 0 6px;
+  color: var(--muted-soft);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.screen h2 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: clamp(20px, 2.1vw, 27px);
+  font-weight: 760;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.copy {
+  max-width: 44ch;
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.spin {
+  animation: state-spin 1.1s linear infinite;
+}
+
+@keyframes state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

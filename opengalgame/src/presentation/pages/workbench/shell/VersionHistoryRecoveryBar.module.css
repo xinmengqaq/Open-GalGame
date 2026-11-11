@@ -1,0 +1,84 @@
+/*
+ * 撤销后草稿恢复条。只挂在工作台页面壳的反馈层，使用 --wb-* 工作台变量，
+ * 不引用已删除的历史抽屉样式。
+ */
+.recovery {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background:
+    radial-gradient(ellipse 60% 100% at 0% 0%, rgb(255 255 255 / 70%) 0%, transparent 60%),
+    linear-gradient(135deg, var(--wb-surface-solid) 0%, #f0fbf7 100%);
+  box-shadow:
+    inset 0 0 0 1px var(--wb-hairline),
+    var(--wb-shadow-soft);
+  animation: recovery-in var(--wb-duration-base) var(--wb-ease);
+}
+
+.recoveryIcon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--wb-wash-mint);
+  color: var(--wb-positive-strong);
+}
+
+.recoveryIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.recoveryCopy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 240px;
+  gap: 2px;
+}
+
+.recoveryTitle {
+  margin: 0;
+  color: var(--wb-positive-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.recoveryReason {
+  margin: 0;
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.recoveryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@keyframes recovery-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recovery {
+    animation: none;
+  }
+}

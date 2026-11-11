@@ -1,0 +1,1027 @@
+/* 工作台顶栏、动作槽位、更多菜单与壳层反馈安全区。 */
+
+.topbar {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  flex: none;
+  grid-template-areas: 'back identity state actions';
+  grid-template-columns: auto minmax(190px, 1fr) minmax(220px, 430px) auto;
+  gap: 10px 26px;
+  align-items: center;
+  min-height: 72px;
+  margin: 14px 22px 0;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--wb-hairline);
+}
+
+/* 返回键是浮在画布上的圆形玻璃钮，不是工具栏方块。 */
+.back {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  grid-area: back;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wb-surface-soft);
+  color: var(--wb-text-strong);
+  box-shadow: var(--wb-shadow-chip);
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.back:hover {
+  background: var(--wb-surface-glass);
+  color: var(--wb-accent-strong);
+  box-shadow: var(--wb-shadow-soft);
+  transform: translateY(-1px);
+}
+
+.back:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.back svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.identity {
+  display: grid;
+  grid-area: identity;
+  min-width: 0;
+  gap: 2px;
+}
+
+.kicker {
+  overflow: hidden;
+  margin: 0;
+  color: var(--wb-text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identityLine {
+  display: flex;
+  min-width: 0;
+  gap: 12px;
+  align-items: center;
+}
+
+.project {
+  overflow: hidden;
+  margin: 0;
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 场景是“点 + 文字”，不再做胶囊标签。 */
+.sceneChip {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  color: var(--wb-text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sceneChip::before {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--wb-positive);
+  content: '';
+}
+
+.stateSlot {
+  display: flex;
+  grid-area: state;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.stateSlot > * {
+  min-width: 0;
+}
+
+.actionSlotWrap {
+  display: flex;
+  grid-area: actions;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.actionSlot {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  gap: 2px;
+  align-items: center;
+}
+
+/* 辅助动作是裸文字按钮，悬停才浮出一层淡紫 wash。 */
+.secondaryAction {
+  display: inline-flex;
+  height: 36px;
+  gap: 7px;
+  align-items: center;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: transparent;
+  color: var(--wb-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.secondaryAction:hover:not(:disabled) {
+  background: var(--wb-wash-lilac-soft);
+  color: var(--wb-accent-strong);
+  transform: translateY(-1px);
+}
+
+.secondaryAction:focus-visible,
+.moreTrigger:focus-visible {
+  outline: none;
+  background: var(--wb-wash-lilac-soft);
+  box-shadow: var(--wb-focus);
+}
+
+.secondaryAction:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.actionIcon {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  place-items: center;
+  color: currentColor;
+  opacity: 0.72;
+}
+
+.secondaryAction:hover:not(:disabled) .actionIcon {
+  opacity: 1;
+}
+
+.actionIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.actionLabel {
+  white-space: nowrap;
+}
+
+/* 场景工具是常驻的图标按钮，靠 tooltip 说明，不增加一排文字按钮。 */
+.sceneTools {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--wb-hairline);
+}
+
+.sceneToolWrap {
+  position: relative;
+  display: inline-flex;
+  border-radius: 50%;
+}
+
+/* 禁用按钮不接收指针事件：把命中让给包裹层，禁用原因才能在悬停时浮出。 */
+.sceneToolWrap[data-hint='true'] .sceneTool:disabled {
+  pointer-events: none;
+}
+
+/* 禁用按钮也不可聚焦：包裹层承接键盘焦点，视觉沿用图标钮的淡紫 wash 与焦点环。 */
+.sceneToolWrap[data-hint='true']:focus-visible {
+  outline: none;
+  background: var(--wb-wash-lilac-soft);
+  box-shadow: var(--wb-focus);
+}
+
+/* 禁用原因浮层：沿用「更多」菜单的玻璃浮层语言，默认收起，悬停或聚焦时浮出。 */
+.sceneToolHint {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(248px, calc(100vw - 48px));
+  padding: 8px 11px;
+  border: 0;
+  border-radius: var(--wb-radius-control);
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--wb-wash-cream) 0%, transparent 62%),
+    var(--wb-surface-glass);
+  box-shadow: var(--wb-shadow-float);
+  color: var(--wb-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  backdrop-filter: blur(18px) saturate(1.08);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition:
+    opacity var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease),
+    visibility var(--wb-duration-fast) var(--wb-ease);
+}
+
+.sceneToolWrap:hover .sceneToolHint,
+.sceneToolWrap:focus-within .sceneToolHint,
+.sceneToolWrap:focus-visible .sceneToolHint {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.sceneTool {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--wb-text);
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.sceneTool:hover:not(:disabled) {
+  background: var(--wb-wash-lilac-soft);
+  color: var(--wb-accent-strong);
+  transform: translateY(-1px);
+}
+
+.sceneTool:focus-visible {
+  outline: none;
+  background: var(--wb-wash-lilac-soft);
+  box-shadow: var(--wb-focus);
+}
+
+.sceneTool:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.sceneToolIcon {
+  display: grid;
+  place-items: center;
+}
+
+.sceneToolIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.sceneTaskSpinner {
+  animation: save-spin 0.9s linear infinite;
+}
+
+.sceneTaskStatus {
+  display: inline-flex;
+  max-width: 176px;
+  min-height: 28px;
+  gap: 6px;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 6px 0 9px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-surface-glass);
+  box-shadow: var(--wb-shadow-chip);
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sceneTaskStatus[data-tone='busy'] {
+  color: var(--wb-accent-strong);
+}
+
+.sceneTaskStatus[data-tone='ok'] {
+  background: color-mix(in srgb, var(--teal) 14%, var(--paper-strong));
+  color: var(--wb-positive-strong);
+}
+
+.sceneTaskStatus[data-tone='danger'],
+.sceneTaskStatus[data-tone='warning'] {
+  background: color-mix(in srgb, var(--rose) 12%, var(--paper-strong));
+  color: var(--wb-danger);
+}
+
+.sceneTaskStatusIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+
+.sceneTaskStatusIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sceneTaskStatusLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 导出成功时补一行产物绝对路径与打开动作；仍是一条内联状态，不另开浮层。 */
+.sceneTaskStatus[data-expanded='true'] {
+  flex-wrap: wrap;
+  max-width: min(400px, 44vw);
+  padding: 6px 6px 6px 9px;
+  border-radius: var(--wb-radius-control);
+  white-space: normal;
+  row-gap: 5px;
+}
+
+.sceneTaskStatusBody {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  align-items: center;
+}
+
+.sceneTaskStatusPath {
+  display: inline-flex;
+  min-width: 0;
+  gap: 2px;
+  align-items: baseline;
+  color: var(--wb-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.sceneTaskStatusPathLabel {
+  flex: none;
+  color: var(--wb-text-muted);
+}
+
+.sceneTaskStatusPathValue {
+  min-width: 0;
+}
+
+.sceneTaskStatusActions {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.sceneTaskStatusAction {
+  display: inline-flex;
+  height: 24px;
+  gap: 5px;
+  align-items: center;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--teal) 16%, var(--paper-strong));
+  color: var(--wb-positive-strong);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sceneTaskStatusAction:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--teal) 26%, var(--paper-strong));
+}
+
+.sceneTaskStatusAction:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.sceneTaskStatusAction:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+
+.sceneTaskStatusAction svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.sceneTaskStatusError {
+  grid-column: 1 / -1;
+  color: var(--wb-danger);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.sceneTaskStatusDismiss {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: currentColor;
+  opacity: 0.65;
+}
+
+.sceneTaskStatusDismiss:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  opacity: 1;
+}
+
+.sceneTaskStatusDismiss:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.sceneTaskStatusDismiss svg {
+  width: 12px;
+  height: 12px;
+}
+
+.saveCluster {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-left: 8px;
+}
+
+/* 保存结果是一条轻状态轨：字形 + 短文案，底色随语义轻微变化。 */
+.saveState {
+  display: inline-flex;
+  max-width: 138px;
+  min-height: 30px;
+  gap: 7px;
+  align-items: center;
+  padding: 0 11px 0 9px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-surface-glass);
+  box-shadow: var(--wb-shadow-chip);
+  color: var(--wb-text-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.saveState[data-tone='accent'],
+.saveState[data-tone='busy'] {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--purple) 13%, var(--paper-strong)),
+    color-mix(in srgb, var(--paper-strong) 88%, transparent) 82%
+  );
+  color: var(--wb-accent-strong);
+}
+
+.saveState[data-tone='ok'] {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--teal) 14%, var(--paper-strong)),
+    color-mix(in srgb, var(--paper-strong) 88%, transparent) 82%
+  );
+  color: var(--wb-positive-strong);
+}
+
+.saveState[data-tone='warning'] {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--warning) 13%, var(--paper-strong)),
+    color-mix(in srgb, var(--paper-strong) 88%, transparent) 82%
+  );
+  color: var(--wb-warning);
+}
+
+.saveState[data-tone='danger'] {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--rose) 13%, var(--paper-strong)),
+    color-mix(in srgb, var(--paper-strong) 88%, transparent) 82%
+  );
+  color: var(--wb-danger-strong);
+}
+
+.saveDot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.saveDot::after {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  opacity: 0.14;
+}
+
+.saveSpinner {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border: 1.8px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: save-spin 900ms linear infinite;
+}
+
+.saveCheck {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.saveStateLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 全屏只有一个实心主操作：无边框主按钮，软浮在画布上。 */
+.saveButton {
+  display: inline-flex;
+  min-height: 38px;
+  gap: 8px;
+  align-items: center;
+  padding: 0 17px 0 15px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--purple) 82%, #fff) 0%,
+    var(--purple-deep) 66%
+  );
+  color: var(--white);
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--purple-shadow) 78%, transparent);
+  transition:
+    filter var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease);
+}
+
+.saveButton:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 18px 34px -16px color-mix(in srgb, var(--purple-shadow) 82%, transparent);
+  transform: translateY(-1px);
+}
+
+.saveButton:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.saveButton:disabled {
+  opacity: 0.52;
+  cursor: default;
+  filter: saturate(0.45);
+}
+
+.saveIcon {
+  display: grid;
+  place-items: center;
+}
+
+.saveIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 更多动作菜单 */
+
+.moreWrap {
+  position: static;
+}
+
+.moreTrigger {
+  display: inline-flex;
+  height: 36px;
+  gap: 7px;
+  align-items: center;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: transparent;
+  color: var(--wb-text);
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.moreTrigger:hover,
+.moreTrigger[data-open='true'] {
+  background: var(--wb-wash-lilac-soft);
+  color: var(--wb-accent-strong);
+}
+
+.moreIcon {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  place-items: center;
+  color: currentColor;
+  opacity: 0.74;
+}
+
+.moreIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.moreChevron {
+  width: 13px;
+  height: 13px;
+  color: var(--wb-text-faint);
+  transition: transform var(--wb-duration-base) var(--wb-ease);
+}
+
+.moreTrigger[data-open='true'] .moreChevron {
+  transform: rotate(180deg);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  width: min(312px, calc(100vw - 24px));
+  gap: 4px;
+  padding: 10px;
+  border: 0;
+  border-radius: var(--wb-radius-card);
+  background: var(--wb-surface-glass);
+  box-shadow: var(--wb-shadow-float);
+  backdrop-filter: blur(18px) saturate(1.08);
+  transform-origin: top right;
+}
+
+.menuCaption {
+  margin: 2px 8px 6px;
+  color: var(--wb-text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.menuItem {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--wb-radius-control);
+  background: transparent;
+  color: var(--wb-text);
+  text-align: left;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.menuItem:hover:not(:disabled) {
+  background: var(--wb-wash-lilac-soft);
+}
+
+.menuItem:focus-visible {
+  outline: none;
+  background: var(--wb-wash-lilac-soft);
+  box-shadow: var(--wb-focus);
+}
+
+.menuItem:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.menuIcon {
+  display: grid;
+  width: 18px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  color: var(--wb-accent);
+}
+
+.menuIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.menuCopy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 2px;
+}
+
+.menuLabel {
+  color: var(--wb-text-strong);
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.menuHint {
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.menuUnavailable {
+  flex: none;
+  align-self: center;
+  color: var(--wb-text-faint);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 反馈固定悬浮在顶栏下方的中央安全位；不按遮挡关系跳到任意角落。 */
+.shelf {
+  position: fixed;
+  top: calc(var(--feedback-top, 64px) + 24px);
+  left: 50%;
+  z-index: 1000;
+  width: min(384px, calc(100vw - 32px));
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(-50%, -8px);
+  transition:
+    opacity var(--wb-duration-base) var(--wb-ease),
+    transform var(--wb-duration-base) var(--wb-ease);
+}
+
+.shelf[data-open='true'] {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+/*
+ * 原生居中弹窗内部：反馈改为操作栏之前的流内一条。
+ * 弹窗自身带 backdrop-filter，会成为 fixed 子元素的包含块，固定浮层会盖住标题和输入；
+ * 这里不覆盖弹窗内容，也不改 Dialog 的居中方式。右侧抽屉仍走上面的固定浮层。
+ */
+.shelf[data-host='dialog'] {
+  position: static;
+  width: auto;
+  margin: 0 24px 2px;
+  transform: none;
+  opacity: 1;
+  visibility: visible;
+}
+
+.shelf[data-host='dialog']:not([data-open='true']) {
+  display: none;
+}
+
+.shelf[data-host='dialog'][data-open='true'] {
+  transform: none;
+}
+
+/* 工作台主题弹窗正文用 30px 内边距，反馈条与正文左右对齐。 */
+:global(dialog[data-theme='workbench']) .shelf[data-host='dialog'] {
+  margin-inline: 30px;
+}
+
+.shelfInner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shelfInner > * {
+  pointer-events: auto;
+}
+
+.toastSlot {
+  position: relative;
+  height: var(--toast-height, 0);
+  flex: none;
+}
+
+.noticeSlot {
+  display: grid;
+  flex: none;
+  justify-items: center;
+  gap: 8px;
+}
+
+.noticeSlot:empty {
+  display: none;
+}
+
+@keyframes save-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1399px) {
+  .saveStateLabel {
+    display: none;
+  }
+
+  .saveState[data-tone='danger'] .saveStateLabel,
+  .saveState[data-tone='warning'] .saveStateLabel {
+    display: inline;
+  }
+
+  .saveState {
+    max-width: 96px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .topbar {
+    grid-template-areas:
+      'back identity actions'
+      'state state state';
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px 14px;
+  }
+
+  .stateSlot {
+    justify-content: stretch;
+  }
+
+  .stateSlot > * {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    margin: 10px 12px 0;
+    padding: 6px 0 10px;
+    gap: 8px 10px;
+  }
+
+  .project {
+    font-size: 17px;
+  }
+
+  .sceneChip {
+    display: none;
+  }
+
+  .saveState {
+    display: none;
+  }
+
+  .saveButton {
+    padding: 0 14px;
+  }
+
+  .shelf {
+    width: min(384px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar {
+    grid-template-areas:
+      'back identity'
+      'state state'
+      'actions actions';
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .actionSlotWrap {
+    justify-content: stretch;
+  }
+
+  .actionSlot {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 760px) {
+  .sceneTaskStatus {
+    max-width: none;
+    padding: 0 4px;
+  }
+
+  .sceneTaskStatusLabel {
+    display: none;
+  }
+
+  .sceneTaskStatus[data-expanded='true'] {
+    max-width: min(100%, 360px);
+    padding: 6px 6px 6px 9px;
+  }
+
+  .sceneTaskStatus[data-expanded='true'] .sceneTaskStatusLabel {
+    display: inline;
+  }
+}
+
+@media (max-width: 460px) {
+  .moreLabel {
+    display: none;
+  }
+
+  .moreTrigger {
+    padding: 0 8px;
+  }
+
+  .actionSlot {
+    gap: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back,
+  .secondaryAction,
+  .saveButton,
+  .moreTrigger,
+  .moreChevron,
+  .menuItem,
+  .shelf,
+  .toastSlot,
+  .sceneToolHint {
+    transition: none;
+  }
+
+  .back:hover,
+  .secondaryAction:hover:not(:disabled),
+  .saveButton:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .saveSpinner {
+    animation: none;
+  }
+}

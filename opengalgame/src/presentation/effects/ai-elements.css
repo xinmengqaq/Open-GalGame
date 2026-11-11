@@ -1,0 +1,278 @@
+@import 'tailwindcss' source(none);
+
+/*
+ * Tailwind 4 只从被扫描到的文件生成类名。这里关闭自动扫描，显式覆盖表现层组件、
+ * 启动入口和 Streamdown 自带的类名；新增表现层目录时同步补 @source。
+ */
+@source '../**/*.{ts,tsx}';
+@source '../../bootstrap/**/*.{ts,tsx}';
+@source '../../../node_modules/streamdown/dist/*.js';
+
+/*
+ * shadcn/ui 语义变量映射到 presentation/effects/tokens.css 的既有色值，
+ * 不新建第二套色板，也不加载远程字体。字体和正文继承 base.css 已设置的
+ * tokens 字号与中文栈，因此这里不重复声明 font-family。
+ */
+@theme inline {
+  --color-background: var(--paper-strong);
+  --color-foreground: var(--ink);
+  --color-card: var(--paper);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--paper-strong);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--purple);
+  --color-primary-foreground: var(--white);
+  --color-secondary: var(--lav);
+  --color-secondary-foreground: var(--ink-strong);
+  --color-muted: var(--lav);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--purple-wash);
+  --color-accent-foreground: var(--ink-strong);
+  --color-destructive: var(--rose);
+  --color-destructive-foreground: var(--white);
+  --color-border: var(--line-soft);
+  --color-input: var(--line);
+  --color-ring: var(--purple);
+
+  /* 组件使用的进入/退出动画：等价于 tw-animate-css 的 animate-in / animate-out。 */
+  --animate-in: ai-enter var(--tw-duration, 200ms) var(--ease-out, ease-out) both;
+  --animate-out: ai-exit var(--tw-duration, 200ms) var(--ease-out, ease-out) both;
+
+  /*
+   * 圆角沿用 tokens.css 的既有尺度：控件 8px，浮动容器和气泡更大。
+   * 显式声明避免 rounded-* 落到 Tailwind 默认值后被 tokens 的 --radius-* 改写。
+   */
+  --radius-xs: 4px;
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-md);
+  --radius-xl: var(--radius-lg);
+  --radius-2xl: 28px;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  /* preflight 已把边框重置为 0 solid，这里补默认边框色。 */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--line-soft);
+  }
+}
+
+@property --ai-enter-opacity {
+  syntax: '*';
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --ai-enter-scale {
+  syntax: '*';
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --ai-enter-translate-x {
+  syntax: '*';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --ai-enter-translate-y {
+  syntax: '*';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --ai-exit-opacity {
+  syntax: '*';
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --ai-exit-scale {
+  syntax: '*';
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --ai-exit-translate-x {
+  syntax: '*';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --ai-exit-translate-y {
+  syntax: '*';
+  inherits: false;
+  initial-value: 0;
+}
+
+@keyframes ai-enter {
+  from {
+    opacity: var(--ai-enter-opacity);
+    transform: translate3d(var(--ai-enter-translate-x), var(--ai-enter-translate-y), 0)
+      scale3d(var(--ai-enter-scale), var(--ai-enter-scale), 1);
+  }
+}
+
+@keyframes ai-exit {
+  to {
+    opacity: var(--ai-exit-opacity);
+    transform: translate3d(var(--ai-exit-translate-x), var(--ai-exit-translate-y), 0)
+      scale3d(var(--ai-exit-scale), var(--ai-exit-scale), 1);
+  }
+}
+
+@utility fade-in-0 {
+  --ai-enter-opacity: 0;
+}
+
+@utility fade-out-0 {
+  --ai-exit-opacity: 0;
+}
+
+@utility zoom-in {
+  --ai-enter-scale: 0;
+}
+
+@utility zoom-in-95 {
+  --ai-enter-scale: 0.95;
+}
+
+@utility zoom-out {
+  --ai-exit-scale: 0;
+}
+
+@utility zoom-out-95 {
+  --ai-exit-scale: 0.95;
+}
+
+@utility slide-in-from-top {
+  --ai-enter-translate-y: -100%;
+}
+
+@utility slide-in-from-right {
+  --ai-enter-translate-x: 100%;
+}
+
+@utility slide-in-from-bottom {
+  --ai-enter-translate-y: 100%;
+}
+
+@utility slide-in-from-left {
+  --ai-enter-translate-x: -100%;
+}
+
+@utility slide-in-from-top-2 {
+  --ai-enter-translate-y: -0.5rem;
+}
+
+@utility slide-in-from-right-2 {
+  --ai-enter-translate-x: 0.5rem;
+}
+
+@utility slide-in-from-bottom-2 {
+  --ai-enter-translate-y: 0.5rem;
+}
+
+@utility slide-in-from-left-2 {
+  --ai-enter-translate-x: -0.5rem;
+}
+
+@utility slide-out-to-top {
+  --ai-exit-translate-y: -100%;
+}
+
+@utility slide-out-to-right {
+  --ai-exit-translate-x: 100%;
+}
+
+@utility slide-out-to-bottom {
+  --ai-exit-translate-y: 100%;
+}
+
+@utility slide-out-to-left {
+  --ai-exit-translate-x: -100%;
+}
+
+@utility slide-out-to-top-2 {
+  --ai-exit-translate-y: -0.5rem;
+}
+
+@utility slide-out-to-right-2 {
+  --ai-exit-translate-x: 0.5rem;
+}
+
+@utility slide-out-to-bottom-2 {
+  --ai-exit-translate-y: 0.5rem;
+}
+
+@utility slide-out-to-left-2 {
+  --ai-exit-translate-x: -0.5rem;
+}
+
+/*
+ * 抽屉根作用域。base.css 的 * 规则是无层的（user-select: none、隐藏滚动条），
+ * 会压过 @layer 里的 utilities，所以这里用更高特异性的无层规则还回可选中文本
+ * 和可见滚动条，只作用于抽屉，不改工作台其他区域。
+ */
+.drawer-surface,
+[data-slot='sheet-content'] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.drawer-surface *,
+[data-slot='sheet-content'] * {
+  scrollbar-width: thin;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.drawer-surface *::-webkit-scrollbar,
+[data-slot='sheet-content'] *::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+  height: 8px;
+}
+
+.drawer-surface *::-webkit-scrollbar-thumb,
+[data-slot='sheet-content'] *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--line);
+  background-clip: content-box;
+}
+
+/* Radix ScrollArea 自带滚动条，避免原生滚动条重复出现。 */
+.drawer-surface [data-slot='scroll-area-viewport'],
+[data-slot='sheet-content'] [data-slot='scroll-area-viewport'] {
+  scrollbar-width: none;
+}
+
+.drawer-surface [data-slot='scroll-area-viewport']::-webkit-scrollbar,
+[data-slot='sheet-content'] [data-slot='scroll-area-viewport']::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * 减少动态效果：进入/退出只保留短淡入，不位移、不缩放。base.css 已把动画时长
+ * 压到 0.01ms，这里再清掉位移和缩放变量，避免依赖时长兜底。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-out,
+  .animate-in *,
+  .animate-out * {
+    --ai-enter-translate-x: 0;
+    --ai-enter-translate-y: 0;
+    --ai-enter-scale: 1;
+    --ai-exit-translate-x: 0;
+    --ai-exit-translate-y: 0;
+    --ai-exit-scale: 1;
+  }
+}

@@ -1,0 +1,49 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.omp/
+outputs/
+prototypes/
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local agent / Playwright CLI dumps
+.agents/
+.playwright-cli/
+
+# Review screenshots and capture output
+output/
+
+# Node / Electron build artifacts (also covered in opengalgame/.gitignore)
+node_modules/
+dist/
+out/
+release/
+coverage/
+.eslintcache
+*.log
+*.log.*
+*.tsbuildinfo
+
+# Playwright / Vitest
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+/artifacts/
+/harness/artifacts/
+/opengalgame/artifacts/
+
+# User work data (must not mix with software resources)
+.opengalgame/
+空白画布/
+
+# 本地 WebGAL 验证素材
+/docs/素材目录/
+
+harness/handoffs/evidence/

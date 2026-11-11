@@ -1,0 +1,114 @@
+.host {
+  --normal-bg: var(--surface);
+  --normal-border: var(--line);
+  --normal-text: var(--ink);
+  --border-radius: 8px;
+  --width: 260px;
+}
+
+.host [data-sonner-toast] {
+  padding: 12px 16px;
+  box-shadow: var(--shadow-panel);
+  font-size: 14px;
+}
+
+/* 工作台嵌入态：半透明浮层 + 状态点，不使用 Sonner 默认白卡、边框和左侧色条。 */
+.host.embedded[data-sonner-toaster] {
+  --normal-bg: transparent;
+  --normal-border: transparent;
+  --normal-text: var(--wb-text, var(--ink));
+  --border-radius: var(--wb-radius-card, 18px);
+  --width: 100%;
+  position: absolute;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: 100%;
+  transform: translateX(-50%);
+}
+
+.host.embedded [data-sonner-toast][data-styled='true'] {
+  width: 100%;
+  padding: 12px 16px 12px 15px;
+  border: 0;
+  border-radius: var(--wb-radius-card, 18px);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--paper-strong, #fff) 88%, transparent) 0%,
+    color-mix(in srgb, var(--lav) 72%, transparent) 100%
+  );
+  box-shadow: var(--wb-shadow-float, var(--shadow-float));
+  backdrop-filter: blur(16px) saturate(1.06);
+  color: var(--wb-text, var(--ink));
+  font-family: var(--wb-font, var(--font-sans));
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.host.embedded [data-sonner-toast][data-styled='true']::before {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--wb-accent, var(--purple));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wb-accent, var(--purple)) 13%, transparent);
+  content: '';
+}
+
+.host.embedded [data-sonner-toast][data-type='success']::before {
+  background: var(--wb-positive, var(--teal));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--teal) 15%, transparent);
+}
+
+.host.embedded [data-sonner-toast][data-type='error']::before {
+  background: var(--wb-danger, var(--rose));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rose) 15%, transparent);
+}
+
+.host.embedded [data-sonner-toast][data-type='warning']::before {
+  background: var(--wb-warning, var(--warning));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 15%, transparent);
+}
+
+.host.embedded [data-sonner-toast][data-styled='true'] [data-title] {
+  color: inherit;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.host.embedded [data-sonner-toast][data-styled='true'] [data-description] {
+  color: var(--wb-text-muted, var(--muted));
+  font-weight: 500;
+}
+
+/* 关闭键落在右上角外侧，不压状态点。 */
+.host.embedded [data-sonner-toast][data-styled='true'] [data-close-button] {
+  top: 0;
+  right: 0;
+  left: auto;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: var(--wb-surface-solid, var(--paper-strong));
+  box-shadow: var(--wb-shadow-chip, var(--shadow-panel));
+  color: var(--wb-text-muted, var(--muted));
+  transform: translate(32%, -32%);
+}
+
+.host.embedded [data-sonner-toast][data-styled='true'] [data-close-button]:hover {
+  background: var(--wb-surface-solid, var(--paper-strong));
+  color: var(--wb-text-strong, var(--ink-strong));
+}
+
+.host.embedded [data-sonner-toast][data-styled='true'] [data-close-button] svg {
+  width: 12px;
+  height: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .host.embedded [data-sonner-toast] {
+    transition: none;
+  }
+}

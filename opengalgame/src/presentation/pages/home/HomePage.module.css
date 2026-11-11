@@ -1,0 +1,392 @@
+.screen {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  color: #3b365f;
+  background: #f6edf7;
+}
+
+.wash,
+.rays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wash {
+  background:
+    radial-gradient(ellipse at 78% 47%, #fff6ce 0%, #ead4f3 32%, transparent 60%),
+    linear-gradient(140deg, #fbf6ff 0%, #f3e8f5 42%, #cce3e3 100%);
+}
+
+.wash::after {
+  position: absolute;
+  right: -8%;
+  bottom: -25%;
+  width: 86%;
+  height: 62%;
+  content: '';
+  border-radius: 50%;
+  background: #bfded766;
+  transform: rotate(-14deg);
+}
+
+.rays {
+  opacity: 0.25;
+  background: repeating-conic-gradient(
+    from 0deg at 74% 44%,
+    #fff6ff 0deg 5deg,
+    transparent 5deg 13deg
+  );
+  mask-image: radial-gradient(ellipse at 74% 44%, transparent 12%, #000 62%, transparent 82%);
+}
+
+.header,
+.footer {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 40px;
+}
+
+.header {
+  min-height: 72px;
+  border-bottom: 1px solid #68778955;
+}
+
+.brand,
+.headerRight {
+  display: flex;
+  align-items: center;
+}
+
+.brand {
+  gap: 12px;
+  color: #554679;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.brand small {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.mark {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  object-fit: contain;
+}
+
+.settings {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 18px;
+  border: 1px solid #76658f;
+  border-radius: 100px;
+  background: #fff9f4a6;
+  color: #4b416d;
+  font-size: 16px;
+}
+
+.settings:hover,
+.settings:focus-visible {
+  background: #fff;
+  border-color: #c490db;
+}
+
+.settings svg {
+  width: 21px;
+  height: 21px;
+}
+
+.stage {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(380px, 1.05fr) minmax(280px, 0.95fr);
+  align-items: stretch;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 20px 40px 4px;
+}
+
+.copy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 720px;
+  min-width: 0;
+}
+
+.kicker {
+  margin: 0 0 16px;
+  color: #6e6686;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+}
+
+.kicker span {
+  margin-right: 18px;
+  padding: 9px 16px;
+  border: 1px solid #a777c3;
+  border-radius: 3px;
+  background: #fff8ef99;
+  color: #8a4faa;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.flower {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  color: #c795d7;
+  fill: currentColor;
+  stroke: none;
+  transform: rotate(18deg);
+}
+
+.copy h1 {
+  margin: 0 0 20px;
+  color: #4a3e6e;
+  font-size: clamp(36px, 4.2vw, 64px);
+  font-weight: 800;
+  line-height: 1.28;
+  letter-spacing: -0.06em;
+  text-shadow: 3px 4px 0 #fffdf1;
+}
+
+.titleLine {
+  display: block;
+  overflow: hidden;
+}
+
+.titleInner {
+  display: inline-block;
+}
+
+.accent {
+  color: #9a5abd;
+}
+
+.lead {
+  margin: 0;
+  color: #6f6584;
+  font-size: 18px;
+  line-height: 1.9;
+}
+
+.actions {
+  width: min(560px, 100%);
+  margin-top: 32px;
+}
+
+.primary,
+.secondary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  text-align: left;
+}
+
+.primary {
+  width: 100%;
+  min-height: 72px;
+  gap: 16px;
+  padding: 12px 22px 12px 14px;
+  border: 2px solid #73508d;
+  border-radius: 8px;
+  background: #8d67ab;
+  box-shadow: 4px 5px 0 #65487f;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.primaryLabel {
+  flex: 1;
+}
+
+.arrow {
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+}
+
+.iconBox {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #fff9;
+  border-radius: 6px;
+}
+
+.iconBox svg {
+  width: 24px;
+  height: 24px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.secondary {
+  min-height: 56px;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid #8896a4;
+  border-radius: 6px;
+  background: #fffaf2b8;
+  color: #465772;
+  font-size: 16px;
+}
+
+.secondary:hover,
+.secondary:focus-visible {
+  background: #fff;
+  border-color: #9a6abc;
+}
+
+.iconSlot {
+  position: relative;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  color: #4da7a5;
+}
+
+.iconSlot svg {
+  width: 24px;
+  height: 24px;
+}
+
+.plusHalo {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: #4a9c9b33;
+  transform: scale(0);
+  pointer-events: none;
+}
+
+.visual {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.circle {
+  position: absolute;
+  top: 6%;
+  right: -6%;
+  width: 92%;
+  aspect-ratio: 1;
+  max-height: 100%;
+  border: 3px solid #fffdf297;
+  border-radius: 50%;
+  background: linear-gradient(155deg, #fff4e6b8 3%, #dfc8f199 63%, #acd9d29c);
+}
+
+.hero {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: right bottom;
+  filter: drop-shadow(-14px 10px 0 #fff5e450);
+  -webkit-mask-image: linear-gradient(180deg, #000 90%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 90%, transparent 100%);
+}
+
+.speech {
+  position: absolute;
+  z-index: 4;
+  top: 12%;
+  right: 8%;
+  padding: 14px 18px;
+  border: 2px solid #705d8b;
+  border-radius: 17px 17px 17px 3px;
+  background: #fffdfa;
+  box-shadow: 5px 5px 0 #6b82957a;
+  color: #635277;
+  font-size: 16px;
+  font-weight: 700;
+  transform: rotate(6deg);
+}
+
+.star {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  fill: #fffaf4;
+  stroke: none;
+  filter: drop-shadow(0 0 3px #5bb0a2);
+}
+
+.starA {
+  top: 18%;
+  left: 10%;
+}
+
+.starB {
+  right: 8%;
+  bottom: 18%;
+  width: 22px;
+  height: 22px;
+}
+
+.footer {
+  z-index: 4;
+  min-height: 52px;
+  border-top: 1px solid #7483975c;
+  color: #728197;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 960px) {
+  .stage {
+    grid-template-columns: 1fr;
+    padding: 16px 24px;
+  }
+
+  .header,
+  .footer {
+    margin: 0 24px;
+  }
+
+  .visual {
+    min-height: 240px;
+  }
+}

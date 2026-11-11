@@ -1,0 +1,5 @@
+export type AjaxResult<T = unknown> = {
+  code: number
+  msg: string
+  data?: T
+}

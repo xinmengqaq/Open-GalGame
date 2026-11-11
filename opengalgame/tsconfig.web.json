@@ -1,0 +1,36 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "src/bootstrap/env.d.ts",
+    "src/bootstrap/renderer.tsx",
+    "src/bootstrap/browser/**/*",
+    "src/presentation/**/*",
+    "src/interfaces/client/**/*",
+    "src/interfaces/project-files/client/**/*",
+    "src/interfaces/project-files/contracts/**/*",
+    "src/interfaces/project-versioning/client/**/*",
+    "src/interfaces/project-versioning/contracts/**/*",
+    "src/interfaces/scene-canvas/client/**/*",
+    "src/interfaces/scene-canvas/contracts/**/*",
+    "src/interfaces/scene-generation/client/**/*",
+    "src/interfaces/scene-generation/contracts/**/*",
+    "src/interfaces/scene-preview/client/**/*",
+    "src/interfaces/scene-preview/contracts/**/*",
+    "src/interfaces/contracts/**/*",
+    "src/application/*/dto/**/*",
+    "src/application/*/vo/**/*",
+    "src/common/**/*"
+  ],
+  "exclude": ["src/bootstrap/browser/devFileBackend.ts", "src/bootstrap/browser/devFilePlugin.ts"],
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@presentation/*": ["./src/presentation/*"],
+      "@application/*": ["./src/application/*"],
+      "@interfaces/*": ["./src/interfaces/*"],
+      "@common/*": ["./src/common/*"],
+      "@domain/*": ["./src/domain/*"]
+    }
+  }
+}

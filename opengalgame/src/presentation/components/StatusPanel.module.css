@@ -1,0 +1,84 @@
+/* 状态面板：一层柔和底色 + 图标 + 文案，不做卡中卡。 */
+
+.panel {
+  --status-bg: var(--surface-selected);
+  --status-ink: var(--purple-deep);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: var(--wb-radius-card, 14px);
+  background: var(--status-bg);
+  color: var(--status-ink);
+  font-family: var(--wb-font, var(--font-sans));
+}
+
+.info,
+.busy {
+  --status-bg: color-mix(in srgb, var(--purple) 9%, transparent);
+  --status-ink: var(--purple-deep);
+}
+
+.success {
+  --status-bg: color-mix(in srgb, var(--teal) 10%, transparent);
+  --status-ink: var(--teal-deep);
+}
+
+.error {
+  --status-bg: color-mix(in srgb, var(--rose) 9%, transparent);
+  --status-ink: var(--error);
+}
+
+.icon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin-top: 1px;
+  place-items: center;
+}
+
+.icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.title {
+  margin: 0 0 3px;
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.detail {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--purple) 20%, transparent);
+  border-top-color: var(--purple);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

@@ -1,0 +1,135 @@
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  color: #4a3e6e;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.optional {
+  margin-left: 8px;
+  color: #8a829c;
+  font-weight: 500;
+}
+
+.control {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d7c8e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #3b365f;
+  font: inherit;
+  font-weight: 500;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.control:focus {
+  border-color: #9a5abd;
+  box-shadow: 0 0 0 3px #9a5abd33;
+  outline: none;
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.error {
+  color: #a14a4a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 工作台弹层里的表单：浅底软控件 + 紫光焦点，不用白底方框和实边框。 */
+:global([data-theme='workbench']) .field {
+  gap: 7px;
+  margin: 0 0 18px;
+  color: var(--wb-text-muted);
+  font-family: var(--wb-font);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+:global([data-theme='workbench']) .optional {
+  margin-left: 7px;
+  color: var(--wb-text-faint);
+  font-weight: 550;
+}
+
+:global([data-theme='workbench']) .control {
+  min-height: 44px;
+  padding: 11px 14px;
+  border-color: transparent;
+  border-radius: var(--wb-radius-control);
+  background: var(--wb-wash-ink);
+  box-shadow: inset 0 0 0 1px var(--wb-hairline);
+  caret-color: var(--wb-accent);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: 14.5px;
+  font-weight: 500;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease);
+}
+
+:global([data-theme='workbench']) .control::placeholder {
+  color: var(--wb-text-faint);
+}
+
+:global([data-theme='workbench']) .control:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: inset 0 0 0 1px var(--wb-hairline-strong);
+}
+
+:global([data-theme='workbench']) .control:focus {
+  border-color: transparent;
+  background: var(--wb-surface-soft);
+  box-shadow: var(--wb-focus);
+  outline: none;
+}
+
+:global([data-theme='workbench']) .control:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+:global([data-theme='workbench']) .control[aria-invalid='true'] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wb-danger) 38%, transparent);
+}
+
+:global([data-theme='workbench']) .control[aria-invalid='true']:focus {
+  box-shadow:
+    0 0 0 2px var(--wb-surface-solid),
+    0 0 0 5px color-mix(in srgb, var(--wb-danger) 46%, transparent);
+}
+
+:global([data-theme='workbench']) .textarea {
+  min-height: 112px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+:global([data-theme='workbench']) .error {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--wb-danger-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+:global([data-theme='workbench']) .error::before {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}

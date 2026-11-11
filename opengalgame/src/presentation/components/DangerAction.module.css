@@ -1,0 +1,43 @@
+.action {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.glyph {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.glyph svg {
+  width: 100%;
+  height: 100%;
+}
+
+.action.quiet {
+  border-color: #e3bcc4;
+  background: #fff8f8;
+  box-shadow: none;
+  color: #8a3a3a;
+}
+
+.action.quiet:hover:not(:disabled) {
+  border-color: #c8818e;
+  background: #fbebee;
+  box-shadow: 0 6px 16px -16px #8a3a4a;
+  color: #7d2f3a;
+}
+
+.action.quiet:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.action.solid .glyph {
+  color: #fff;
+}

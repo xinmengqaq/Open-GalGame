@@ -1,0 +1,38 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "electron.vite.config.*",
+    "vite.renderer.config.*",
+    "scripts/langsmith-studio/*.ts",
+    "src/bootstrap/main.ts",
+    "src/bootstrap/preload.ts",
+    "src/bootstrap/browser/devFileBackend.ts",
+    "src/bootstrap/browser/devFilePlugin.ts",
+    "src/bootstrap/devUserDirectoryRecovery.ts",
+    "src/bootstrap/userDirectory.ts",
+    "src/application/**/*",
+    "src/domain/**/*",
+    "src/infrastructure/**/*",
+    "src/interfaces/ipc/**/*",
+    "src/interfaces/project-files/ipc/**/*",
+    "src/interfaces/project-versioning/ipc/**/*",
+    "src/interfaces/scene-canvas/ipc/**/*",
+    "src/interfaces/preload/**/*",
+    "src/interfaces/mappers/**/*",
+    "src/interfaces/contracts/**/*",
+    "src/interfaces/dto/**/*",
+    "src/common/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "types": ["electron-vite/node"],
+    "paths": {
+      "@bootstrap/*": ["./src/bootstrap/*"],
+      "@application/*": ["./src/application/*"],
+      "@domain/*": ["./src/domain/*"],
+      "@infrastructure/*": ["./src/infrastructure/*"],
+      "@interfaces/*": ["./src/interfaces/*"],
+      "@common/*": ["./src/common/*"]
+    }
+  }
+}

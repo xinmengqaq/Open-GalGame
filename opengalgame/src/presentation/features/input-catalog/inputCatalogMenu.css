@@ -1,0 +1,148 @@
+/*
+ * 目录右键菜单：半透明浮层，靠留白和字重分组，不用菜单卡边框和图标方块。
+ */
+.menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 228px;
+  max-width: min(288px, calc(100vw - 16px));
+  padding: 8px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--wb-surface-glass);
+  box-shadow: var(--wb-shadow-float);
+  backdrop-filter: blur(18px) saturate(1.08);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+}
+
+.menuHeader {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 4px;
+  padding: 5px 8px 9px;
+  border: 0;
+}
+
+.menuHeaderIcon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.menuHeaderIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.menuHeaderText {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.menuHeaderText strong {
+  overflow: hidden;
+  color: var(--wb-text-strong);
+  font-size: 12.5px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuHeaderText small {
+  color: var(--wb-text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.menuGroup {
+  display: grid;
+  gap: 1px;
+}
+
+.menuItem {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--wb-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.menuItemIcon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  color: var(--wb-text-faint);
+}
+
+.menuItemIcon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.menuItem:hover:not(:disabled),
+.menuItem:focus-visible {
+  background: var(--wb-wash-lilac);
+  outline: none;
+  color: var(--wb-accent-strong);
+}
+
+.menuItem:hover:not(:disabled) .menuItemIcon,
+.menuItem:focus-visible .menuItemIcon {
+  color: var(--wb-accent);
+}
+
+.menuItem:focus-visible {
+  box-shadow: var(--wb-glow);
+}
+
+.menuItem:disabled {
+  cursor: not-allowed;
+  color: var(--wb-text-faint);
+}
+
+.menuItem:disabled .menuItemIcon {
+  opacity: 0.5;
+}
+
+.menuDanger {
+  color: var(--wb-danger-strong);
+}
+
+.menuDanger .menuItemIcon {
+  color: var(--wb-danger);
+}
+
+.menuDanger:hover:not(:disabled),
+.menuDanger:focus-visible {
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.menuSplit {
+  height: 5px;
+  margin: 2px 0;
+  background: transparent;
+}

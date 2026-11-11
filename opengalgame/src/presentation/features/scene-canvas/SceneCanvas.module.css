@@ -1,0 +1,356 @@
+@import './sceneCanvasToolbar.css';
+@import './sceneCanvasStates.css';
+@import './sceneCanvasDialogs.css';
+
+/*
+ * 画布是工作台洗光的延伸：没有自己的卡面、纸底和点阵底纹。
+ * 卡片、关系、dock、空态与失败态的视觉分别由各自模块维护。
+ */
+
+.stage {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: clip;
+  overscroll-behavior: none;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+}
+
+.stage::before {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 62% 56% at 24% 16%,
+      color-mix(in srgb, var(--wb-surface-solid) 30%, transparent) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 54% 48% at 84% 84%,
+      color-mix(in srgb, var(--wb-positive) 9%, transparent) 0%,
+      transparent 74%
+    );
+  content: '';
+  pointer-events: none;
+}
+
+.stage[data-state='failed'] {
+  background: transparent;
+}
+
+.viewport {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: clip;
+  overscroll-behavior: none;
+  margin: var(--canvas-safe-top, 0px) var(--canvas-safe-right, 0px) var(--canvas-safe-bottom, 0px)
+    var(--canvas-safe-left, 0px);
+}
+
+.flow {
+  background: transparent;
+}
+
+.viewport :global(.react-flow) {
+  background: transparent;
+}
+
+.viewport :global(.react-flow__background) {
+  opacity: 0.42;
+}
+
+.viewport :global(.react-flow__renderer),
+.viewport :global(.react-flow__pane) {
+  background: transparent;
+}
+
+.viewport :global(.react-flow__pane) {
+  cursor: grab;
+}
+
+.viewport :global(.react-flow__pane.dragging) {
+  cursor: grabbing;
+}
+
+.viewport :global(.react-flow__handle) {
+  cursor: pointer !important;
+}
+
+.viewport :global(.react-flow__node) {
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--wb-font);
+}
+
+.viewport :global(.react-flow__node-inputCard) {
+  cursor: grab;
+}
+
+.viewport :global(.react-flow__node-inputCard.dragging) {
+  cursor: grabbing;
+}
+
+.viewport :global(.react-flow__node-relationAnchor) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.viewport :global(.react-flow__attribution) {
+  padding: 2px 5px;
+  border-radius: 6px 0 0;
+  background: transparent;
+  color: var(--wb-text-faint);
+  font-size: 9px;
+  opacity: 0.5;
+}
+
+.viewport :global(.react-flow__attribution a) {
+  color: var(--wb-text-faint);
+}
+
+.viewport :global(.react-flow__node.selected),
+.viewport :global(.react-flow__node:focus),
+.viewport :global(.react-flow__node:focus-visible) {
+  outline: none;
+}
+
+/* 卡片节点与覆盖层 */
+
+.node {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border-radius: 19px;
+  isolation: isolate;
+}
+
+.node[data-preview='true'],
+.node[data-fill='true'] {
+  height: 100%;
+}
+
+.nodeBody {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  border-radius: 19px;
+}
+
+.node[data-preview='true'] .nodeBody,
+.node[data-fill='true'] .nodeBody {
+  height: 100%;
+}
+
+.nodeTargetReady .nodeBody {
+  box-shadow: 0 0 0 7px color-mix(in srgb, var(--wb-positive) 10%, transparent);
+}
+
+.cardTarget {
+  inset: 0 !important;
+  z-index: 2 !important;
+  width: 264px !important;
+  height: 32px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 16px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* 预览卡缩放手柄：柔光圆点，保留 React Flow 的命中与缩放行为。 */
+
+.resizeLine {
+  border-color: color-mix(in srgb, var(--wb-accent) 20%, transparent) !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+}
+
+.resizeHandle {
+  width: 9px !important;
+  height: 9px !important;
+  border: 1.5px solid color-mix(in srgb, var(--wb-accent) 84%, transparent) !important;
+  border-radius: 50% !important;
+  background: var(--wb-surface-solid) !important;
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--wb-accent) 13%, transparent),
+    0 8px 14px -10px var(--wb-purple-shadow, #65487f) !important;
+}
+
+/* 点击连接预览 */
+
+.viewport :global(.react-flow__connection-path) {
+  stroke: color-mix(in srgb, var(--wb-accent) 88%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 5 8;
+  stroke-linecap: round;
+  animation: preview-flow 1000ms linear infinite;
+}
+
+.connectionPreview {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connectionPreviewGlow {
+  fill: none;
+  stroke: color-mix(in srgb, var(--wb-accent) 14%, transparent);
+  stroke-width: 12;
+  stroke-linecap: round;
+}
+
+.connectionPreviewLine {
+  fill: none;
+  stroke: color-mix(in srgb, var(--wb-accent) 86%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 5 8;
+  stroke-linecap: round;
+  animation: preview-flow 1000ms linear infinite;
+}
+
+.connectionPreviewDot {
+  fill: var(--wb-surface-solid);
+  stroke: color-mix(in srgb, var(--wb-accent) 88%, transparent);
+  stroke-width: 2;
+}
+
+/* 画布轻反馈：状态点 + 一句短文案，不套提示卡。 */
+
+.notice {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 12;
+  display: flex;
+  max-width: calc(100% - 32px);
+  gap: 9px;
+  align-items: center;
+  padding: 8px 15px 8px 13px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-surface-solid) 82%, transparent);
+  box-shadow: var(--wb-shadow-chip);
+  color: var(--wb-accent-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+  pointer-events: none;
+  transform: translateX(-50%);
+  backdrop-filter: blur(14px);
+  animation: canvas-notice-in 220ms var(--wb-ease);
+}
+
+.notice[data-placement='shelf'] {
+  position: relative;
+  top: auto;
+  left: auto;
+  max-width: min(720px, 100%);
+  justify-content: center;
+  text-align: center;
+  transform: none;
+  animation: shelf-notice-in 220ms var(--wb-ease);
+}
+
+.notice[data-tone='error'] {
+  background: color-mix(in srgb, var(--wb-danger) 12%, var(--wb-surface-solid));
+  color: var(--wb-danger-strong);
+}
+
+.noticeDot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
+}
+
+/* 动效 */
+
+@keyframes preview-flow {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes canvas-notice-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes shelf-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 760px) {
+  .notice {
+    top: 10px;
+    font-size: 11.5px;
+  }
+}
+
+@media (max-width: 520px) {
+  .endpointChip b {
+    max-width: 120px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connectionPreviewLine,
+  .viewport :global(.react-flow__connection-path) {
+    animation: none;
+  }
+
+  .notice {
+    animation: none;
+  }
+
+  .menu {
+    animation: none;
+  }
+}

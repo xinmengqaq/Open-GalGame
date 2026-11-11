@@ -1,0 +1,330 @@
+/* 右键菜单与弹窗局部内容 */
+
+.menu {
+  position: fixed;
+  z-index: 50;
+  width: 222px;
+  padding: 6px;
+  border: 1px solid #e2d5ec;
+  border-radius: 14px;
+  background: #fffdfbf7;
+  box-shadow:
+    0 1px 0 #ffffff inset,
+    0 24px 54px -34px #4a3e6ecc;
+  backdrop-filter: blur(16px);
+  animation: menu-in 150ms var(--ease-out);
+}
+
+.menuHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 4px;
+  padding: 8px 10px 7px;
+  border-bottom: 1px solid #ece2f2;
+}
+
+.menuHeader span {
+  color: var(--purple-deep);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.menuHeader small {
+  color: var(--muted-soft);
+  font-size: 10px;
+}
+
+.menu button {
+  display: flex;
+  width: 100%;
+  gap: 9px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu button:hover {
+  background: #f4eaf8;
+  color: var(--purple-deep);
+}
+
+.menu button svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.menuDanger {
+  color: #8a3a4a !important;
+}
+
+.menuDanger:hover {
+  background: #f8e4e7 !important;
+  color: #7d2f3a !important;
+}
+
+.menu kbd {
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 1px solid #e1d2e9;
+  border-radius: 5px;
+  background: #faf6fc;
+  color: var(--muted-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+/* 编辑与关系弹窗中的局部内容 */
+
+.editIntro {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #ece1f3;
+  border-radius: 11px;
+  background: #faf5fd;
+}
+
+.editKind {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid #d9c7e7;
+  border-radius: 999px;
+  background: #fffdfb;
+  color: var(--purple-deep);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.editIntro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.presetDescription {
+  margin: -4px 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #faf6fc;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+/* 媒体卡用途说明的示例提示：跟在文本域下方，安静但不和正文混在一起。 */
+.purposeHint {
+  margin: -10px 0 18px;
+  color: var(--wb-text-faint);
+  font-family: var(--wb-font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.65;
+}
+
+.dialogError {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #ebc7cd;
+  border-radius: 8px;
+  background: #fbeef0;
+  color: #8a3a4a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.relationIntro {
+  position: relative;
+  display: grid;
+  margin: 0 0 18px;
+  padding: 13px 14px 12px 16px;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid #ede1f4;
+  border-radius: 12px;
+  background:
+    radial-gradient(ellipse 70% 110% at 92% 10%, #fff7e6 0%, transparent 65%),
+    linear-gradient(150deg, #faf4fd 0%, #fdfaf3 100%);
+}
+
+.relationIntroLine {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--relation-accent);
+}
+
+.relationEndpoints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.endpointChip {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  padding: 5px 9px;
+  border: 1px solid #e7dcef;
+  border-radius: 9px;
+  background: #fffdfb;
+}
+
+.endpointChip small {
+  color: var(--muted-soft);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.endpointChip b {
+  max-width: 170px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.endpointLink {
+  color: var(--purple);
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.relationIntro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.recordSection {
+  margin: 4px 0 12px;
+  padding: 12px;
+  border: 1px solid #ece2f2;
+  border-radius: 12px;
+  background: #fdfaf7;
+}
+
+.recordHeader {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.recordHeader h3 {
+  margin: 0 0 3px;
+  color: var(--purple-deep);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.recordHeader p {
+  max-width: 330px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.recordDetachAction {
+  flex: none;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+
+.recordCard {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid #e9dff0;
+  border-radius: 10px;
+  background: #fffdfb;
+}
+
+.recordCardIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #e3d4ee;
+  border-radius: 9px;
+  background: #f6eef9;
+  color: var(--purple);
+}
+
+.recordCardIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.recordCardCopy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.recordCardCopy small {
+  color: var(--muted-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.recordCardCopy b {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recordCardCopy p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.recordEmpty,
+.recordMissing {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.recordMissing {
+  color: #8a3a4a;
+}

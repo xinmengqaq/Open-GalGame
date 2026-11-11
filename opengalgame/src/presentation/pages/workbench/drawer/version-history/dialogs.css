@@ -1,0 +1,191 @@
+/*
+ * 撤销与清理确认框。Radix AlertDialog 的 portal 不在 Sheet DOM 内，
+ * 用 .wb-drawer--dialog 复用工作台变量；选择器仍限定在 .wb-drawer 前缀。
+ */
+/* 撤销与清理确认框；portal 不在 Sheet DOM 内，用 .wb-drawer--dialog 复用变量。 */
+.wb-drawer--dialog.works-dialog {
+  display: flex;
+  width: calc(100vw - 32px);
+  max-width: 440px;
+  flex-direction: column;
+  gap: 0;
+  padding: 22px;
+  border: 0;
+  border-radius: 20px;
+  background:
+    radial-gradient(100% 90% at 100% 0%, rgb(255 246 227 / 40%), transparent 55%),
+    linear-gradient(158deg, var(--wb-surface-solid), #fbf5fd);
+  box-shadow:
+    0 34px 80px -40px rgb(47 42 79 / 70%),
+    inset 0 1px 0 rgb(255 255 255 / 90%);
+  color: var(--wb-text);
+}
+
+[data-slot='alert-dialog-overlay']:has(+ .wb-drawer--dialog[data-slot='alert-dialog-content']) {
+  background:
+    radial-gradient(ellipse 50% 50% at 50% 50%, rgb(255 246 227 / 16%), transparent 65%),
+    rgb(63 52 88 / 28%);
+  backdrop-filter: blur(3px);
+}
+
+.wb-drawer--dialog .works-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wb-drawer--dialog .works-dialog__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.wb-drawer--dialog .works-dialog__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.wb-drawer--dialog .works-dialog__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.wb-drawer--dialog .works-dialog__title {
+  margin: 0;
+  color: var(--wb-text-strong);
+  font-size: 18px;
+  font-weight: 780;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+}
+
+.wb-drawer--dialog .works-dialog__desc {
+  margin: 6px 0 0;
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.wb-drawer--dialog .works-dialog__target {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin: 14px 0 4px;
+  padding: 10px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--lav-deep) 42%, transparent);
+  font-size: 14px;
+}
+
+.wb-drawer--dialog .works-dialog__target strong {
+  color: var(--wb-text-strong);
+  font-weight: 700;
+}
+
+.wb-drawer--dialog .works-dialog__target span {
+  margin-left: auto;
+  color: var(--wb-text-faint);
+  font-size: 12px;
+  text-align: right;
+}
+
+.wb-drawer--dialog .works-dialog__scope {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.wb-drawer--dialog .works-dialog__scope li + li {
+  margin-top: 3px;
+}
+
+.wb-drawer--dialog .works-dialog__caveat {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wb-wash-cream);
+  color: var(--warning);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.wb-drawer--dialog .works-dialog__blocked {
+  margin: 10px 0 0;
+  color: var(--warning);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.wb-drawer--dialog .works-dialog__failure {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.wb-drawer--dialog .works-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.wb-drawer--dialog .works-secondary,
+.wb-drawer--dialog .works-danger {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.wb-drawer--dialog .works-secondary {
+  background: rgb(255 253 251 / 88%);
+  box-shadow: inset 0 0 0 1px var(--wb-hairline-strong);
+  color: var(--wb-text);
+}
+
+.wb-drawer--dialog .works-secondary:hover:not(:disabled) {
+  background: #fff;
+}
+
+.wb-drawer--dialog .works-danger {
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.wb-drawer--dialog .works-danger--solid {
+  background: linear-gradient(145deg, #b0627a, #96475f);
+  box-shadow:
+    3px 4px 0 rgb(100 44 63 / 28%),
+    0 14px 22px -16px rgb(100 44 63 / 60%);
+  color: #fff;
+}
+
+.wb-drawer--dialog .works-danger--solid:hover:not(:disabled) {
+  background: linear-gradient(145deg, #a4556d, #8a4158);
+}
+
+.wb-drawer--dialog .works-secondary:disabled,
+.wb-drawer--dialog .works-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+}

@@ -1,0 +1,520 @@
+/* 共享媒体预览：画布卡与输入目录缩略图使用同一比例规则和真实媒体元素。 */
+
+.previewRoot {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.previewRoot[data-variant='card'] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.previewRoot[data-variant='thumbnail'] {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+}
+
+.surface {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* 原始比例：只在边界内缩小，不裁切，也不放大超过原始尺寸。 */
+.cardMedia {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.thumbMedia {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 9px;
+  object-fit: contain;
+}
+
+.thumbVideoWrap {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--wb-surface-soft) 78%, transparent);
+}
+
+.thumbPlayMark {
+  position: absolute;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-surface-solid) 76%, transparent);
+  color: var(--wb-accent-strong);
+  pointer-events: none;
+}
+
+.thumbPlayMark svg {
+  width: 9px;
+  height: 9px;
+  margin-left: 1px;
+}
+
+/* 视频控件在悬停、聚焦或播放时出现；键盘可达。 */
+
+.videoControls {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 9px;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-surface-solid) 84%, transparent);
+  box-shadow: var(--wb-shadow-chip);
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.surface:hover .videoControls,
+.surface:focus-within .videoControls,
+.surface[data-playing='true'] .videoControls {
+  opacity: 1;
+  transform: none;
+}
+
+.videoToggle {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
+  color: var(--wb-accent-strong);
+  cursor: pointer;
+}
+
+.videoToggle svg {
+  width: 11px;
+  height: 11px;
+}
+
+.videoToggle:hover {
+  background: color-mix(in srgb, var(--wb-accent) 20%, transparent);
+}
+
+.videoSeek,
+.audioSeek {
+  min-width: 0;
+  flex: 1;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--wb-radius-pill);
+  accent-color: var(--wb-accent);
+  cursor: pointer;
+}
+
+.videoTime,
+.audioTime {
+  flex: none;
+  color: var(--wb-text-muted);
+  font-family: var(--wb-font);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* 音频卡：真实播放、进度、时长与能量条。 */
+
+.audioDeck {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  overflow: hidden;
+  margin-top: 3px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background:
+    radial-gradient(
+      ellipse 120% 150% at 0% 50%,
+      color-mix(in srgb, var(--wb-warning) 13%, transparent) 0%,
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--wb-surface-soft) 76%, transparent);
+}
+
+.audioDeck[data-audio-state='playing'] {
+  background:
+    radial-gradient(
+      ellipse 120% 150% at 0% 50%,
+      color-mix(in srgb, var(--wb-warning) 22%, transparent) 0%,
+      transparent 64%
+    ),
+    color-mix(in srgb, var(--wb-surface-soft) 76%, transparent);
+}
+
+.audioDeck[data-audio-state='blocked'] {
+  background:
+    radial-gradient(
+      ellipse 120% 150% at 0% 50%,
+      color-mix(in srgb, var(--wb-danger) 14%, transparent) 0%,
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--wb-surface-soft) 76%, transparent);
+}
+
+.audioDeck[data-audio-state='loading'] {
+  grid-template-columns: 36px minmax(0, 1fr);
+}
+
+.audioPlay {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-surface-solid) 78%, transparent);
+  box-shadow: var(--wb-shadow-chip);
+  color: var(--wb-warning);
+  cursor: pointer;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.audioPlay svg {
+  width: 14px;
+  height: 14px;
+}
+
+.audioPlay:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wb-warning) 16%, var(--wb-surface-solid));
+  transform: scale(1.04);
+}
+
+.audioDeck[data-audio-state='playing'] .audioPlay {
+  color: var(--wb-warning);
+}
+
+.audioPlay:disabled {
+  color: var(--wb-text-faint);
+  cursor: not-allowed;
+}
+
+.audioPlay:disabled::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 25px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--wb-danger) 72%, transparent);
+  content: '';
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.audioBody {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.audioWave {
+  display: block;
+  width: 100%;
+  height: 30px;
+}
+
+.audioWave rect {
+  fill: color-mix(in srgb, var(--wb-warning) 46%, transparent);
+  transition: fill var(--wb-duration-fast) var(--wb-ease);
+}
+
+.audioWave rect[data-played='true'] {
+  fill: var(--wb-warning);
+}
+
+.audioDeck[data-audio-state='blocked'] .audioWave rect {
+  fill: color-mix(in srgb, var(--wb-danger) 40%, transparent);
+}
+
+.audioSeek {
+  width: 100%;
+  height: 3px;
+  flex: none;
+}
+
+.audioState {
+  min-width: 0;
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.audioRetry {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-accent) 9%, transparent);
+  color: var(--wb-accent-strong);
+  font-family: var(--wb-font);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.audioRetry:hover {
+  background: color-mix(in srgb, var(--wb-accent) 16%, transparent);
+}
+
+.hiddenAudio {
+  display: none;
+}
+
+/* 目录行内的紧凑播放：小尺寸能量条 + 播放按钮。 */
+
+.compactAudio {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background:
+    radial-gradient(
+      ellipse 120% 140% at 0% 50%,
+      color-mix(in srgb, var(--wb-warning) 16%, transparent) 0%,
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--wb-surface-soft) 78%, transparent);
+}
+
+.compactWave {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  left: 4px;
+  width: calc(100% - 8px);
+  height: 9px;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.compactWave rect {
+  fill: color-mix(in srgb, var(--wb-warning) 70%, transparent);
+}
+
+.compactWave rect[data-played='true'] {
+  fill: var(--wb-warning);
+}
+
+.compactPlay {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-surface-solid) 88%, transparent);
+  box-shadow: var(--wb-shadow-chip);
+  color: var(--wb-warning);
+  cursor: pointer;
+}
+
+.compactPlay svg {
+  width: 11px;
+  height: 11px;
+}
+
+.compactPlay:hover {
+  background: color-mix(in srgb, var(--wb-warning) 18%, var(--wb-surface-solid));
+}
+
+.compactPlay:focus-visible,
+.videoToggle:focus-visible,
+.audioPlay:focus-visible,
+.audioRetry:focus-visible,
+.thumbUnavailable:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.thumbUnavailable {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--wb-danger) 9%, var(--wb-surface-soft));
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+.thumbUnavailable > svg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.7;
+}
+
+.thumbOffMark {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-danger) 16%, var(--wb-surface-solid));
+  color: var(--wb-danger-strong);
+}
+
+.thumbOffMark svg {
+  width: 8px;
+  height: 8px;
+}
+
+/* 加载骨架只表达读取中，不做循环位移以外的装饰。 */
+
+.cardSkeleton {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--wb-surface-soft) 74%, transparent) 0%,
+    color-mix(in srgb, var(--wb-surface-solid) 52%, transparent) 46%,
+    color-mix(in srgb, var(--wb-surface-soft) 74%, transparent) 92%
+  );
+  background-size: 220% 100%;
+  animation: media-skeleton 1.5s ease-in-out infinite;
+}
+
+.thumbSkeleton {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--wb-surface-soft) 76%, transparent);
+  animation: media-pulse 1.5s ease-in-out infinite;
+}
+
+.audioPlaySkeleton {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-surface-solid) 58%, transparent);
+  animation: media-pulse 1.5s ease-in-out infinite;
+}
+
+.audioBarsSkeleton {
+  height: 30px;
+  border-radius: 8px;
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--wb-warning) 30%, transparent) 0 2px,
+    transparent 2px 8px
+  );
+  animation: media-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes media-skeleton {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -80% 0;
+  }
+}
+
+@keyframes media-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (hover: none) {
+  .videoControls {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .audioDeck {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .audioTime {
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .videoControls,
+  .audioPlay,
+  .compactPlay {
+    transition: none;
+  }
+
+  .cardSkeleton,
+  .thumbSkeleton,
+  .audioPlaySkeleton,
+  .audioBarsSkeleton {
+    animation: none;
+  }
+}

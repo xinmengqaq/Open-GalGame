@@ -1,0 +1,233 @@
+/* 图片与视频卡内容：预览本身就是画布上的浮光表面，不套白卡。 */
+
+.mediaStage {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 15px;
+  background:
+    radial-gradient(
+      ellipse 76% 84% at 18% -6%,
+      color-mix(in srgb, var(--wb-accent) 30%, transparent) 0%,
+      transparent 64%
+    ),
+    radial-gradient(
+      ellipse 82% 96% at 102% 106%,
+      color-mix(in srgb, var(--wb-positive) 24%, transparent) 0%,
+      transparent 66%
+    ),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--wb-surface-solid) 58%, transparent),
+      color-mix(in srgb, var(--wb-surface-soft) 42%, transparent)
+    );
+  box-shadow:
+    0 28px 50px -44px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 72%, transparent),
+    0 10px 22px -22px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 42%, transparent);
+  transition: box-shadow var(--wb-duration-base) var(--wb-ease);
+}
+
+.mediaStage:hover {
+  box-shadow:
+    0 34px 60px -44px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 82%, transparent),
+    0 14px 26px -22px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 52%, transparent);
+}
+
+/* 图片是画布上的素材本体：预览区保持透明，不铺白底或卡片底色。 */
+.mediaStage[data-media-kind='image'] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.mediaStage[data-media-kind='image']:hover {
+  box-shadow: none;
+}
+
+.mediaStage[data-media-kind='image']::before,
+.mediaStage[data-media-kind='image']::after {
+  display: none;
+}
+
+.mediaStage[data-media-kind='video'] {
+  background:
+    radial-gradient(
+      ellipse 76% 84% at 18% -6%,
+      color-mix(in srgb, var(--wb-danger) 28%, transparent) 0%,
+      transparent 64%
+    ),
+    radial-gradient(
+      ellipse 82% 96% at 102% 106%,
+      color-mix(in srgb, var(--wb-accent) 24%, transparent) 0%,
+      transparent 66%
+    ),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--wb-surface-solid) 58%, transparent),
+      color-mix(in srgb, var(--wb-surface-soft) 42%, transparent)
+    );
+}
+
+/* 柔光涟漪：同心光带只作空间提示，不铺在标题后面。 */
+
+.mediaStage::before {
+  position: absolute;
+  inset: -34%;
+  background: repeating-radial-gradient(
+    circle at 74% 24%,
+    transparent 0 34px,
+    color-mix(in srgb, var(--wb-surface-solid) 52%, transparent) 34px 35px,
+    transparent 35px 68px
+  );
+  content: '';
+  mask-image: radial-gradient(circle at 74% 24%, #000 0%, transparent 70%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.mediaStage::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    188deg,
+    transparent 52%,
+    color-mix(in srgb, var(--wb-text) 5%, transparent) 100%
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.mediaFallback {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.mediaKind {
+  position: absolute;
+  top: 10px;
+  left: 13px;
+  z-index: 2;
+  padding: 2px 7px 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wb-surface-solid) 78%, transparent);
+  box-shadow: var(--wb-shadow-chip);
+  color: color-mix(in srgb, var(--wb-text-muted) 82%, transparent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+}
+
+.mediaEmblem {
+  position: relative;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-surface-solid) 58%, transparent);
+  box-shadow:
+    0 0 0 10px color-mix(in srgb, var(--wb-accent) 6%, transparent),
+    0 18px 32px -24px color-mix(in srgb, var(--wb-accent) 62%, transparent);
+  color: color-mix(in srgb, var(--wb-accent-strong) 78%, transparent);
+}
+
+.mediaEmblem > svg {
+  width: 21px;
+  height: 21px;
+  opacity: 0.82;
+}
+
+.mediaOffMark {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-danger) 16%, var(--wb-surface-solid));
+  color: var(--wb-danger-strong);
+}
+
+.mediaOffMark svg {
+  width: 10px;
+  height: 10px;
+}
+
+.mediaHeadline {
+  margin-top: 9px;
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
+.mediaRetry {
+  margin-top: 8px;
+  padding: 4px 11px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-accent) 10%, transparent);
+  color: var(--wb-accent-strong);
+  font-family: var(--wb-font);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mediaRetry:hover {
+  background: color-mix(in srgb, var(--wb-accent) 18%, transparent);
+}
+
+.mediaRetry:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+
+.mediaFooter {
+  display: flex;
+  min-width: 0;
+  flex: none;
+  flex-direction: column;
+  gap: 3px;
+  align-items: stretch;
+  padding: 10px 2px 1px;
+}
+
+.mediaTitle {
+  min-width: 0;
+  margin: 0;
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .mediaFallback {
+    padding: 9px 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mediaStage {
+    transition: none;
+  }
+}

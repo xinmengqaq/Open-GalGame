@@ -1,0 +1,18 @@
+; 真实读取样本
+changeBg:room.png -next; 背景
+changeFigure:hero.png -id=hero;
+miniAvatar:avatar.png;
+bgm:theme.ogg -volume=60;
+playEffect:bell.wav;
+playVideo:opening.mp4;
+小明:你好\;世界 -vocal=voice.ogg; 台词注释
+接着说 -concat;
+旁白:第一行\
+  |第二行
+  -next;
+setVar:flag=1;
+label:start;
+jumpLabel:start -when=flag;
+changeBg:none;
+bgm:https://example.com/theme.ogg;
+changeFigure:missing.png;

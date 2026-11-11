@@ -1,0 +1,430 @@
+/*
+ * 生成抽屉的浏览器式标签栏。
+ * 只取 workbenchTheme.module.css 的 --wb-* 与 effects/tokens.css；
+ * 不覆盖 drawer.css 的旧标签规则，新标签也不沿用 1px 全边框卡片。
+ */
+
+.wb-drawer .wb-drawer-tabs {
+  display: flex;
+  height: 44px;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  gap: 8px;
+  padding-left: 4px;
+  border-bottom: 1px solid var(--wb-hairline);
+  color: var(--wb-text);
+}
+
+/* 标签溢出时横向滚动；滚动条隐藏，仍可用键盘和滚轮移动。 */
+.wb-drawer .wb-drawer-tabs__list {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.wb-drawer .wb-drawer-tabs__list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ---------- 标签 ---------- */
+
+.wb-drawer .wb-drawertab {
+  position: relative;
+  display: flex;
+  height: 38px;
+  flex: none;
+  align-items: center;
+  border-radius: var(--wb-radius-control) var(--wb-radius-control) 0 0;
+  color: var(--wb-text-muted);
+  -webkit-user-select: none;
+  user-select: none;
+  transition:
+    background-color var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease),
+    opacity var(--wb-duration-fast) var(--wb-ease);
+}
+
+.wb-drawer .wb-drawertab:hover:not([data-active='true']) {
+  background: color-mix(in srgb, var(--wb-surface-solid) 46%, transparent);
+  color: var(--wb-text);
+}
+
+/* 活动标签是轻表面加 2px 强调线，不是分段按钮，也不套 1px 全边框。 */
+.wb-drawer .wb-drawertab[data-active='true'] {
+  background: linear-gradient(
+    180deg,
+    var(--wb-surface-solid) 0%,
+    color-mix(in srgb, var(--wb-surface-solid) 66%, transparent) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--wb-surface-solid),
+    inset 1px 0 0 color-mix(in srgb, var(--wb-surface-solid) 62%, transparent),
+    inset -1px 0 0 var(--wb-hairline),
+    var(--wb-shadow-chip);
+  color: var(--wb-text-strong);
+}
+
+.wb-drawer .wb-drawertab[data-active='true']::after {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 2px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-accent);
+  content: '';
+  pointer-events: none;
+}
+
+.wb-drawer .wb-drawertab__button {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  max-width: 168px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1;
+  outline: none;
+  white-space: nowrap;
+}
+
+.wb-drawer .wb-drawertab[data-closable='true'] .wb-drawertab__button {
+  padding-right: 4px;
+}
+
+.wb-drawer .wb-drawertab__button:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.wb-drawer .wb-drawertab__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 关闭按钮必须与标签按钮同级，不能嵌在 button 里。 */
+.wb-drawer .wb-drawertab__close {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  margin: 0 8px 0 4px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: transparent;
+  color: var(--wb-text-faint);
+  opacity: 0.45;
+  transition:
+    background-color var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease),
+    opacity var(--wb-duration-fast) var(--wb-ease);
+}
+
+.wb-drawer .wb-drawertab__close svg {
+  width: 12px;
+  height: 12px;
+}
+
+.wb-drawer .wb-drawertab:hover .wb-drawertab__close,
+.wb-drawer .wb-drawertab:focus-within .wb-drawertab__close,
+.wb-drawer .wb-drawertab[data-active='true'] .wb-drawertab__close {
+  opacity: 1;
+}
+
+.wb-drawer .wb-drawertab__close:hover:not(:disabled) {
+  background: var(--wb-wash-ink);
+  color: var(--wb-text-strong);
+}
+
+.wb-drawer .wb-drawertab__close:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.wb-drawer .wb-drawertab__close:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+/* ---------- 标签上的真实状态 ---------- */
+
+.wb-drawer .wb-drawertab__tone {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-text-faint);
+}
+
+.wb-drawer .wb-drawertab__tone[data-tone='running'] {
+  background: var(--wb-positive);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-positive) 18%, transparent);
+}
+
+.wb-drawer .wb-drawertab__tone[data-tone='waiting'] {
+  border: 2px solid var(--wb-warning);
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.wb-drawer .wb-drawertab__tone[data-tone='paused'] {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  background: var(--wb-text-muted);
+}
+
+.wb-drawer .wb-drawertab__tone[data-tone='failed'] {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  background: var(--wb-danger);
+  transform: rotate(45deg);
+}
+
+/* 结果待核对：警告色空心菱形，与失败实心菱形、等待空心圆区分。 */
+.wb-drawer .wb-drawertab__tone[data-tone='pendingVerification'] {
+  width: 6px;
+  height: 6px;
+  border: 2px solid var(--wb-warning);
+  border-radius: 0;
+  background: transparent;
+  box-sizing: border-box;
+  transform: rotate(45deg);
+}
+
+/* 候选角标只来自真实读取结果；未读取时用活动点，不伪造计数。 */
+.wb-drawer .wb-drawertab__badge {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-wash-warning);
+  color: var(--wb-warning);
+  font-family: var(--wb-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.wb-drawer .wb-drawertab__live {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-positive-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-positive-strong) 16%, transparent);
+}
+
+/* ---------- 拖拽排序：只改顺序，不拖出窗口 ---------- */
+
+.wb-drawer .wb-drawertab[data-dragging='true'] {
+  opacity: 0.55;
+}
+
+.wb-drawer .wb-drawertab[data-drop] {
+  background: color-mix(in srgb, var(--wb-wash-lilac) 60%, transparent);
+}
+
+.wb-drawer .wb-drawertab[data-drop='before']::before,
+.wb-drawer .wb-drawertab[data-drop='after']::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-accent);
+  content: '';
+  pointer-events: none;
+}
+
+.wb-drawer .wb-drawertab[data-drop='before']::before {
+  left: 0;
+}
+
+.wb-drawer .wb-drawertab[data-drop='after']::before {
+  right: 0;
+}
+
+/* ---------- “+” 与浮层菜单 ---------- */
+
+.wb-drawer .wb-drawer-tabs__add {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  align-self: center;
+  place-items: center;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: transparent;
+  color: var(--wb-text-muted);
+  transition:
+    background-color var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.wb-drawer .wb-drawer-tabs__add:hover {
+  background: var(--wb-surface-quiet);
+  color: var(--wb-accent-strong);
+}
+
+.wb-drawer .wb-drawer-tabs__add:active {
+  transform: scale(0.94);
+}
+
+.wb-drawer .wb-drawer-tabs__add:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.wb-drawer .wb-drawer-tabs__add svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 浮层外观由调用侧决定；这里只落 --wb-* 表面、圆角和阴影。 */
+.wb-drawer-tabs__menu,
+.wb-drawertab__menu {
+  min-width: 200px;
+  max-width: 252px;
+  padding: 8px;
+  border-radius: var(--wb-radius-card);
+  background: var(--wb-surface-solid);
+  box-shadow:
+    inset 0 0 0 1px var(--wb-hairline),
+    inset 0 1px 0 var(--wb-surface-solid),
+    var(--wb-shadow-float);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+}
+
+.wb-drawer-tabs__menu-list,
+.wb-drawertab__menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-drawer-tabs__menu-item,
+.wb-drawertab__menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--wb-radius-control);
+  background: transparent;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  transition:
+    background-color var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.wb-drawer-tabs__menu-item:hover:not(:disabled),
+.wb-drawer-tabs__menu-item:focus-visible,
+.wb-drawertab__menu-item:hover:not(:disabled),
+.wb-drawertab__menu-item:focus-visible {
+  outline: none;
+  background: var(--wb-surface-quiet);
+  color: var(--wb-text-strong);
+}
+
+.wb-drawer-tabs__menu-item:focus-visible,
+.wb-drawertab__menu-item:focus-visible {
+  box-shadow: var(--wb-focus);
+}
+
+.wb-drawer-tabs__menu-item:disabled,
+.wb-drawertab__menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.wb-drawer-tabs__menu-item svg,
+.wb-drawertab__menu-item svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--wb-accent);
+}
+
+.wb-drawertab__menu-item--danger {
+  color: var(--wb-danger-strong);
+}
+
+.wb-drawertab__menu-item--danger svg {
+  color: var(--wb-danger);
+}
+
+.wb-drawer-tabs__menu-text {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.wb-drawer-tabs__menu-label {
+  font-weight: 650;
+}
+
+.wb-drawer-tabs__menu-hint {
+  color: var(--wb-text-faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wb-drawer-tabs__menu-empty {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--wb-text-faint);
+  font-size: 14px;
+}
+
+/* 减少动态效果：直接跳位，不做过渡。 */
+@media (prefers-reduced-motion: reduce) {
+  .wb-drawer .wb-drawer-tabs__list {
+    scroll-behavior: auto;
+  }
+
+  .wb-drawer .wb-drawertab,
+  .wb-drawer .wb-drawertab__close,
+  .wb-drawer .wb-drawer-tabs__add,
+  .wb-drawer-tabs__menu-item,
+  .wb-drawertab__menu-item {
+    transition: none;
+  }
+
+  .wb-drawer .wb-drawer-tabs__add:active {
+    transform: none;
+  }
+}

@@ -1,0 +1,233 @@
+/* 动画与特效预设 */
+
+.presetScope {
+  width: 100%;
+  min-width: 0;
+}
+
+.presetBadge {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 9px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-accent) 10%, transparent);
+  color: var(--wb-accent-strong);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.55;
+  white-space: nowrap;
+}
+
+.presetBadge[data-tone='busy']::before {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  animation: preset-pulse 1s ease-in-out infinite;
+}
+
+.presetEmblem {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 60px;
+  margin-top: 1px;
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 14px;
+  background:
+    radial-gradient(
+      ellipse 62% 86% at 26% 12%,
+      color-mix(in srgb, var(--card-accent, var(--wb-accent)) 20%, transparent) 0%,
+      transparent 66%
+    ),
+    color-mix(in srgb, var(--wb-surface-soft) 74%, transparent);
+  color: color-mix(in srgb, var(--card-accent, var(--wb-accent)) 82%, transparent);
+}
+
+.presetEmblem[data-has-preset='false'] {
+  color: color-mix(in srgb, var(--wb-text-muted) 72%, transparent);
+}
+
+.presetEmblem > svg {
+  position: relative;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  opacity: 0.9;
+}
+
+.presetOrbit,
+.presetOrbitInner {
+  position: absolute;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.14;
+}
+
+.presetOrbit {
+  top: -40px;
+  right: -20px;
+  width: 138px;
+  height: 138px;
+}
+
+.presetOrbitInner {
+  top: -12px;
+  right: 8px;
+  width: 82px;
+  height: 82px;
+  opacity: 0.1;
+}
+
+.presetControls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 1px;
+}
+
+.selectShell {
+  position: relative;
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+
+.presetSelect {
+  width: 100%;
+  height: 34px;
+  padding: 0 30px 0 11px;
+  appearance: none;
+  border: 0;
+  border-radius: var(--wb-radius-control);
+  outline: 0;
+  background: color-mix(in srgb, var(--wb-accent) 7%, transparent);
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease);
+}
+
+.presetSelect:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
+}
+
+.presetSelect:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--wb-accent) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.presetSelect:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.selectChevron {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid color-mix(in srgb, var(--wb-accent-strong) 76%, transparent);
+  border-bottom: 1.5px solid color-mix(in srgb, var(--wb-accent-strong) 76%, transparent);
+  transform: translateY(-68%) rotate(45deg);
+  pointer-events: none;
+}
+
+.clearPreset {
+  display: inline-flex;
+  height: 32px;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--wb-radius-control);
+  background: transparent;
+  color: var(--wb-text-muted);
+  font-family: var(--wb-font);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.clearPreset svg {
+  width: 12px;
+  height: 12px;
+}
+
+.clearPreset:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wb-danger) 10%, transparent);
+  color: var(--wb-danger-strong);
+}
+
+.clearPreset:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.presetError {
+  display: flex;
+  min-height: 58px;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 1px 0 0;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--wb-danger) 10%, transparent);
+  color: color-mix(in srgb, var(--wb-danger-strong) 88%, var(--wb-text));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.65;
+}
+
+.presetError svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 2px;
+  color: var(--wb-danger);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@keyframes preset-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presetSelect,
+  .clearPreset {
+    transition: none;
+  }
+
+  .presetBadge[data-tone='busy']::before {
+    animation: none;
+  }
+}

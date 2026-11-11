@@ -1,0 +1,289 @@
+/* 顶部栏：返回、场景身份、草稿历史、保存状态与保存。 */
+
+.topbar {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  flex: none;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 78px;
+  margin: 10px 26px 0;
+  padding: 6px 2px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.backButton {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--paper-strong) 48%, transparent);
+  color: var(--ink-strong);
+  box-shadow: 0 10px 22px -20px var(--purple-shadow);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.backButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--paper-strong) 78%, transparent);
+  color: var(--purple-deep);
+  transform: translateY(-1px);
+}
+
+.backButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.backButton:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--paper-strong),
+    0 0 0 5px color-mix(in srgb, var(--purple) 55%, transparent);
+}
+
+.identity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.kicker {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted-soft);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identityLine {
+  display: flex;
+  min-width: 0;
+  gap: 12px;
+  align-items: center;
+}
+
+.identityLine h1 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-strong);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sceneChip {
+  display: inline-flex;
+  flex: none;
+  max-width: 42%;
+  gap: 6px;
+  align-items: center;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sceneChip::before {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--teal);
+  content: '';
+}
+
+.topActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.saveStatus {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.saveDot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.statusOk {
+  color: var(--teal-deep);
+}
+
+.statusDirty {
+  color: var(--warning);
+}
+
+.statusBusy {
+  color: var(--purple);
+}
+
+.statusWarning {
+  color: var(--warning);
+}
+
+.statusError {
+  color: var(--error);
+}
+
+.statusMuted {
+  color: var(--muted-soft);
+}
+
+.historyGroup {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper-strong) 46%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.historyButton {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.historyButton:hover:not(:disabled) {
+  background: var(--paper-strong);
+  color: var(--purple-deep);
+}
+
+.historyButton:disabled {
+  color: var(--muted-soft);
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.historyButton:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--paper-strong),
+    0 0 0 5px color-mix(in srgb, var(--purple) 52%, transparent);
+}
+
+.saveButton {
+  display: inline-flex;
+  height: 38px;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #9a74b8, #8863a5);
+  color: var(--paper-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow:
+    0 1px 0 #fffdfb47 inset,
+    0 12px 24px -20px var(--purple-deep);
+  transition:
+    filter var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.saveButton:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.saveButton:disabled {
+  border-color: color-mix(in srgb, var(--ink) 9%, transparent);
+  background: color-mix(in srgb, var(--paper-strong) 46%, transparent);
+  color: var(--muted-soft);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.saveButton:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--paper-strong),
+    0 0 0 5px color-mix(in srgb, var(--purple) 55%, transparent);
+}
+
+.spin {
+  animation: preview-spin 1.05s linear infinite;
+}
+
+@keyframes preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1280px) {
+  .topbar {
+    margin: 8px 18px 0;
+    gap: 10px;
+  }
+
+  .saveButton {
+    padding: 0 14px;
+  }
+}
+
+@media (max-height: 780px) {
+  .topbar {
+    min-height: 68px;
+    margin: 8px 18px 0;
+    padding-bottom: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backButton,
+  .historyButton,
+  .saveButton {
+    transition: none;
+  }
+
+  .spin {
+    animation: none;
+  }
+}

@@ -1,0 +1,294 @@
+/*
+ * 卡片共同外框：类型光点、头部、状态槽、内容区与操作槽。
+ * 画布卡片是浮在洗光上的轻块，不是后台白卡：没有整圈边框、色带和头部底板。
+ */
+
+.frame {
+  --card-accent: var(--wb-accent);
+  --card-tint: color-mix(in srgb, var(--card-accent) 15%, transparent);
+  --card-fill: color-mix(in srgb, var(--wb-surface-solid) 93%, transparent);
+  --card-shadow:
+    0 26px 48px -36px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 62%, transparent),
+    0 8px 18px -16px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 38%, transparent);
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--wb-radius-card);
+  background:
+    radial-gradient(ellipse 118% 84% at 4% -12%, var(--card-tint) 0%, transparent 58%),
+    linear-gradient(168deg, color-mix(in srgb, #fff 42%, transparent), transparent 46%),
+    var(--card-fill);
+  color: var(--wb-text);
+  box-shadow: var(--card-shadow);
+  transition:
+    transform var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-base) var(--wb-ease),
+    background var(--wb-duration-base) var(--wb-ease);
+}
+
+.frame[data-kind='document'] {
+  --card-accent: var(--wb-positive-strong);
+}
+
+.frame[data-kind='prompt'] {
+  --card-accent: var(--wb-accent-strong);
+}
+
+.frame[data-kind='image'] {
+  --card-accent: var(--wb-accent);
+}
+
+.frame[data-kind='audio'] {
+  --card-accent: var(--wb-warning);
+}
+
+.frame[data-kind='video'] {
+  --card-accent: var(--wb-danger);
+}
+
+.frame[data-kind='animation'] {
+  --card-accent: var(--wb-positive);
+}
+
+.frame[data-kind='effect'] {
+  --card-accent: var(--wb-accent-strong);
+}
+
+.frame[data-fill='true'] {
+  height: 100%;
+}
+
+.frame:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--wb-shadow-float);
+}
+
+.frame[data-selected='true'] {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--card-accent) 22%, transparent),
+    0 0 46px -8px color-mix(in srgb, var(--card-accent) 52%, transparent),
+    var(--wb-shadow-float);
+}
+
+.frame[data-risk='true'] {
+  --card-accent: var(--wb-danger);
+  background:
+    radial-gradient(
+      ellipse 130% 90% at 6% -14%,
+      color-mix(in srgb, var(--wb-danger) 18%, transparent),
+      transparent 62%
+    ),
+    var(--card-fill);
+}
+
+.frame[data-risk='true']:hover {
+  box-shadow:
+    0 0 34px -18px color-mix(in srgb, var(--wb-danger) 52%, transparent),
+    var(--wb-shadow-float);
+}
+
+.frame[data-risk='true'][data-selected='true'] {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--wb-danger) 24%, transparent),
+    0 0 46px -8px color-mix(in srgb, var(--wb-danger) 48%, transparent),
+    var(--wb-shadow-float);
+}
+
+.frame:focus-within {
+  outline: 0;
+}
+
+.frame:has(:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--card-accent) 52%, transparent);
+  outline-offset: 3px;
+}
+
+/* 提示词正文是整块可编辑表面：焦点用柔光而不是整圈描边。 */
+.frame[data-layout='paper']:focus-within {
+  outline: 0;
+  background:
+    radial-gradient(
+      ellipse 118% 84% at 4% -12%,
+      color-mix(in srgb, var(--card-accent) 22%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(168deg, color-mix(in srgb, #fff 50%, transparent), transparent 46%),
+    var(--card-fill);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--card-accent) 16%, transparent),
+    0 0 52px -16px color-mix(in srgb, var(--card-accent) 42%, transparent),
+    var(--card-shadow);
+}
+
+/* 选中时从卡片上方落下的一层柔光，不做挂签和描边。 */
+
+.selectAura {
+  position: absolute;
+  z-index: 0;
+  inset: -2px;
+  border-radius: inherit;
+  background: radial-gradient(
+    ellipse 78% 56% at 50% -8%,
+    color-mix(in srgb, var(--card-accent) 26%, transparent) 0%,
+    transparent 72%
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+
+.frame[data-selected='true'] .selectAura {
+  opacity: 1;
+}
+
+/* 头部：类型光点 + 名称，状态槽固定右侧。没有底板和分隔线。 */
+
+.header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 14px 0;
+  background: transparent;
+}
+
+.kind {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  gap: 7px;
+  align-items: center;
+}
+
+.kindIcon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--card-accent) 12%, transparent);
+  color: var(--card-accent);
+}
+
+.kindIcon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.kindLabel {
+  overflow: hidden;
+  color: var(--wb-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusSlot {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 64%;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+/* 内容与操作槽 */
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 7px 14px 14px;
+}
+
+.frame[data-layout='media'] .content {
+  min-height: 0;
+  flex: 1;
+  padding: 0;
+}
+
+.frame[data-layout='paper'] .content {
+  min-height: 0;
+  flex: 1;
+  padding: 0;
+}
+
+.actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 14px 14px;
+  border: 0;
+  background: transparent;
+}
+
+/* 图片与视频是画布上的预览物：外框让位给预览本身。 */
+
+.frame[data-layout='media'],
+.frame[data-layout='media']:hover,
+.frame[data-layout='media'][data-selected='true'] {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.frame[data-layout='media'][data-selected='true'] .content {
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--card-accent) 32%, transparent));
+}
+
+.frame[data-layout='media'] .content {
+  padding: 0;
+}
+
+@media (max-width: 520px) {
+  .header {
+    padding: 10px 11px 0;
+  }
+
+  .content {
+    padding: 6px 11px 12px;
+  }
+
+  .frame[data-layout='media'] .content {
+    padding: 0;
+  }
+
+  .actions {
+    padding: 0 11px 12px;
+  }
+}
+
+@media (hover: none) {
+  .frame:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame {
+    transition: none;
+  }
+
+  .frame:hover,
+  .frame[data-selected='true'] {
+    transform: none;
+  }
+}

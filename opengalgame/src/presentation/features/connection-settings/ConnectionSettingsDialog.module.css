@@ -1,0 +1,409 @@
+.modelRow {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+/* 首次读取：用表单骨架说明正在加载，不占满表单宽度的状态条。 */
+
+.loadingPanel {
+  display: grid;
+  gap: 14px;
+  padding: 2px 0;
+}
+
+.loadingHead {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  color: #4a3e6e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.loadingPulse {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #9a5abd;
+  box-shadow: 0 0 0 0 #9a5abd55;
+  animation: connection-pulse 1.5s ease-out infinite;
+}
+
+.skeletonRows {
+  display: grid;
+  gap: 12px;
+}
+
+.skeletonRow {
+  height: 38px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #f4eef9 25%, #faf7fc 50%, #f4eef9 75%);
+  background-size: 200% 100%;
+  animation: connection-skeleton 1.4s ease-in-out infinite;
+}
+
+.loadingHint {
+  margin: 0;
+  color: #6f6584;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.summaryNote {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f6f1fa;
+  color: #6f6584;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.summaryNote[data-tone='empty'] {
+  background: #fdf8ec;
+  color: #8a5a2b;
+}
+
+/* 上次测试/保存结果：表单内只保留一条紧凑入口，详情在弹窗里看。 */
+
+.feedbackEntry {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border: 1px solid #eadff3;
+  border-radius: 8px;
+  background: #fffcf7;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast, 160ms) var(--ease-out, ease),
+    background var(--duration-fast, 160ms) var(--ease-out, ease);
+}
+
+.feedbackEntry:hover {
+  border-color: #d7c8e8;
+  background: #fbf7fd;
+}
+
+.feedbackEntry:focus-visible {
+  border-color: #9a5abd;
+  outline: none;
+  box-shadow: 0 0 0 3px #9a5abd33;
+}
+
+.feedbackDot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #3f8f79;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #3f8f79 16%, transparent);
+}
+
+.feedbackEntry[data-tone='error'] .feedbackDot {
+  background: #c25a72;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #c25a72 16%, transparent);
+}
+
+.feedbackCopy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.feedbackLabel {
+  color: #8a7d9d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.feedbackTitle {
+  color: #4a3e6e;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.feedbackAction {
+  flex: none;
+  color: #7b4f96;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+@keyframes connection-pulse {
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes connection-skeleton {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.modelRow > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.modelRow > button {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* 扩展请求配置：可选区块，层次低于 API Key 与主操作；已配置时只显示状态，不回显内容。 */
+.extension {
+  margin-top: 2px;
+  padding-top: 16px;
+  border-top: 1px solid #eadff3;
+}
+
+.extensionEntry {
+  display: flex;
+  width: 100%;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #eadff3;
+  border-radius: 8px;
+  background: #fffcf7;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast, 160ms) var(--ease-out, ease),
+    background var(--duration-fast, 160ms) var(--ease-out, ease);
+}
+
+.extensionEntry:hover:not(:disabled) {
+  border-color: #d7c8e8;
+  background: #fbf7fd;
+}
+
+.extensionEntry:focus-visible {
+  border-color: #9a5abd;
+  outline: none;
+  box-shadow: 0 0 0 3px #9a5abd33;
+}
+
+.extensionEntry:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.extensionEntryCopy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+
+.extensionEntryAction {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  align-items: center;
+  color: #7b4f96;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.extensionEntryAction svg {
+  width: 14px;
+  height: 14px;
+}
+
+.extensionTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.extensionTitle {
+  margin: 0;
+  color: #4a3e6e;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.extensionBadge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f3ecf9;
+  color: #7b4f96;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.extensionBadge[data-tone='configured'] {
+  background: #edf7f3;
+  color: #2f7c68;
+}
+
+.extensionHint {
+  display: block;
+  margin: 4px 0 0;
+  color: #6f6584;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.extensionPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #9a5abd 6%, #fffcf7);
+  animation: extension-reveal 160ms var(--ease-out, ease) both;
+}
+
+.extensionPanel[data-tone='danger'] {
+  background: #fdf1f4;
+}
+
+.extensionPanel[data-tone='pending'] {
+  background: #fdf8ec;
+}
+
+.extensionPanel:focus {
+  outline: none;
+}
+
+.extensionPanelCopy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 240px;
+  gap: 3px;
+}
+
+.extensionDot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #3f8f79;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #3f8f79 16%, transparent);
+}
+
+.extensionDot[data-tone='pending'] {
+  background: #b1843f;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #b1843f 16%, transparent);
+}
+
+.extensionActions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.extensionEditor {
+  animation: extension-reveal 160ms var(--ease-out, ease) both;
+}
+
+.extensionEditor .extensionTitleRow {
+  margin-bottom: 2px;
+}
+
+.extensionEditor > .extensionHint {
+  margin: 6px 0 12px;
+}
+
+.extensionEditor textarea.extensionTextarea {
+  min-height: 128px;
+  max-height: 240px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.extensionHelp {
+  margin: -6px 0 12px;
+  color: #6f6584;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.extensionHelpNote {
+  display: block;
+  margin-top: 2px;
+}
+
+.extensionHelpNote[data-tone='caution'] {
+  color: #8a5a2b;
+}
+
+.extensionEditorFoot {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.extensionActions .compactButton,
+.extensionEditorFoot .compactButton {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+@keyframes extension-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .extensionPanel,
+  .extensionEditor {
+    animation: none;
+  }
+
+  .loadingPulse,
+  .skeletonRow {
+    animation: none;
+  }
+}

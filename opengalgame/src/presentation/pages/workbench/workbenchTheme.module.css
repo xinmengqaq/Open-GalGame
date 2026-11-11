@@ -1,0 +1,92 @@
+/*
+ * 工作台局部视觉接口（--wb-*）。
+ *
+ * 挂载边界：WorkbenchPage 的 .screen 与 FeedbackLayer 的 Portal 浮层。
+ * 首页、项目页、共享组件不引用 --wb-*；工作台内原生 dialog 经 DOM 继承。
+ * 后续工作台子模块只从这里取字体、颜色、wash、表面、圆角、阴影、焦点和动效，
+ * 不再各自声明新的圆角或阴影档位。
+ */
+.theme {
+  /* 字体 */
+  --wb-font: var(--font-sans);
+  --wb-font-mono: var(--font-mono);
+
+  /* 文字 */
+  --wb-text: var(--ink);
+  --wb-text-strong: var(--ink-strong);
+  --wb-text-muted: var(--muted);
+  --wb-text-faint: var(--muted-soft);
+
+  /* 语义色 */
+  --wb-accent: var(--purple);
+  --wb-accent-strong: var(--purple-deep);
+  --wb-positive: var(--teal);
+  --wb-positive-strong: var(--teal-deep);
+  --wb-warning: var(--warning);
+  --wb-danger: var(--rose);
+  --wb-danger-strong: var(--error);
+
+  /* 状态洗光，只作低饱和底色，不承载正文 */
+  --wb-wash-lilac: color-mix(in srgb, var(--purple) 10%, transparent);
+  --wb-wash-lilac-soft: color-mix(in srgb, var(--purple) 6%, transparent);
+  --wb-wash-mint: color-mix(in srgb, var(--teal) 10%, transparent);
+  --wb-wash-cream: color-mix(in srgb, var(--warning) 8%, transparent);
+  --wb-wash-warning: color-mix(in srgb, var(--warning) 9%, transparent);
+  --wb-wash-rose: color-mix(in srgb, var(--rose) 9%, transparent);
+  --wb-wash-ink: color-mix(in srgb, var(--ink) 5%, transparent);
+
+  /* 表面与分隔 */
+  --wb-surface-glass: color-mix(in srgb, var(--paper-strong) 70%, transparent);
+  --wb-surface-soft: color-mix(in srgb, var(--paper-strong) 45%, transparent);
+  --wb-surface-quiet: color-mix(in srgb, var(--paper-strong) 28%, transparent);
+  --wb-surface-solid: var(--paper-strong);
+  --wb-hairline: color-mix(in srgb, var(--ink) 9%, transparent);
+  --wb-hairline-strong: color-mix(in srgb, var(--ink) 16%, transparent);
+
+  /* 圆角层级：面板 / 卡片与浮层 / 控件 */
+  --wb-radius-panel: 26px;
+  --wb-radius-card: 18px;
+  --wb-radius-control: 12px;
+  --wb-radius-pill: 999px;
+
+  /* 阴影层级：浮层 / 软浮 / 小控件 */
+  --wb-shadow-float:
+    0 32px 66px -46px color-mix(in srgb, var(--purple-shadow) 64%, transparent),
+    0 10px 26px -24px color-mix(in srgb, var(--purple-shadow) 46%, transparent);
+  --wb-shadow-soft: 0 16px 34px -30px color-mix(in srgb, var(--purple-shadow) 56%, transparent);
+  --wb-shadow-chip: 0 10px 22px -20px color-mix(in srgb, var(--purple-shadow) 52%, transparent);
+
+  /* 焦点与选中光环 */
+  --wb-glow: 0 0 0 3px color-mix(in srgb, var(--purple) 20%, transparent);
+  --wb-focus:
+    0 0 0 2px var(--paper-strong), 0 0 0 5px color-mix(in srgb, var(--purple) 52%, transparent);
+
+  /* 动效 */
+  --wb-duration-fast: var(--duration-fast);
+  --wb-duration-base: var(--duration-base);
+  --wb-ease: var(--ease-out);
+
+  /* 连续画布洗光：淡紫、奶油、青绿三层柔光，不铺在正文背后 */
+  --wb-canvas-wash:
+    radial-gradient(
+      ellipse 54% 48% at 78% 14%,
+      color-mix(in srgb, var(--cream) 74%, transparent) 0%,
+      transparent 66%
+    ),
+    radial-gradient(
+      ellipse 48% 44% at 12% 86%,
+      color-mix(in srgb, var(--teal) 16%, transparent) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse 68% 62% at 46% 46%,
+      color-mix(in srgb, var(--purple) 13%, transparent) 0%,
+      transparent 74%
+    ),
+    linear-gradient(
+      146deg,
+      color-mix(in srgb, var(--lav) 76%, #fff) 0%,
+      var(--lav) 44%,
+      color-mix(in srgb, var(--mint) 44%, var(--lav)) 100%
+    );
+}

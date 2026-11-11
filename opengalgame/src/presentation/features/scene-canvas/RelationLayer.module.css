@@ -1,0 +1,663 @@
+/*
+ * 关系层：一条柔光带、两个光点和线上的一枚状态光点。
+ * 命名 / 未命名 / 选中 / 拒绝用线型、点形与洗光共同表达，不用整圈硬边框。
+ * 关系标签的全部样式只在本文件维护，SceneCanvas.module.css 不再保留第二套。
+ */
+
+.edgeLayer {
+  pointer-events: none;
+  --relation-line: var(--wb-positive-strong);
+  --relation-ink: var(--wb-positive-strong);
+}
+
+.edgeLayer[data-tone='unnamed'] {
+  --relation-line: var(--wb-warning);
+  --relation-ink: var(--wb-warning);
+}
+
+.edgeLayer[data-active='true'] {
+  --relation-line: var(--wb-accent);
+  --relation-ink: var(--wb-accent-strong);
+}
+
+.edgeLayer[data-rejected='true'] {
+  --relation-line: var(--wb-danger);
+  --relation-ink: var(--wb-danger-strong);
+}
+
+/* 线：宽柔光带 + 细实线；未命名用琥珀虚线，拒绝用短虚线。 */
+
+.edgeUnderlay {
+  fill: none;
+  stroke: var(--relation-line, var(--wb-positive-strong));
+  stroke-width: 14;
+  stroke-linecap: round;
+  opacity: 0.08;
+  pointer-events: none;
+  transition: opacity 180ms var(--wb-ease);
+}
+
+.edgeLine {
+  fill: none;
+  stroke: var(--relation-line, var(--wb-positive-strong));
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.86;
+  pointer-events: none;
+  transition:
+    stroke-width 160ms var(--wb-ease),
+    stroke-dasharray 160ms ease,
+    opacity 160ms ease;
+}
+
+.edgeLayer[data-tone='unnamed'] .edgeLine {
+  stroke-dasharray: 9 7;
+  opacity: 0.78;
+}
+
+.edgeLayer[data-active='true'] .edgeLine {
+  stroke-width: 3.4;
+  opacity: 1;
+}
+
+.edgeLayer[data-active='true'] .edgeUnderlay {
+  opacity: 0.18;
+}
+
+.edgeLayer[data-rejected='true'] .edgeLine {
+  stroke-width: 2.8;
+  stroke-dasharray: 3 5;
+  opacity: 0.95;
+}
+
+.edgeLayer[data-rejected='true'] .edgeUnderlay {
+  opacity: 0.16;
+}
+
+.edgeLayer:hover .edgeLine {
+  stroke-width: 3.6;
+  opacity: 1;
+}
+
+.edgeLayer:hover .edgeUnderlay {
+  opacity: 0.16;
+}
+
+.edgeEndpoint {
+  fill: var(--relation-line, var(--wb-positive-strong));
+  stroke: none;
+  pointer-events: none;
+}
+
+.edgeLayer[data-tone='unnamed'] .edgeEndpoint {
+  fill: var(--wb-surface-solid);
+  stroke: var(--relation-line, var(--wb-warning));
+  stroke-width: 1.6;
+}
+
+.edgeHit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 30;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* 关系记录连线：卡片到一个关系光点的引用线，不参与关系状态配色。 */
+
+.recordEdgeLayer {
+  pointer-events: none;
+}
+
+.recordEdgeLine {
+  fill: none;
+  stroke: color-mix(in srgb, var(--wb-positive) 76%, transparent);
+  stroke-width: 1.8;
+  stroke-dasharray: 2 7;
+  stroke-linecap: round;
+  opacity: 0.75;
+}
+
+.recordEdgeSource {
+  fill: color-mix(in srgb, var(--wb-positive) 82%, transparent);
+}
+
+.recordEdgePin {
+  fill: var(--wb-surface-solid);
+  stroke: color-mix(in srgb, var(--wb-positive-strong) 78%, transparent);
+  stroke-width: 1.5;
+}
+
+/* 关系标签：线上浮着的一枚玻璃胶囊。 */
+
+:global(.react-flow__node-relationAnchor) .anchor {
+  --relation-line: var(--wb-positive-strong);
+  --relation-ink: var(--wb-positive-strong);
+  --label-lift: 30px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: max-content;
+  max-width: min(340px, 56vw);
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  transform: translate(-50%, calc(-50% - var(--label-lift)));
+  transition: transform 180ms var(--wb-ease);
+}
+
+/* 标签的状态色必须写在基础变量之后，否则会被默认的青绿覆盖。 */
+
+.anchor[data-tone='unnamed'] {
+  --relation-line: var(--wb-warning);
+  --relation-ink: var(--wb-warning);
+}
+
+.anchor[data-active='true'] {
+  --relation-line: var(--wb-accent);
+  --relation-ink: var(--wb-accent-strong);
+}
+
+.anchor[data-rejected='true'] {
+  --relation-line: var(--wb-danger);
+  --relation-ink: var(--wb-danger-strong);
+}
+
+/* 标签与线之间的短光茎；标签落在中点上时不画。 */
+
+.anchor::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 1px;
+  height: max(8px, calc(var(--label-lift) - 18px));
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--relation-line) 58%, transparent),
+    transparent
+  );
+  content: '';
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.anchor[data-condensed='true']::after {
+  display: none;
+}
+
+.labelRow {
+  position: relative;
+  display: flex;
+  max-width: 100%;
+  gap: 3px;
+  align-items: center;
+  padding: 4px 9px 4px 11px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--relation-line) 10%, var(--wb-surface-solid)) 0%,
+    color-mix(in srgb, var(--wb-surface-solid) 86%, transparent) 64%
+  );
+  box-shadow: var(--wb-shadow-chip);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+  transition:
+    background 160ms ease,
+    box-shadow 180ms var(--wb-ease),
+    max-width 180ms var(--wb-ease),
+    padding 160ms ease;
+}
+
+.anchor[data-tone='unnamed'] .labelRow {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--wb-warning) 10%, var(--wb-surface-solid)) 0%,
+    color-mix(in srgb, var(--wb-surface-solid) 86%, transparent) 64%
+  );
+}
+
+.anchor[data-active='true'] .labelRow {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--wb-accent) 20%, transparent),
+    var(--wb-shadow-chip);
+}
+
+.anchor[data-rejected='true'] .labelRow {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--wb-danger) 20%, transparent),
+    var(--wb-shadow-chip);
+}
+
+.anchor[data-loadable='true'] .labelRow {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--wb-positive) 18%, var(--wb-surface-solid)) 0%,
+    color-mix(in srgb, var(--wb-surface-solid) 88%, transparent) 68%
+  );
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--wb-positive) 16%, transparent),
+    var(--wb-shadow-chip);
+}
+
+.anchor:hover .labelRow {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--relation-line) 12%, transparent),
+    var(--wb-shadow-soft);
+}
+
+.label {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 276px;
+  gap: 8px;
+  align-items: center;
+  padding: 1px 0;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: transparent;
+  color: var(--relation-ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 光点收起时标签按钮只有约 9px 宽；低缩放时按屏幕像素补足点击区，避免点不中。
+   补足量不超过与该锚点最近的邻居间距（--anchor-hit-clearance），否则会盖住相邻锚点。 */
+
+.label::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(calc(24px * var(--canvas-zoom-inverse, 1)), var(--anchor-hit-clearance, 100000px));
+  height: min(calc(24px * var(--canvas-zoom-inverse, 1)), var(--anchor-hit-clearance, 100000px));
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+.label:hover {
+  color: var(--wb-text-strong);
+}
+
+.label:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--wb-accent) 66%, transparent);
+  outline-offset: 3px;
+}
+
+.stateMark {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border: 1.5px solid var(--relation-line);
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--relation-line) 12%, transparent);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.anchor[data-tone='named'] .stateMark {
+  background: var(--relation-line);
+}
+
+.anchor[data-active='true'] .stateMark {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-accent) 22%, transparent);
+}
+
+.anchor[data-rejected='true'] .stateMark {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-danger) 22%, transparent);
+}
+
+.labelText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anchor[data-tone='unnamed'] .labelText {
+  color: var(--wb-warning);
+  font-weight: 600;
+}
+
+.recordMark {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--relation-line) 18%, transparent);
+  color: var(--relation-line);
+}
+
+.recordMark svg {
+  width: 13px;
+  height: 13px;
+}
+
+.recordDetach {
+  position: relative;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-accent) 8%, transparent);
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.55;
+  cursor: pointer;
+  transition:
+    opacity 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.labelRow:hover .recordDetach,
+.recordDetach:focus-visible {
+  opacity: 1;
+}
+
+.recordDetach:hover {
+  background: color-mix(in srgb, var(--wb-danger) 12%, transparent);
+  color: var(--wb-danger-strong);
+}
+
+/* 默认收起为光点；悬停、聚焦、编辑或可装载时展开名称，避免遮挡卡片。 */
+
+.anchor[data-condensed='true'] {
+  --label-lift: 0px;
+}
+
+.anchor[data-condensed='true'] .labelRow {
+  max-width: 34px;
+  justify-content: center;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.anchor[data-condensed='true'] .label {
+  gap: 0;
+}
+
+.anchor[data-condensed='true'] .stateMark {
+  width: 9px;
+  height: 9px;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--relation-line) 14%, transparent),
+    0 0 12px -2px color-mix(in srgb, var(--relation-line) 48%, transparent);
+}
+
+.anchor[data-condensed='true'] .labelText,
+.anchor[data-condensed='true'] .recordMark,
+.anchor[data-condensed='true'] .recordDetach {
+  min-width: 0;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    max-width 180ms var(--wb-ease),
+    opacity 120ms ease;
+}
+
+.anchor[data-condensed='true'] .recordDetach {
+  visibility: hidden;
+}
+
+.anchor[data-condensed='true']:hover .labelRow,
+.anchor[data-condensed='true']:focus-within .labelRow,
+.anchor[data-condensed='true'][data-active='true'] .labelRow,
+.anchor[data-condensed='true'][data-rejected='true'] .labelRow {
+  max-width: 320px;
+  justify-content: flex-start;
+  padding: 4px 9px 4px 11px;
+}
+
+.anchor[data-condensed='true']:hover .label,
+.anchor[data-condensed='true']:focus-within .label {
+  gap: 8px;
+}
+
+.anchor[data-condensed='true']:hover .labelText,
+.anchor[data-condensed='true']:focus-within .labelText,
+.anchor[data-condensed='true'][data-active='true'] .labelText,
+.anchor[data-condensed='true'][data-rejected='true'] .labelText {
+  max-width: 220px;
+  opacity: 1;
+}
+
+.anchor[data-condensed='true']:hover .recordMark,
+.anchor[data-condensed='true']:focus-within .recordMark,
+.anchor[data-condensed='true'][data-active='true'] .recordMark,
+.anchor[data-condensed='true']:hover .recordDetach,
+.anchor[data-condensed='true']:focus-within .recordDetach,
+.anchor[data-condensed='true'][data-active='true'] .recordDetach {
+  max-width: 24px;
+  opacity: 0.85;
+  visibility: visible;
+  transition-delay: 40ms;
+}
+
+/* 展开后卸下按钮可见，必须同时恢复命中，否则收起态下只能看到不能点。 */
+.anchor[data-condensed='true']:hover .recordDetach,
+.anchor[data-condensed='true']:focus-within .recordDetach {
+  pointer-events: auto;
+}
+
+/* 关系被选中（编辑中）时标签行已经展开，卸下按钮也必须同时出现且可点。 */
+.anchor[data-condensed='true'][data-active='true'] .recordDetach {
+  pointer-events: auto;
+}
+
+.anchor[data-condensed='true'][data-loadable='true'] .labelRow {
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--wb-positive) 15%, transparent),
+    var(--wb-shadow-chip);
+}
+
+.anchor[data-condensed='true'][data-loadable='true'] .stateMark {
+  background: var(--wb-positive-strong);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--wb-positive) 16%, transparent),
+    0 0 16px -2px color-mix(in srgb, var(--wb-positive) 62%, transparent);
+}
+
+/* 收起状态下，装载提示只在指针或键盘接近这枚光点时出现，不压卡片。 */
+.anchor[data-condensed='true'][data-loadable='true'] .dropHint {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.anchor[data-condensed='true'][data-loadable='true']:hover .dropHint,
+.anchor[data-condensed='true'][data-loadable='true']:focus-within .dropHint {
+  opacity: 1;
+}
+
+.dropHint {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-positive) 14%, var(--wb-surface-solid));
+  box-shadow: var(--wb-shadow-chip);
+  color: var(--wb-positive-strong);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+/* 端口：填充为主，命中区域仍由外层 Handle 保证。 */
+
+.portAnchor {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 140ms ease;
+}
+
+/* 收起为光点时不再额外画端口：光点本身带光晕，就是落点。 */
+
+.anchor[data-condensed='true'] .portAnchor {
+  opacity: 0;
+}
+
+.anchor[data-condensed='true']:hover .portAnchor,
+.anchor[data-condensed='true']:focus-within .portAnchor {
+  opacity: 1;
+}
+
+.port {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid transparent;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--wb-accent) 48%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-accent) 10%, transparent);
+  pointer-events: none;
+  transform: rotate(45deg);
+  transition:
+    width 160ms var(--wb-ease),
+    height 160ms var(--wb-ease),
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.port[data-shape='circle'] {
+  border-radius: 50%;
+  transform: none;
+}
+
+.port[data-state='named'] {
+  border-color: transparent;
+  background: var(--wb-positive-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-positive) 12%, transparent);
+}
+
+.port[data-state='unnamed'] {
+  border-color: var(--wb-warning);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--wb-surface-solid) 80%, transparent);
+  box-shadow: none;
+}
+
+.port[data-state='active'] {
+  width: 11px;
+  height: 11px;
+  border-color: transparent;
+  background: var(--wb-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wb-accent) 20%, transparent);
+}
+
+.port[data-state='ready'] {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid color-mix(in srgb, var(--wb-positive-strong) 78%, transparent);
+  background: color-mix(in srgb, var(--wb-surface-solid) 72%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wb-positive) 12%, transparent);
+}
+
+.port[data-state='rejected'] {
+  width: 12px;
+  height: 12px;
+  border-color: transparent;
+  background: var(--wb-danger);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--wb-danger) 16%, transparent);
+}
+
+.port[data-state='active']::after {
+  position: absolute;
+  inset: 3.5px;
+  border-radius: 1px;
+  background: var(--wb-surface-solid);
+  content: '';
+}
+
+/* 记录落点跟标签行同域：命中区随可见标签走，不再用固定大热区抢占邻近锚点。 */
+
+:global(.react-flow__node-relationAnchor) .anchor .anchorHandle {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0;
+  border: 0 !important;
+  border-radius: var(--wb-radius-pill) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+  pointer-events: none !important;
+}
+
+/* 低缩放时按屏幕像素补足命中盒：屏幕命中不小于 24px，正常缩放仍以标签尺寸为准；
+   补足量同样受最近邻居间距限制，低缩放时两枚锚点不会互相叠压。
+   伪元素只扩张命中外沿，不改 handle 实测框，记录虚线端点不被命中盒带偏。 */
+
+:global(.react-flow__node-relationAnchor) .anchor .anchorHandle::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(calc(24px * var(--canvas-zoom-inverse, 1)), var(--anchor-hit-clearance, 100000px));
+  height: min(calc(24px * var(--canvas-zoom-inverse, 1)), var(--anchor-hit-clearance, 100000px));
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+:global(.react-flow__node-relationAnchor) .anchor[data-loadable='true'] .anchorHandle {
+  pointer-events: all !important;
+}
+
+@media (max-width: 760px) {
+  .labelRow {
+    max-width: 100%;
+  }
+
+  .label {
+    max-width: 220px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .labelRow,
+  .stateMark,
+  .recordDetach,
+  .port,
+  .edgeLine,
+  .edgeUnderlay,
+  .anchor {
+    transition: none;
+  }
+
+  .anchor[data-condensed='true'] .labelText,
+  .anchor[data-condensed='true'] .recordMark,
+  .anchor[data-condensed='true'] .recordDetach {
+    transition: none;
+  }
+}

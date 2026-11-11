@@ -1,0 +1,96 @@
+/* 来源与格式状态：色点 + 正文级文字，不用胶囊、渐变底或边框。 */
+
+.status {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  gap: 6px;
+  align-items: center;
+  color: var(--wb-text-muted, var(--muted));
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.dot::after {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  opacity: 0.14;
+}
+
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.readable {
+  color: var(--wb-text-muted, var(--muted));
+}
+
+.readable .dot {
+  background: var(--wb-positive, var(--teal));
+}
+
+.unreadable {
+  color: var(--wb-warning, var(--warning));
+}
+
+.disconnected {
+  color: var(--wb-danger, var(--rose));
+}
+
+.compact {
+  gap: 5px;
+  font-size: 11.5px;
+}
+
+.compact .dot {
+  width: 5px;
+  height: 5px;
+}
+
+/* 文档格式 */
+
+.format {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  align-items: center;
+  color: var(--wb-text-faint, var(--muted-soft));
+  font-family: var(--wb-font-mono, var(--font-mono));
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.formatUnknown {
+  color: var(--wb-warning, var(--warning));
+  font-family: var(--wb-font, var(--font-sans));
+}
+
+.formatIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.formatIcon svg {
+  width: 12px;
+  height: 12px;
+}

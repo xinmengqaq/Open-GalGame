@@ -1,0 +1,245 @@
+/*
+ * 目录弹窗内容与共享 Dialog 外壳解耦：这里是目录自己的表单、选择行与删除信息，
+ * 一律用 wash 行和留白分组，不再套目标信息卡、警告卡和统计胶囊。
+ */
+.dialogForm {
+  display: grid;
+  gap: 8px;
+}
+
+.dialogHint {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0;
+  color: var(--wb-text-faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dialogHint svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--wb-accent);
+}
+
+.dialogLead {
+  margin: 0 0 10px;
+  color: var(--wb-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.chooser {
+  display: grid;
+  gap: 6px;
+}
+
+.chooserCard {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--wb-wash-lilac-soft);
+  color: var(--wb-text);
+  text-align: left;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.chooserCard:hover:not(:disabled) {
+  background: var(--wb-wash-lilac);
+  box-shadow: var(--wb-shadow-soft);
+  transform: translateY(-1px);
+}
+
+.chooserCard:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--wb-accent) 58%, transparent);
+  outline-offset: 2px;
+}
+
+.chooserCard:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.chooserIcon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.chooserIcon[data-tone='image'] {
+  background: var(--wb-wash-mint);
+  color: var(--wb-positive-strong);
+}
+
+.chooserIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chooserCopy {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.chooserCopy strong {
+  color: var(--wb-text-strong);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.chooserCopy span {
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.chooserArrow {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--wb-surface-solid) 55%, transparent);
+  color: var(--wb-accent);
+}
+
+.chooserArrow svg {
+  width: 13px;
+  height: 13px;
+}
+
+.deleteBody {
+  display: grid;
+  gap: 9px;
+}
+
+.deleteTarget {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--wb-wash-lilac-soft);
+}
+
+.deleteTargetIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger);
+}
+
+.deleteTargetIcon[data-tone='folder'] {
+  background: var(--wb-wash-cream);
+  color: var(--wb-warning);
+}
+
+.deleteTargetIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.deleteTargetText {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.deleteTargetText strong {
+  overflow: hidden;
+  color: var(--wb-text-strong);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deleteTargetText small {
+  color: var(--wb-text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.deleteStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  align-items: baseline;
+  padding-left: 2px;
+}
+
+.deleteStats span {
+  display: inline-flex;
+  gap: 4px;
+  align-items: baseline;
+  padding: 0;
+  background: transparent;
+  color: var(--wb-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.deleteStats span + span::before {
+  margin-right: 10px;
+  color: var(--wb-hairline-strong);
+  content: '·';
+}
+
+.deleteStats strong {
+  color: var(--wb-text-strong);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.deleteWarning {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.deleteWarning svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--wb-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chooserCard {
+    transition: none;
+  }
+}

@@ -1,0 +1,238 @@
+/*
+ * 工程未就绪：三层错开的场景框和一层缺失柔光，直接落在画布上。
+ * 不套白卡、不画告警图标，也不露出内部名词。
+ */
+
+.panel {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 12px 20px 20px;
+  padding: 24px 20px 8vh;
+  place-content: center;
+  justify-items: center;
+  overflow: hidden;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  text-align: center;
+}
+
+.glow {
+  position: absolute;
+  z-index: -1;
+  width: min(520px, 86%);
+  height: 280px;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      ellipse 48% 56% at 62% 42%,
+      color-mix(in srgb, var(--cream) 72%, transparent) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 42% 48% at 34% 58%,
+      color-mix(in srgb, var(--teal) 18%, transparent) 0%,
+      transparent 72%
+    );
+  pointer-events: none;
+}
+
+.art {
+  position: relative;
+  width: min(280px, 100%);
+  height: 188px;
+  margin-bottom: 8px;
+}
+
+.layers {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.back,
+.middle,
+.front {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.back {
+  fill: color-mix(in srgb, var(--wb-surface-solid) 34%, transparent);
+  stroke: color-mix(in srgb, var(--purple) 28%, transparent);
+  stroke-width: 1.4;
+}
+
+.middle {
+  fill: color-mix(in srgb, var(--wb-surface-solid) 58%, transparent);
+  stroke: color-mix(in srgb, var(--purple) 46%, transparent);
+  stroke-width: 1.5;
+}
+
+.front {
+  fill: color-mix(in srgb, var(--wb-surface-solid) 82%, transparent);
+  stroke: color-mix(in srgb, var(--teal) 62%, var(--purple));
+  stroke-width: 1.7;
+  filter: drop-shadow(0 18px 22px color-mix(in srgb, var(--purple-shadow) 28%, transparent));
+}
+
+.missing {
+  position: absolute;
+  top: 78px;
+  right: 18px;
+  width: 92px;
+  height: 58px;
+  border: 1.5px dashed color-mix(in srgb, var(--teal) 54%, transparent);
+  border-radius: 16px;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--teal) 16%, transparent) 0%,
+    transparent 72%
+  );
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.copy {
+  display: grid;
+  width: min(460px, 100%);
+  gap: 8px;
+  justify-items: center;
+}
+
+.copy h2 {
+  margin: 0;
+  color: var(--wb-text-strong);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.copy p {
+  max-width: 420px;
+  margin: 0;
+  color: var(--wb-text-muted);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.75;
+}
+
+.failure,
+.failureSlot {
+  width: min(420px, 100%);
+  min-height: 28px;
+  margin: 10px 0 0;
+}
+
+.failure {
+  color: var(--wb-danger-strong);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.rebuild {
+  display: inline-flex;
+  min-width: 148px;
+  min-height: 42px;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--purple) 82%, #fff) 0%,
+    var(--purple-deep) 66%
+  );
+  box-shadow: 0 16px 30px -18px color-mix(in srgb, var(--purple-shadow) 78%, transparent);
+  color: var(--white);
+  font-family: var(--wb-font);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    filter var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease);
+}
+
+.rebuild:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 18px 34px -16px color-mix(in srgb, var(--purple-shadow) 82%, transparent);
+  transform: translateY(-1px);
+}
+
+.rebuild:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.rebuild:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.rebuild:disabled {
+  cursor: default;
+  opacity: 0.62;
+  filter: saturate(0.55);
+  transform: none;
+}
+
+.mark {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, #fff 22%, transparent);
+}
+
+.panel[data-state='rebuilding'] .mark {
+  animation: rebuild-pulse 1.2s ease-in-out infinite;
+}
+
+.panel[data-state='failed'] .missing {
+  border-color: color-mix(in srgb, var(--rose) 48%, transparent);
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--rose) 14%, transparent) 0%,
+    transparent 72%
+  );
+}
+
+@keyframes rebuild-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (max-width: 1366px) {
+  .panel {
+    margin: 8px 16px 16px;
+    padding-bottom: 4vh;
+  }
+
+  .art {
+    height: 168px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel[data-state='rebuilding'] .mark,
+  .missing {
+    animation: none;
+  }
+
+  .rebuild {
+    transition: none;
+  }
+}

@@ -1,0 +1,253 @@
+/*
+ * 作品历史的加载骨架、空态、失败态与分页。选择器限定在 .wb-drawer 根作用域。
+ */
+/* 加载骨架 */
+.wb-drawer .works-skeleton {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 0 24px 100px;
+}
+
+.wb-drawer .works-skeleton::before {
+  position: absolute;
+  top: 4px;
+  bottom: 0;
+  left: 79px;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--purple) 22%, transparent),
+    color-mix(in srgb, var(--teal) 12%, transparent),
+    transparent
+  );
+  content: '';
+}
+
+.wb-drawer .works-skeleton__date {
+  width: 76px;
+  height: 12px;
+  border-radius: 6px;
+}
+
+.wb-drawer .works-skeleton__row {
+  display: grid;
+  grid-template-columns: 56px 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.wb-drawer .works-skeleton__time {
+  height: 10px;
+  border-radius: 5px;
+}
+
+.wb-drawer .works-skeleton__node {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.wb-drawer .works-skeleton__main {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.wb-drawer .works-skeleton__title {
+  width: 48%;
+  height: 12px;
+  border-radius: 6px;
+}
+
+.wb-drawer .works-skeleton__line {
+  height: 10px;
+  border-radius: 5px;
+}
+
+.wb-drawer .works-skeleton__meta {
+  width: 32%;
+  height: 9px;
+  border-radius: 5px;
+}
+
+.wb-drawer .works-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--wb-text) 8%, transparent);
+}
+
+.wb-drawer .works-shimmer::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 55%), transparent);
+  content: '';
+  animation: works-shimmer-sweep 1.8s ease-in-out infinite;
+}
+
+@keyframes works-shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* 空态与失败态 */
+.wb-drawer .works-empty {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 30px 0 20px 100px;
+}
+
+.wb-drawer .works-empty__ghost {
+  position: absolute;
+  top: 16px;
+  bottom: 0;
+  left: 79px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--wb-hairline-strong), transparent);
+}
+
+.wb-drawer .works-empty__node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wb-drawer .works-empty__mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  margin-left: -34px;
+  place-items: center;
+  color: var(--wb-text-faint);
+}
+
+.wb-drawer .works-empty__mark svg {
+  width: 24px;
+  height: 24px;
+}
+
+.wb-drawer .works-empty__label {
+  color: var(--wb-text-strong);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.wb-drawer .works-empty__copy {
+  display: flex;
+  max-width: 440px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 10px;
+}
+
+.wb-drawer .works-empty__copy h3 {
+  margin: 0;
+  color: var(--wb-text-strong);
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.wb-drawer .works-empty__copy p {
+  margin: 0;
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.wb-drawer .works-empty__copy button {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.wb-drawer .works-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.wb-drawer .works-state__mark {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.wb-drawer .works-state__mark svg {
+  width: 24px;
+  height: 24px;
+}
+
+.wb-drawer .works-state__title {
+  margin: 4px 0 0;
+  color: var(--wb-text-strong);
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.wb-drawer .works-state__detail {
+  margin: 0;
+  max-width: 360px;
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.wb-drawer .works-state button {
+  margin-top: 6px;
+}
+
+/* 分页 */
+.wb-drawer .works-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 6px 100px;
+}
+
+.wb-drawer .works-loaded {
+  color: var(--wb-text-faint);
+  font-family: var(--wb-font-mono);
+  font-size: 12px;
+}
+
+.wb-drawer .works-more {
+  height: 34px;
+  flex: none;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: rgb(255 253 251 / 88%);
+  box-shadow: inset 0 0 0 1px var(--wb-hairline-strong);
+  color: var(--wb-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-drawer .works-more:hover:not(:disabled) {
+  background: #fff;
+}
+
+.wb-drawer .works-more:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

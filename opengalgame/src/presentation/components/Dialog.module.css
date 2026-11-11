@@ -1,0 +1,294 @@
+.dialog {
+  position: fixed;
+  inset: 0;
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(85vh, 720px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid #d7c8e8;
+  border-radius: 8px;
+  background: #fffcf7;
+  color: #3b365f;
+  box-shadow:
+    0 24px 60px #3b365f33,
+    3px 3px 0 #cbb6de;
+}
+
+.dialog[data-size='wide'] {
+  width: min(680px, calc(100vw - 48px));
+}
+
+.dialog[data-size='narrow'] {
+  width: min(440px, calc(100vw - 48px));
+}
+
+.dialog[data-placement='right'] {
+  width: min(520px, 100vw);
+  max-width: 100vw;
+  max-height: 100dvh;
+  height: 100dvh;
+  margin: 0 0 0 auto;
+  border-width: 1px 0 1px 1px;
+  border-color: #d7c8e8;
+  border-radius: 8px 0 0 8px;
+  background: linear-gradient(168deg, #fffdfb 0%, #fdf8f3 52%, #f9f2fb 100%);
+  box-shadow: -32px 0 76px -38px #3b365f80;
+}
+
+.dialog[data-closing='true'] {
+  pointer-events: none;
+}
+
+.dialog[data-placement='right'] .shell {
+  max-height: none;
+  height: 100%;
+}
+
+.dialog[data-placement='right'] .header {
+  padding: 26px 26px 14px;
+}
+
+.dialog[data-placement='right'] .body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dialog[data-placement='right'] .actions {
+  padding: 14px 26px 20px;
+  border-top: 1px solid #eadff3;
+  background: #fffdfbc7;
+}
+
+.dialog::backdrop {
+  background: #3b365f66;
+  backdrop-filter: blur(8px);
+}
+
+.shell {
+  display: flex;
+  max-height: min(85vh, 720px);
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 24px 8px;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.header h2 {
+  margin: 0;
+  color: #4a3e6e;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--muted, #6f6584);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #6f6584;
+  font-size: 28px;
+  font-weight: 200;
+  line-height: 1;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.close:hover:not(:disabled) {
+  border-color: var(--line-soft);
+  background: #f6edf7;
+  color: var(--purple-deep);
+}
+
+.close:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.body {
+  overflow: auto;
+  padding: 8px 24px 12px;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px 22px;
+}
+
+/*
+ * 工作台弹层：在视口中心浮起的柔光玻璃面板。
+ * 只由 data-theme='workbench'（工作台 --wb-* 主题内、居中弹窗）命中；
+ * 首页、项目页和右侧抽屉保留上方原有外观。
+ */
+.dialog[data-theme='workbench'] {
+  width: min(512px, calc(100vw - 48px));
+  max-height: min(82dvh, 680px);
+  border: 0;
+  border-radius: var(--wb-radius-panel);
+  background-color: color-mix(in srgb, var(--wb-surface-solid) 78%, transparent);
+  background-image:
+    radial-gradient(
+      92% 70% at 0% 0%,
+      color-mix(in srgb, var(--wb-accent) 15%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(76% 56% at 100% 0%, var(--wb-wash-cream) 0%, transparent 60%),
+    radial-gradient(
+      94% 64% at 100% 100%,
+      color-mix(in srgb, var(--wb-positive) 13%, transparent) 0%,
+      transparent 64%
+    );
+  box-shadow: var(--wb-shadow-float);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  backdrop-filter: blur(30px) saturate(1.08);
+  -webkit-backdrop-filter: blur(30px) saturate(1.08);
+}
+
+.dialog[data-theme='workbench'][data-size='narrow'] {
+  width: min(404px, calc(100vw - 48px));
+}
+
+.dialog[data-theme='workbench'][data-size='wide'] {
+  width: min(648px, calc(100vw - 48px));
+}
+
+.dialog[data-theme='workbench'] .shell {
+  max-height: min(82dvh, 680px);
+}
+
+.dialog[data-theme='workbench'] .header {
+  padding: 28px 30px 6px;
+}
+
+.dialog[data-theme='workbench'] .header h2 {
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 20px;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.dialog[data-theme='workbench'] .subtitle {
+  margin-top: 3px;
+  color: var(--wb-text-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+
+.dialog[data-theme='workbench'] .close {
+  width: 34px;
+  height: 34px;
+  border-color: transparent;
+  border-radius: 50%;
+  background: var(--wb-surface-quiet);
+  color: var(--wb-text-muted);
+  font-size: 22px;
+  font-weight: 400;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.dialog[data-theme='workbench'] .close:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.dialog[data-theme='workbench'] .close:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.dialog[data-theme='workbench'] .body {
+  padding: 8px 30px 12px;
+}
+
+.dialog[data-theme='workbench'] .actions {
+  gap: 10px;
+  padding: 18px 30px 26px;
+}
+
+.dialog[data-theme='workbench'] .actions button {
+  min-height: 42px;
+  padding: 10px 20px;
+  border-color: transparent;
+  border-radius: var(--wb-radius-pill);
+  box-shadow: none;
+  font-family: var(--wb-font);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.dialog[data-theme='workbench'] .actions button:hover:not(:disabled) {
+  border-color: transparent;
+  transform: none;
+}
+
+.dialog[data-theme='workbench'] .actions button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.dialog[data-theme='workbench'] .actions button:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+/* 遮罩是一层淡紫灰纱 + 中心柔光，让弹窗浮在光池上，而不是压在暗幕上。 */
+.dialog[data-theme='workbench']::backdrop {
+  background:
+    radial-gradient(
+      ellipse 54% 48% at 50% 46%,
+      color-mix(in srgb, var(--paper-strong) 24%, transparent) 0%,
+      transparent 74%
+    ),
+    color-mix(in srgb, #2f2a46 15%, transparent);
+  backdrop-filter: blur(3px) saturate(1.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog[data-theme='workbench'] .actions button,
+  .dialog[data-theme='workbench'] .close {
+    transition: none;
+  }
+}

@@ -1,0 +1,188 @@
+/* 当前场景与候选共用的舞台节点。只表达调用方给出的加载/就绪/失败，不推断舞台状态。 */
+
+.frame {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse 80% 80% at 24% 18%, rgb(141 103 171 / 34%), transparent 64%),
+    radial-gradient(ellipse 70% 80% at 82% 82%, rgb(74 156 155 / 24%), transparent 62%), #211c3b;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 14%),
+    inset 0 1px 0 rgb(255 255 255 / 22%),
+    0 26px 52px -38px rgb(29 24 56 / 88%);
+  isolation: isolate;
+}
+
+.iframe {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #1b1733;
+}
+
+.emptyStage {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 52% 46% at 34% 30%, #4a3763 0%, transparent 72%),
+    radial-gradient(ellipse 46% 42% at 72% 74%, #2d4a4c 0%, transparent 72%),
+    linear-gradient(150deg, #241d36 0%, #171322 64%, #131020 100%);
+}
+
+.emptyStage::after {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(#fffdfb0d 1px, transparent 1px),
+    linear-gradient(90deg, #fffdfb0a 1px, transparent 1px);
+  background-size: 72px 72px;
+  content: '';
+  mask-image: radial-gradient(ellipse at center, #000 0%, transparent 76%);
+  opacity: 0.4;
+}
+
+/* 轻量遮罩：真实画面优先，只在未就绪时压暗并提示。 */
+.veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgb(21 18 38 / 22%) 0%, rgb(15 13 31 / 56%) 100%);
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.veilGlow {
+  width: 46%;
+  max-width: 300px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 46%, #fff6e34d 0%, #8d67ab42 44%, transparent 72%);
+  filter: blur(14px);
+  animation: stage-breathe 3.4s ease-in-out infinite;
+}
+
+.veilShimmer {
+  position: absolute;
+  inset: auto 12% 18%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0%, #fffdfb75 48%, transparent 100%);
+  opacity: 0.5;
+  animation: stage-sweep 2.6s ease-in-out infinite;
+}
+
+[data-stage-status='ready'] .veil,
+[data-stage-status='failed'] .veil {
+  opacity: 0;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 3vw, 32px);
+  pointer-events: none;
+}
+
+.overlay > * {
+  pointer-events: auto;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  color: #f4ecdc;
+  text-align: center;
+  /* 加载只是提示：遮罩不能挡住引擎画面，只有显式的操作按钮接收指针。 */
+  pointer-events: none;
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 210deg,
+    transparent 0deg 96deg,
+    #e9d9a8 190deg,
+    transparent 300deg
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  animation: stage-spin 1.2s linear infinite;
+}
+
+.loading strong {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.loading p {
+  margin: 0;
+  color: #cfc3ae;
+  font-size: 11.5px;
+}
+
+.loadingAction {
+  margin-top: 6px;
+  pointer-events: auto;
+}
+
+@keyframes stage-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes stage-breathe {
+  0%,
+  100% {
+    opacity: 0.64;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes stage-sweep {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translateX(-14%);
+  }
+  50% {
+    opacity: 0.72;
+    transform: translateX(14%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veilGlow,
+  .veilShimmer,
+  .spinner {
+    animation: none;
+  }
+
+  .veil {
+    transition-duration: 90ms;
+  }
+}
