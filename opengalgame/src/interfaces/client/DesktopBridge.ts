@@ -1,4 +1,11 @@
 import type {
+  CheckForUpdateDTO,
+  DownloadUpdateDTO,
+  InstallUpdateDTO,
+  ReadUpdateStatusDTO
+} from '@application/app-update/dto/AppUpdateDTO'
+import type { UpdateCheckVO, UpdateStatusVO } from '@application/app-update/vo/AppUpdateVO'
+import type {
   ConnectionSettingsDTO,
   ListModelsDTO
 } from '@application/connections/dto/ConnectionSettingsDTO'
@@ -345,5 +352,10 @@ export interface DesktopBridge {
   readLatestPreviewSave(
     request: ReadLatestPreviewSaveDTO
   ): Promise<AjaxResult<PreviewSaveVersionVO | null>>
+  checkForUpdate(request: CheckForUpdateDTO): Promise<AjaxResult<UpdateCheckVO>>
+  downloadUpdate(request: DownloadUpdateDTO): Promise<AjaxResult<UpdateStatusVO>>
+  installUpdate(request: InstallUpdateDTO): Promise<AjaxResult<null>>
+  readUpdateStatus(request: ReadUpdateStatusDTO): Promise<AjaxResult<UpdateStatusVO>>
+  onAppUpdateStatus(listener: (status: UpdateStatusVO) => void): () => void
   openDirectory(request: OpenDirectoryDTO): Promise<AjaxResult<null>>
 }

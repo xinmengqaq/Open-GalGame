@@ -1,12 +1,15 @@
 import type { ReactElement } from 'react'
 
 import { ToastHost } from '../components/ToastHost'
+import { AppSettingsDialog, AppUpdateErrorDialog } from '../features/app-update/AppSettingsDialog'
+import { useAppUpdate } from '../features/app-update/useAppUpdate'
 import { HomePage } from '../pages/home/HomePage'
 import { ProjectsPage } from '../pages/projects/ProjectsPage'
 import { WorkbenchPage } from '../pages/workbench/WorkbenchPage'
 import { useNavigationStore } from '../stores/navigation.store'
 import { AppShell } from './AppShell'
 import { PageTransition } from './PageTransition'
+import type { AppUpdateClient } from '@interfaces/app-update/client/AppUpdateClient'
 import type { ConnectionSettingsClient } from '@interfaces/client/ConnectionSettingsClient'
 import type { ProjectClient } from '@interfaces/client/ProjectClient'
 import type { ProjectFilesClient } from '@interfaces/project-files/client/ProjectFilesClient'
@@ -19,6 +22,7 @@ import type { ScenePreviewClient } from '@interfaces/scene-preview/client/SceneP
 interface AppProps {
   projectClient: ProjectClient
   connectionClient: ConnectionSettingsClient
+  appUpdateClient: AppUpdateClient
   projectFilesClient: ProjectFilesClient
   sceneCanvasClient: SceneCanvasClient
   projectVersioningClient: ProjectVersioningClient
@@ -30,6 +34,7 @@ interface AppProps {
 export function App({
   projectClient,
   connectionClient,
+  appUpdateClient,
   projectFilesClient,
   sceneCanvasClient,
   projectVersioningClient,
@@ -39,12 +44,17 @@ export function App({
 }: AppProps): ReactElement {
   const page = useNavigationStore((state) => state.page)
   const openedProjectId = useNavigationStore((state) => state.openedProject?.id ?? 'workbench')
+  const appUpdate = useAppUpdate(appUpdateClient)
   return (
     <AppShell>
       <ToastHost />
       <PageTransition page={page}>
         {page === 'home' ? (
-          <HomePage projectClient={projectClient} connectionClient={connectionClient} />
+          <HomePage
+            projectClient={projectClient}
+            connectionClient={connectionClient}
+            appUpdate={appUpdate}
+          />
         ) : null}
         {page === 'projects' ? <ProjectsPage projectClient={projectClient} /> : null}
         {page === 'workbench' ? (
@@ -60,6 +70,8 @@ export function App({
           />
         ) : null}
       </PageTransition>
+      <AppSettingsDialog flow={appUpdate} />
+      <AppUpdateErrorDialog flow={appUpdate} />
     </AppShell>
   )
 }

@@ -1,0 +1,3 @@
+[submodule "vendor/md-blockkit"]
+	path = vendor/md-blockkit
+	url = https://github.com/xinmengqaq/md-blockkit.git

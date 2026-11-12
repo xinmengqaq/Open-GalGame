@@ -2,6 +2,11 @@ appId: xyz.opengalgame.app
 productName: opengalgame
 directories:
   buildResources: build
+publish:
+  provider: github
+  owner: xinmengqaq
+  repo: Open-GalGame
+  releaseType: release
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -16,11 +21,29 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml}'
   - '!{.env,.env.*,.npmrc}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts}'
+  - '!.opengalgame{,/**}'
+  - '!output{,/**}'
+  - '!artifacts{,/**}'
+  - '!test-results{,/**}'
+  - '!playwright-report{,/**}'
+  - '!playwright.*.cjs'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: ../vendor/md-blockkit/LICENSE
+    to: licenses/md-blockkit-LICENSE.txt
 win:
   executableName: opengalgame
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
 nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: false
+  language: '2052'
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}

@@ -80,7 +80,39 @@ app
       (await foreign.webContents.executeJavaScript('window.opengalgame.getSettingsSummary()')).code,
       4102
     )
+    assert.equal(
+      (await foreign.webContents.executeJavaScript('window.opengalgame.readUpdateStatus({})')).code,
+      4102
+    )
     foreign.destroy()
+    const updateStatus = await call('window.opengalgame.readUpdateStatus({})')
+    assert.equal(updateStatus.code, 2000)
+    assert.equal(updateStatus.data.phase, 'idle')
+    assert.equal(updateStatus.data.supported, false)
+    assert.equal(updateStatus.data.currentVersion, app.getVersion())
+    const updateSubscription = await call(`(async () => {
+      const received = []
+      const off = window.opengalgame.onAppUpdateStatus((status) => received.push(status))
+      const first = await window.opengalgame.checkForUpdate({ reason: 'manual' })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const whileSubscribed = received.length
+      off()
+      const second = await window.opengalgame.checkForUpdate({ reason: 'manual' })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      return {
+        first,
+        second,
+        whileSubscribed,
+        afterUnsubscribe: received.length,
+        last: received.at(-1)
+      }
+    })()`)
+    assert.equal(updateSubscription.first.code, 5101)
+    assert.equal(updateSubscription.second.code, 5101)
+    assert.ok(updateSubscription.whileSubscribed >= 1, '订阅后应收到开发形态的失败状态')
+    assert.equal(updateSubscription.last.phase, 'failed')
+    assert.equal(updateSubscription.last.failure.kind, 'unsupported')
+    assert.equal(updateSubscription.afterUnsubscribe, updateSubscription.whileSubscribed)
     assert.ok(safeStorage.isEncryptionAvailable(), '系统安全存储不可用')
     const saved = await call(
       'window.opengalgame.saveSettings({providerId:"openai-compatible",baseUrl:"http://localhost:9999/v1",model:"smoke",contextWindow:8192,maxOutputTokens:1024,apiKey:{kind:"replace",value:"temporary-smoke-secret"}})'
@@ -92,7 +124,7 @@ app
     await close()
     clearTimeout(timeout)
     process.stdout.write(
-      `Electron ${process.versions.electron}：目录创建、工程文件、preload、IPC 来源隔离、系统密钥加密验证通过\n`
+      `Electron ${process.versions.electron}：目录创建、工程文件、preload、IPC 来源隔离、应用更新状态与系统密钥加密验证通过\n`
     )
     app.quit()
   })

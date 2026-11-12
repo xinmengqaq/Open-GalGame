@@ -4,12 +4,18 @@ import { dirname, join, resolve } from 'node:path'
 
 import { createProjectServices } from './projects'
 import { createSceneGeneration } from './sceneGeneration'
-import './sceneGenerationFailureFacts'
+import { diagnosticReference } from './sceneGenerationFailureFacts'
 import { createScenePreview } from './scenePreview'
 import { createSceneExport } from './sceneExport'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { errorFacts } from '@common/errors/errorFacts'
+import { AppUpdateApplicationServiceImpl } from '@application/app-update/services/impl/AppUpdateApplicationServiceImpl'
+import { didInstallAttemptFail } from '@domain/app-update/models/InstallAttempt'
+import { ElectronUpdaterGatewayImpl } from '@infrastructure/app-update/ElectronUpdaterGatewayImpl'
+import { UserDataInstallAttemptGatewayImpl } from '@infrastructure/app-update/UserDataInstallAttemptGatewayImpl'
+import { AppUpdateController } from '@interfaces/app-update/ipc/AppUpdateController'
+import { registerAppUpdateIpc } from '@interfaces/app-update/ipc/registerAppUpdateIpc'
 import {
   diagnosticFactPayload,
   FAILURE_CAUSE_NAME,
@@ -20,7 +26,6 @@ import { ConnectionSettingsApplicationServiceImpl } from '@application/connectio
 import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { EncryptedConnectionSettingsGatewayImpl } from '@infrastructure/connections/EncryptedConnectionSettingsGatewayImpl'
 import { PinoLoggerGatewayImpl } from '@infrastructure/logging/PinoLoggerGatewayImpl'
-import { diagnosticReference } from './sceneGenerationFailureFacts'
 import { GitCandidatePreviewGatewayImpl } from '@infrastructure/scene-generation/preview/GitCandidatePreviewGatewayImpl'
 import { RegisteredSceneProductionContext } from '@infrastructure/scene-generation/inputs/RegisteredSceneProductionContext'
 import { createElectronCandidateTrustedInput } from '@infrastructure/webgal/compatibility/ElectronCandidateTrustedInput'
@@ -90,6 +95,9 @@ export async function createHomeBackend(options: {
   })
   const require = createRequire(import.meta.url)
   const repositoryRoot = resolve(dirname(require.resolve('webgal-parser/package.json')), '../../..')
+  const promptRoot = app.isPackaged
+    ? join(app.getAppPath(), 'resources', 'ai', 'prompts')
+    : join(repositoryRoot, 'opengalgame/resources/ai/prompts')
   const preview = new GitCandidatePreviewGatewayImpl(
     new AiProjectFileSystemImpl(userDirectory),
     join(userDirectory, 'ai'),
@@ -100,7 +108,7 @@ export async function createHomeBackend(options: {
   )
   const generation = await createSceneGeneration({
     userStateRoot: userDirectory,
-    promptRoot: join(repositoryRoot, 'opengalgame/resources/ai/prompts'),
+    promptRoot,
     loadSettings: () => settingsGateway.loadSettings(),
     dispatch: (job, identity) => {
       void job().catch((error: unknown) => {
@@ -141,6 +149,58 @@ export async function createHomeBackend(options: {
     }
   })
   const exceptions = new IpcExceptionHandler(logger)
+  const appUpdateRelease = new ElectronUpdaterGatewayImpl(logger)
+  const appUpdateInstallAttempts = new UserDataInstallAttemptGatewayImpl(
+    join(app.getPath('userData'), 'app-update', 'install-attempt.json')
+  )
+  let previousInstallFailed = false
+  try {
+    const attempt = await appUpdateInstallAttempts.read()
+    if (attempt !== null) {
+      try {
+        previousInstallFailed = didInstallAttemptFail(app.getVersion(), attempt)
+      } catch (error) {
+        const errorName = error instanceof Error ? error.name : undefined
+        logger.warn('更新安装记录无法判定', {
+          ...(errorName === undefined ? {} : { errorName })
+        })
+      }
+      try {
+        await appUpdateInstallAttempts.clear()
+      } catch (error) {
+        const errorName = error instanceof Error ? error.name : undefined
+        logger.warn('清理更新安装记录失败', {
+          ...(errorName === undefined ? {} : { errorName })
+        })
+      }
+    }
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : undefined
+    logger.warn('读取更新安装记录失败', {
+      ...(errorName === undefined ? {} : { errorName })
+    })
+    try {
+      await appUpdateInstallAttempts.clear()
+    } catch (clearError) {
+      const errorName = clearError instanceof Error ? clearError.name : undefined
+      logger.warn('清理更新安装记录失败', {
+        ...(errorName === undefined ? {} : { errorName })
+      })
+    }
+  }
+  const appUpdate = new AppUpdateApplicationServiceImpl({
+    release: appUpdateRelease,
+    installAttempts: appUpdateInstallAttempts,
+    logger,
+    now: Date.now,
+    previousInstallFailed
+  })
+  const detachAppUpdateIpc = registerAppUpdateIpc({
+    getWindow: options.getWindow,
+    rendererUrl: options.rendererUrl,
+    controller: new AppUpdateController(appUpdate, exceptions),
+    subscribe: (listener) => appUpdate.subscribe(listener)
+  })
   const scenePreviewHost = new WebgalRuntimeHostImpl({
     engineRoot: dirname(require.resolve('webgal-engine/package.json'))
   })
@@ -236,6 +296,7 @@ export async function createHomeBackend(options: {
     connections: new ConnectionSettingsController(connections, exceptions)
   })
   return async () => {
+    detachAppUpdateIpc()
     detachSceneExportIpc()
     detachSystemPathIpc()
     detachScenePreviewIpc()
@@ -247,6 +308,7 @@ export async function createHomeBackend(options: {
     detachVersioningIpc()
     detachIpc()
     detachProcess()
+    appUpdateRelease.dispose()
     scenePreview.bridge.dispose()
     await scenePreviewHost.dispose()
     await generation.close()

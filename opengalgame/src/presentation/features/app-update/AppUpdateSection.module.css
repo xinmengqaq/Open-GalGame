@@ -1,0 +1,455 @@
+.section {
+  position: relative;
+  display: grid;
+  gap: 14px;
+}
+
+.live {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.versionRow {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border: 1px solid #eadff3;
+  border-radius: 10px;
+  background: linear-gradient(120deg, #fffdf9 0%, #fbf4fd 100%);
+}
+
+.versionIdentity {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.versionLabel {
+  color: #6f6584;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.versionValue {
+  color: #3b365f;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.channel {
+  display: inline-flex;
+  flex: none;
+  gap: 7px;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid #cfe4dd;
+  border-radius: 999px;
+  background: #f2faf6;
+  color: #357d76;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.channel[data-tone='muted'] {
+  border-color: #e3d9ec;
+  background: #f7f2fa;
+  color: #6f6584;
+}
+
+.channelDot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+  min-height: 156px;
+  padding: 20px 22px;
+  border: 1px solid #e3d4ee;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 8% 8%, #fff6e3cc 0%, transparent 56%),
+    radial-gradient(110% 110% at 94% 92%, #d9ece6aa 0%, transparent 62%),
+    linear-gradient(135deg, #fbf7ff 0%, #f6eef9 55%, #eef6f3 100%);
+  box-shadow: inset 0 1px 0 #ffffffcc;
+}
+
+.heroGlow {
+  position: absolute;
+  top: -42%;
+  left: -12%;
+  width: 62%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff6ce7d 0%, transparent 66%);
+  pointer-events: none;
+}
+
+.dial {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  overflow: visible;
+  filter: drop-shadow(0 14px 20px #8d67ab2e);
+}
+
+.dialDisc {
+  fill: #fffdf9cc;
+  stroke: none;
+}
+
+.dialTrack {
+  fill: none;
+  stroke: #eadcf0;
+  stroke-width: 2;
+}
+
+.dialArc {
+  fill: none;
+  stroke: #9a5abd;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.dialSuccess {
+  stroke: #4a9c9b;
+}
+
+.dialError {
+  stroke: #b0627a;
+}
+
+.dialMuted {
+  stroke: #b9aec8;
+}
+
+.dialSpin {
+  animation: app-update-spin 1.15s linear infinite;
+  transform-origin: 66px 66px;
+}
+
+.dialPulse {
+  animation: app-update-dial-pulse 1.9s ease-in-out infinite;
+}
+
+.dialPercent {
+  fill: #4a3e6e;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.glyph {
+  fill: none;
+  stroke: #5a4477;
+  stroke-width: 3.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.glyphSuccess {
+  stroke: #357d76;
+}
+
+.glyphError {
+  stroke: #a34862;
+}
+
+.dialSpark {
+  fill: #b58bd0;
+  stroke: none;
+  transform-origin: 66px 66px;
+  animation: app-update-spark 2.2s ease-in-out infinite;
+}
+
+.heroCopy {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.eyebrow {
+  color: #6f6584;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.title {
+  margin: 0;
+  color: #3b365f;
+  font-size: 20px;
+  font-weight: 760;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  margin: 0;
+  color: #6f6584;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.section[data-phase='available'] .hero {
+  border-color: #d3b9e8;
+}
+
+.section[data-phase='downloaded'] .hero,
+.section[data-phase='idle'] .hero {
+  border-color: #bcdcd2;
+}
+
+.section[data-phase='failed'] .hero {
+  border-color: #e3bfc9;
+  background:
+    radial-gradient(120% 90% at 8% 8%, #fdf0f2cc 0%, transparent 58%),
+    linear-gradient(135deg, #fdf8fb 0%, #f8eef4 60%, #f4f0f6 100%);
+}
+
+.progress {
+  position: relative;
+  height: 10px;
+  border: 1px solid #e3d4ee;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #efe4f5;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #9a5abd 0%, #c795d7 100%);
+  box-shadow: 0 0 12px #9a5abd55;
+  transition: width 240ms var(--ease-out);
+}
+
+.progress[data-kind='indeterminate'] .progressFill {
+  width: 42%;
+  background: linear-gradient(90deg, #c9aede 0%, #8d67ab 55%, #c9aede 100%);
+  animation: app-update-track 1.25s ease-in-out infinite;
+}
+
+.progress[data-kind='complete'] .progressFill {
+  width: 100%;
+  background: linear-gradient(90deg, #4a9c9b 0%, #7cc4b4 100%);
+  box-shadow: 0 0 12px #4a9c9b44;
+}
+
+.progress[data-kind='installing'] .progressFill {
+  width: 100%;
+  background: linear-gradient(90deg, #9a5abd 0%, #c795d7 50%, #9a5abd 100%);
+  background-size: 200% 100%;
+  animation: app-update-shimmer 1.6s linear infinite;
+}
+
+.actionRow {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.primaryAction {
+  min-width: 148px;
+}
+
+.manualDownload {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding-bottom: 2px;
+  border-bottom: 1px dashed #c9aede;
+  color: #7b4f96;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.manualDownload:hover,
+.manualDownload:focus-visible {
+  border-color: #9a5abd;
+  color: #5a4477;
+}
+
+.manualDownload svg {
+  width: 14px;
+  height: 14px;
+}
+
+.notes {
+  padding-top: 12px;
+  border-top: 1px dashed #e3d4ee;
+}
+
+.notesSummary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #5a4477;
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.notesSummary::-webkit-details-marker {
+  display: none;
+}
+
+.notesSummary:focus-visible {
+  border-radius: 6px;
+  outline: 3px solid #9a5abd;
+  outline-offset: 3px;
+}
+
+.notesChevron {
+  display: inline-block;
+  color: #9a5abd;
+  font-size: 11px;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.notes[open] .notesChevron {
+  transform: rotate(90deg);
+}
+
+.notesMeta {
+  margin-left: auto;
+  color: #6f6584;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.notesBody {
+  max-height: 156px;
+  margin: 10px 2px 0;
+  overflow: auto;
+  color: #6f6584;
+  font-size: 12.5px;
+  line-height: 1.72;
+  white-space: pre-wrap;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+@keyframes app-update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes app-update-spark {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.9) rotate(0deg);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.06) rotate(18deg);
+  }
+}
+
+@keyframes app-update-dial-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes app-update-track {
+  0% {
+    transform: translateX(-55%);
+  }
+
+  100% {
+    transform: translateX(245%);
+  }
+}
+
+@keyframes app-update-shimmer {
+  0% {
+    background-position: 0% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .hero {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .dial {
+    width: 96px;
+    height: 96px;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialSpin,
+  .dialPulse,
+  .dialSpark,
+  .progress[data-kind='indeterminate'] .progressFill,
+  .progress[data-kind='installing'] .progressFill {
+    animation: none;
+  }
+
+  .progress[data-kind='indeterminate'] .progressFill {
+    width: 100%;
+    opacity: 0.55;
+    transform: none;
+  }
+
+  .progressFill,
+  .notesChevron {
+    transition: none;
+  }
+}

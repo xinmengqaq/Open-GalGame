@@ -12,19 +12,41 @@ import { useNavigationStore } from '../../stores/navigation.store'
 import styles from './HomePage.module.css'
 import { HomeVisual } from './HomeVisual'
 import { useHomeMotion } from './useHomeMotion'
+import type { AppUpdateFlow } from '../../features/app-update/useAppUpdate'
 import type { ConnectionSettingsClient } from '@interfaces/client/ConnectionSettingsClient'
 import type { ProjectClient } from '@interfaces/client/ProjectClient'
 
 interface HomePageProps {
   projectClient: ProjectClient
   connectionClient: ConnectionSettingsClient
+  appUpdate: AppUpdateFlow
 }
 
-export function HomePage({ projectClient, connectionClient }: HomePageProps): ReactElement {
+/** 应用设置入口的更新光环；只是入口提示，不替代对话框内的状态。 */
+function AppUpdateIcon(): ReactElement {
+  return (
+    <svg className={styles.updateIcon} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+      <path d="M20 4v5h-5" />
+    </svg>
+  )
+}
+
+export function HomePage({
+  projectClient,
+  connectionClient,
+  appUpdate
+}: HomePageProps): ReactElement {
   const visit = useNavigationStore((state) => state.visit)
   const importing = useProjectImport(projectClient)
   const creating = useProjectCreate(projectClient)
   const settings = useConnectionSettings(connectionClient)
+  const updateBadge =
+    appUpdate.status?.phase === 'available'
+      ? '有新版本'
+      : appUpdate.status?.phase === 'downloaded'
+        ? '待重启'
+        : null
 
   const root = useRef<HTMLElement>(null)
   const title1 = useRef<HTMLSpanElement>(null)
@@ -82,6 +104,13 @@ export function HomePage({ projectClient, connectionClient }: HomePageProps): Re
           >
             <SettingsIcon ref={gearIcon} />
             连接设置
+          </button>
+          <button className={styles.settings} type="button" onClick={appUpdate.openSettings}>
+            <AppUpdateIcon />
+            应用设置
+            {updateBadge === null ? null : (
+              <span className={styles.updateBadge}>{updateBadge}</span>
+            )}
           </button>
         </div>
       </header>

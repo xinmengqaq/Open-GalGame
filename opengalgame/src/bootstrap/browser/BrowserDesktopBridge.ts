@@ -157,6 +157,10 @@ function systemPathUnavailable(): AjaxResult<never> {
   return { code: ErrorCodes.forbidden, msg: '当前环境不能打开本机目录' }
 }
 
+function appUpdateUnavailable(): AjaxResult<never> {
+  return { code: ErrorCodes.invalidConfig, msg: '当前运行形态不支持应用内更新' }
+}
+
 export function createBrowserDesktopBridge(): DesktopBridge {
   const listeners = new Set<(progress: ProjectProgressVO) => void>()
   const generationListeners = new Set<(progress: SceneGenerationRenderProgressEventVO) => void>()
@@ -888,6 +892,16 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       devOrBlocked('exportSavedScene', request, sceneExportUnavailable()),
     readLatestPreviewSave: (request) =>
       devOrBlocked('readLatestPreviewSave', request, latestPreviewSaveUnavailable()),
+    checkForUpdate: () => Promise.resolve(appUpdateUnavailable()),
+    downloadUpdate: () => Promise.resolve(appUpdateUnavailable()),
+    installUpdate: () => Promise.resolve(appUpdateUnavailable()),
+    readUpdateStatus: () =>
+      Promise.resolve({
+        code: ErrorCodes.success,
+        msg: '更新状态已读取',
+        data: { phase: 'idle', currentVersion: __APP_VERSION__, supported: false }
+      }),
+    onAppUpdateStatus: () => () => undefined,
     openDirectory: (request) => devOrBlocked('openDirectory', request, systemPathUnavailable())
   }
 }

@@ -2,6 +2,13 @@ import { webUtils } from 'electron'
 
 import type { DesktopBridge } from '../client/DesktopBridge'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import type {
+  CheckForUpdateDTO,
+  DownloadUpdateDTO,
+  InstallUpdateDTO,
+  ReadUpdateStatusDTO
+} from '@application/app-update/dto/AppUpdateDTO'
+import type { UpdateCheckVO, UpdateStatusVO } from '@application/app-update/vo/AppUpdateVO'
 import type { ProjectProgressVO } from '@application/projects/vo/ProjectVO'
 import type {
   ClearVersionHistoryDTO,
@@ -374,6 +381,16 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke('scene-export:read-latest-preview-save', request) as Promise<
         AjaxResult<PreviewSaveVersionVO | null>
       >,
+    checkForUpdate: (request: CheckForUpdateDTO) =>
+      transport.invoke('app-update:check', request) as Promise<AjaxResult<UpdateCheckVO>>,
+    downloadUpdate: (request: DownloadUpdateDTO) =>
+      transport.invoke('app-update:download', request) as Promise<AjaxResult<UpdateStatusVO>>,
+    installUpdate: (request: InstallUpdateDTO) =>
+      transport.invoke('app-update:install', request) as Promise<AjaxResult<null>>,
+    readUpdateStatus: (request: ReadUpdateStatusDTO) =>
+      transport.invoke('app-update:read-status', request) as Promise<AjaxResult<UpdateStatusVO>>,
+    onAppUpdateStatus: (listener) =>
+      transport.subscribe('app-update:status', (value) => listener(value as UpdateStatusVO)),
     openDirectory: (request) =>
       transport.invoke('system:open-directory', request) as Promise<AjaxResult<null>>
   }

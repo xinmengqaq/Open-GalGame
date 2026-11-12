@@ -6,9 +6,9 @@
  * `querySelectorAll('button')[index]` 聚焦，删节点会让键盘导航和重渲染错位。
  *
  * 升级约定（md-blockkit）：本模块依赖 md-blockkit 的 DOM 结构标记识别图片入口。
- * 升级 md-blockkit 前必须先运行
- * `tests/unit/presentation/document-layer/md-blockkit-image-surface.contract.test.ts`。
- * 该测试失败时先更新本文件的规则并复验隐藏效果，再升级依赖：
+ * 升级 md-blockkit 前必须经工作台真实编辑器入口复验（文档层与新建文档）：
+ * 图片插入入口保持隐藏或禁用，粘贴与拖入图片被拦截且正文不变。
+ * 结构变化时先更新本文件的规则并复验隐藏效果，再升级依赖：
  * 「md-blockkit 的图片入口结构已变化：先更新 documentImageCapability.ts 的规则并复验隐藏效果，再升级依赖」。
  *
  * 边界：只关闭「新增/编辑图片」的入口，历史 Markdown 图片照旧解析与只读渲染；

@@ -1,0 +1,72 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: opengalgame
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            opengalgame/package-lock.json
+            vendor/md-blockkit/package-lock.json
+
+      # package-lock.json 由 npm 11 生成，npm 10 的 ci 会漏掉部分可选依赖而失败。
+      # 固定 npm 版本，避免 CI 内置 npm 随 Node 22 镜像漂移。
+      - name: Pin npm version
+        run: npm install -g npm@11.19.0
+
+      - name: Verify release tag and version
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "package.json 版本 '$version' 不是 X.Y.Z 三段数字。" >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME 与 package.json 版本 v$version 不一致。" >&2
+            exit 1
+          fi
+
+      - name: Install and build md-blockkit
+        run: npm run build:md-blockkit
+
+      - name: Install application dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build Windows installer
+        run: npx electron-builder --win --x64 --publish never
+
+      # electron-builder 并行上传多个产物时会竞态创建出多个同名 Release。
+      # 改为构建后由 gh 一次创建 Release 并上传三件产物。
+      - name: Publish Windows installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.exe dist/latest.yml dist/*.blockmap --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.exe dist/latest.yml dist/*.blockmap \
+              --title "$version" --notes-file ../docs/更新日志.md
+          fi

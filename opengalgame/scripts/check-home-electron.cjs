@@ -1,12 +1,14 @@
 const { build } = require('esbuild')
 const { spawn } = require('node:child_process')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const { dependencies } = require('../package.json')
 
 /**
  * 以 QA 入口构建主进程代码并跑通 home 冒烟测试，透传子进程退出码。
  * 实现思路：别名只写在 tsconfig.node.json，根 tsconfig 仅有 references，不指定就无法解析跨层导入。
+ * 输出为 CJS，必须像 electron-vite 一样把 import.meta.url 固定为输出文件地址，否则 createRequire 收到空值。
  * @throws {Error} 构建或启动子进程失败。
  */
 async function check() {
@@ -17,6 +19,11 @@ async function check() {
     platform: 'node',
     format: 'cjs',
     tsconfig: path.join(__dirname, '../tsconfig.node.json'),
+    define: {
+      'import.meta.url': JSON.stringify(
+        pathToFileURL(path.join(__dirname, '../out/qa/home.cjs')).href
+      )
+    },
     external: ['electron', ...Object.keys(dependencies)]
   })
   const env = { ...process.env }

@@ -5,6 +5,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { createBrowserDesktopBridge } from './browser/BrowserDesktopBridge'
+import { AppUpdateClientImpl } from '@interfaces/app-update/client/AppUpdateClientImpl'
 import { ConnectionSettingsClientImpl } from '@interfaces/client/ConnectionSettingsClientImpl'
 import { ProjectClientImpl } from '@interfaces/client/ProjectClientImpl'
 import { ProjectFilesClientImpl } from '@interfaces/project-files/client/ProjectFilesClientImpl'
@@ -36,6 +37,7 @@ function startRenderer(): void {
   const bridge = window.opengalgame ?? createBrowserDesktopBridge()
   const projectClient = new ProjectClientImpl(bridge)
   const connectionClient = new ConnectionSettingsClientImpl(bridge)
+  const appUpdateClient = new AppUpdateClientImpl(bridge)
   const projectFilesClient = new ProjectFilesClientImpl(bridge)
   const sceneCanvasClient = new SceneCanvasClientImpl(bridge)
   const projectVersioningClient = new ProjectVersioningClientImpl(bridge)
@@ -48,6 +50,7 @@ function startRenderer(): void {
         <App
           projectClient={projectClient}
           connectionClient={connectionClient}
+          appUpdateClient={appUpdateClient}
           projectFilesClient={projectFilesClient}
           sceneCanvasClient={sceneCanvasClient}
           projectVersioningClient={projectVersioningClient}

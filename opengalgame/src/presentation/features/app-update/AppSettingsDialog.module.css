@@ -1,0 +1,48 @@
+.errorBody {
+  display: grid;
+  gap: 14px;
+}
+
+.errorLead {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.errorMark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff5f7 0%, #f9e3e9 100%);
+  color: #a34862;
+}
+
+.errorMark svg {
+  width: 22px;
+  height: 22px;
+}
+
+.errorMessage {
+  margin: 0;
+  color: #4a3e6e;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.errorDownload {
+  justify-self: start;
+}
+
+.errorHint {
+  padding-top: 10px;
+  border-top: 1px dashed #eadff3;
+  margin: 0;
+  color: #6f6584;
+  font-size: 12px;
+  line-height: 1.6;
+}

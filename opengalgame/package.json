@@ -2,6 +2,10 @@
   "name": "opengalgame",
   "version": "0.1.0",
   "description": "本地优先的 Galgame 桌面创作工具",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xinmengqaq/Open-GalGame.git"
+  },
   "main": "./out/main/index.js",
   "private": true,
   "engines": {
@@ -12,6 +16,7 @@
     "dev:web": "vite --config vite.renderer.config.ts",
     "start": "node ./scripts/run-electron-vite.cjs preview",
     "build": "npm run typecheck && electron-vite build",
+    "build:md-blockkit": "npm --prefix ../vendor/md-blockkit ci && npm --prefix ../vendor/md-blockkit run build",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
@@ -23,7 +28,7 @@
     "test:e2e:workbench": "playwright test --config playwright.renderer.config.cjs tests/e2e/workbench.spec.cjs",
     "test:electron": "npm run build && node ./scripts/check-home-electron.cjs",
     "postinstall": "electron-builder install-app-deps",
-    "build:win": "npm run build && electron-builder --win"
+    "build:win": "npm run build && electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
@@ -45,6 +50,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
+    "md-blockkit": "file:../vendor/md-blockkit",
     "prettier": "^3.7.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
@@ -68,6 +74,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "deepagents": "1.7.0",
+    "electron-updater": "6.6.2",
     "es-toolkit": "^1.52.0",
     "fast-xml-parser": "^5.11.2",
     "file-stream-rotator": "1.0.0",
@@ -76,7 +83,6 @@
     "isomorphic-git": "1.43.0",
     "langchain": "^1.5.15",
     "lucide-react": "^1.61.0",
-    "md-blockkit": "file:../../md-blockkit",
     "nanoid": "^6.0.2",
     "openai": "^7.23.0",
     "pino": "10.1.0",
