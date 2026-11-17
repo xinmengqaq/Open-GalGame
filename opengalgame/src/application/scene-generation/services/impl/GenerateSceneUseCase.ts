@@ -2,7 +2,7 @@ import type { GenerateSceneDTO } from '../../dto/SceneGenerationDTO'
 import type { SceneGenerationExecution } from '../../models/SceneGenerationExecution'
 import type { SceneGenerationOperationVO } from '../../vo/SceneGenerationVO'
 import { AppException } from '@common/errors/AppException'
-import { SceneCanvasErrorCodes } from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import { generationFingerprint, requireAcceptable } from './SceneGenerationApplicationRules'
 import { operationKey, threadKey } from '../../policies/SceneGenerationIdempotency'
 import { toOperationVO } from '../../mapping/SceneGenerationViewMapper'
@@ -59,7 +59,12 @@ export class GenerateSceneUseCase {
         mode: 'generate',
         replies: []
       }
-      requireAcceptable(execution, { baselineState: 'unchanged', lockState: baseline.lockState })
+      requireAcceptable(
+        execution,
+        { baselineState: 'unchanged', lockState: baseline.lockState },
+        undefined,
+        this.context.deps.domain
+      )
       const recorded = await this.context.deps.executions.createExecution(execution)
       this.context.coordinator.startExecution(
         recorded,

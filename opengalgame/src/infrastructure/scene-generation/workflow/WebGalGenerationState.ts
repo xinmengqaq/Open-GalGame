@@ -5,8 +5,8 @@ import type {
 } from '@application/scene-generation/models/SceneGenerationExecution'
 import type { ReplySceneGenerationInteractionDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type { SceneGenerationQuestionVO } from '@application/scene-generation/vo/SceneGenerationVO'
+import type { FailureClass } from '@application/scene-generation/vo/SceneGenerationFailureVO'
 import type {
-  FailureClass,
   RunFailureReason,
   RunOutcome
 } from '@application/scene-generation/models/SceneGenerationRunOutcome'

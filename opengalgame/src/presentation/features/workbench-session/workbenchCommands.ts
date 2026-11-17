@@ -20,6 +20,9 @@ import {
   promptReferenceFailureOf,
   removePromptReferenceIds
 } from './promptReferences'
+import { createWorkbenchAutoSave } from './workbenchAutoSave'
+import { createWorkbenchCommandQueue } from './workbenchCommandQueue'
+import { createWorkbenchPromptEdits } from './workbenchPromptEdits'
 import {
   draftArrangementOf,
   layoutAt,
@@ -35,9 +38,6 @@ import type {
   WorkbenchSaveState
 } from './workbenchSession.types'
 import type { SessionFieldKind } from './webgalPreset'
-
-const PROMPT_FLUSH_DELAY_MS = 450
-const AUTO_SAVE_DELAY_MS = 30_000
 
 export type CreateSourceCardResult = 'created' | 'missing' | 'unreadable' | 'failed'
 
@@ -93,131 +93,37 @@ export interface WorkbenchCommands {
 }
 
 /**
- * 会话命令。所有编辑请求串行执行，保存与自动保存排程也在这里，
+ * 会话命令。编辑请求经串行队列执行；提示词延迟合并与保存排程由协作者承担，
  * 组件只调用命令，不直接创建客户端或排程保存。
  */
 export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCommands {
   const store = useWorkbenchSessionStore
-  let queue: Promise<unknown> = Promise.resolve()
-  const pendingPromptCards = new Set<string>()
-  const promptBursts = new Set<string>()
-  let promptTimer: ReturnType<typeof setTimeout> | null = null
-  let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
-  let queuedSave: Promise<void> | null = null
-  let pendingSaveReason: SceneCanvasSaveReason = 'periodic'
-  let manualSaveRequested = false
-  let autoSaveStopped: 'none' | 'failed' | 'unverified' = 'none'
-  let saveHold = false
-
-  function enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const run = queue.then(task, task)
-    queue = run.then(
-      () => undefined,
-      () => undefined
-    )
-    return run
-  }
-
-  function clearPromptTimer(): void {
-    if (promptTimer !== null) {
-      clearTimeout(promptTimer)
-      promptTimer = null
-    }
-  }
-
-  function clearAutoSaveTimer(): void {
-    if (autoSaveTimer !== null) {
-      clearTimeout(autoSaveTimer)
-      autoSaveTimer = null
-    }
-  }
-
-  function schedulePromptFlush(): void {
-    if (promptTimer !== null) return
-    promptTimer = setTimeout(() => {
-      promptTimer = null
-      void flushPromptEdits()
-    }, PROMPT_FLUSH_DELAY_MS)
-  }
+  const queue = createWorkbenchCommandQueue()
+  const promptEdits = createWorkbenchPromptEdits({
+    client,
+    enqueue: queue.enqueue,
+    noteLocalEdit,
+    noteServerResult
+  })
+  const autoSave = createWorkbenchAutoSave({
+    enqueue: queue.enqueue,
+    flushPromptEdits: promptEdits.flush,
+    performSave
+  })
 
   function noteLocalEdit(): void {
-    if (autoSaveStopped === 'unverified' || saveHold) return
-    autoSaveStopped = 'none'
-    scheduleAutoSave()
+    autoSave.noteLocalEdit()
   }
 
   function noteServerResult(): void {
-    if (autoSaveStopped !== 'none' || saveHold) return
-    scheduleAutoSave()
-  }
-
-  function scheduleAutoSave(): void {
-    if (saveHold || autoSaveTimer !== null || queuedSave !== null) return
-    if (autoSaveStopped === 'unverified') return
-    const state = store.getState()
-    if (state.arrangementStatus !== 'ready' && state.arrangementStatus !== 'empty') return
-    if (!sessionIsDirty(state)) return
-    autoSaveTimer = setTimeout(() => {
-      autoSaveTimer = null
-      void requestSave('periodic')
-    }, AUTO_SAVE_DELAY_MS)
-  }
-
-  async function flushPromptEdits(): Promise<void> {
-    clearPromptTimer()
-    if (pendingPromptCards.size === 0) return
-    const cards = [...pendingPromptCards]
-    pendingPromptCards.clear()
-    let chain: Promise<void> = Promise.resolve()
-    for (const cardId of cards) {
-      chain = chain.then(() => sendPromptEdit(cardId))
-    }
-    await chain
-  }
-
-  function sendPromptEdit(cardId: string): Promise<void> {
-    return enqueue(async () => {
-      const state = store.getState()
-      const card = state.cards.find((item) => item.cardId === cardId)
-      if (!card || card.kind !== 'prompt') return
-      const capture = {
-        revision: state.revision,
-        structuralRevision: state.structuralRevision
-      }
-      try {
-        const arrangement = requireSuccess(
-          await client.editPromptBody({
-            projectId: state.projectId,
-            sceneId: state.sceneId,
-            canvasId: state.canvasId,
-            arrangement: draftArrangementOf(state),
-            cardId,
-            body: card.body
-          })
-        )
-        if (store.getState().projectId !== state.projectId) return
-        store.getState().applyServerArrangement(arrangement, capture)
-        const current = store.getState()
-        if ((current.cardEditRevisions[cardId] ?? 0) <= capture.revision) {
-          promptBursts.delete(cardId)
-        }
-        noteServerResult()
-      } catch (error) {
-        const failure = failureOf(error)
-        const referenceFailure = promptReferenceFailureOf(failure)
-        if (referenceFailure) {
-          store.getState().setPromptReferenceAlert({ message: referenceFailure.text, cardId })
-        }
-        toast(referenceFailure?.text ?? failure.msg)
-      }
-    })
+    autoSave.noteServerResult()
   }
 
   function edit(
     build: (arrangement: SceneCanvasArrangementVO) => Promise<AjaxResult<SceneCanvasArrangementVO>>,
     options?: { silentFailure?: boolean }
   ): Promise<ArrangementEditResult> {
-    return enqueue(async () => {
+    return queue.enqueue(async () => {
       const state = store.getState()
       const capture = {
         revision: state.revision,
@@ -238,55 +144,13 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
   }
 
   async function beforeEdit(): Promise<void> {
-    await flushPromptEdits()
-  }
-
-  function runSave(reason: SceneCanvasSaveReason): Promise<void> {
-    if (queuedSave !== null) {
-      if (reason === 'manual') manualSaveRequested = true
-      return queuedSave
-    }
-    pendingSaveReason = reason
-    const run = enqueue(async () => {
-      const effectiveReason = manualSaveRequested ? 'manual' : pendingSaveReason
-      manualSaveRequested = false
-      await performSave(effectiveReason)
-    })
-    queuedSave = run
-    void run.finally(() => {
-      if (queuedSave === run) queuedSave = null
-      if (manualSaveRequested) {
-        manualSaveRequested = false
-        void requestSave('manual')
-        return
-      }
-      if (autoSaveStopped === 'none' && sessionIsDirty(store.getState())) scheduleAutoSave()
-    })
-    return run
-  }
-
-  function requestSave(reason: SceneCanvasSaveReason): Promise<void> {
-    if (saveHold) return Promise.resolve()
-    clearAutoSaveTimer()
-    if (reason === 'manual') manualSaveRequested = true
-    return beforeEdit().then(() => runSave(reason))
+    await promptEdits.flush()
   }
 
   async function prepareHistoryWrite(): Promise<void> {
-    clearPromptTimer()
-    clearAutoSaveTimer()
-    pendingPromptCards.clear()
-    promptBursts.clear()
-    await queue
-  }
-
-  function setSaveHold(hold: boolean): void {
-    saveHold = hold
-    if (hold) {
-      clearAutoSaveTimer()
-      return
-    }
-    if (autoSaveStopped === 'none' && sessionIsDirty(store.getState())) scheduleAutoSave()
+    promptEdits.discardPending()
+    autoSave.cancelScheduledSave()
+    await queue.idle()
   }
 
   async function performSave(reason: SceneCanvasSaveReason): Promise<void> {
@@ -310,8 +174,7 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
       )
       if (store.getState().projectId !== state.projectId) return
       store.getState().markSaved(sent)
-      autoSaveStopped = 'none'
-      if (sessionIsDirty(store.getState())) scheduleAutoSave()
+      autoSave.noteSaved()
       if (reason === 'manual') toast(workbenchFeedback.saveSucceeded)
     } catch (error) {
       if (store.getState().projectId !== state.projectId) return
@@ -326,7 +189,7 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
       if (referenceFailure) {
         store.getState().setPromptReferenceAlert({ message: referenceFailure.text })
       }
-      autoSaveStopped = saveState === 'unverified' ? 'unverified' : 'failed'
+      autoSave.noteSaveFailure(saveState)
       toast(
         referenceFailure
           ? `${workbenchFeedback.saveFailed}（${referenceFailure.text}）`
@@ -413,19 +276,14 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
   }
 
   function editPromptBody(cardId: string, body: string): void {
-    const first = !promptBursts.has(cardId)
-    if (!store.getState().setPromptBodyDraft(cardId, body, first)) return
-    promptBursts.add(cardId)
-    pendingPromptCards.add(cardId)
-    schedulePromptFlush()
-    noteLocalEdit()
+    promptEdits.editPromptBody(cardId, body)
   }
 
   /** 引用身份用整份编排保存，不拼进正文，也不复用只写 body 的局部请求。 */
   function persistPromptReferences(cardId: string, referenceCardIds: readonly string[]): void {
     if (!store.getState().setPromptReferences(cardId, referenceCardIds)) return
     noteLocalEdit()
-    void requestSave('periodic')
+    void autoSave.requestSave('periodic')
   }
 
   function addPromptReference(cardId: string, referenceCardId: string): void {
@@ -581,17 +439,13 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
   }
 
   function undo(): void {
-    clearPromptTimer()
-    pendingPromptCards.clear()
-    promptBursts.clear()
+    promptEdits.discardPending()
     store.getState().undo()
     if (sessionIsDirty(store.getState())) noteLocalEdit()
   }
 
   function redo(): void {
-    clearPromptTimer()
-    pendingPromptCards.clear()
-    promptBursts.clear()
+    promptEdits.discardPending()
     store.getState().redo()
     if (sessionIsDirty(store.getState())) noteLocalEdit()
   }
@@ -604,7 +458,7 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
     editPromptBody,
     addPromptReference,
     removePromptReferences,
-    flushPromptEdits,
+    flushPromptEdits: promptEdits.flush,
     bindFieldCardPreset,
     copyCard,
     deleteCard,
@@ -613,9 +467,9 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
     editRelationName,
     attachRelationRecord,
     detachRelationRecord,
-    save: (reason = 'manual') => requestSave(reason),
+    save: (reason = 'manual') => autoSave.requestSave(reason),
     prepareHistoryWrite,
-    setSaveHold,
+    setSaveHold: (hold) => autoSave.setSaveHold(hold),
     undo,
     redo,
     moveCards: (moves) => {
@@ -644,10 +498,8 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
     },
     closeDocumentLayer: () => store.getState().closeDocumentLayer(),
     dispose: () => {
-      clearPromptTimer()
-      clearAutoSaveTimer()
-      pendingPromptCards.clear()
-      promptBursts.clear()
+      promptEdits.dispose()
+      autoSave.cancelScheduledSave()
     }
   }
 }
@@ -684,10 +536,3 @@ export function saveFailureText(state: WorkbenchSaveState, message: string): str
   if (state === 'unverified') return workbenchFeedback.saveUnverified
   return `${workbenchFeedback.saveFailed}（${message}）`
 }
-
-/** 供测试和页面判断错误码归属，不按消息文本猜测。 */
-export const SAVE_ERROR_CODES = {
-  persistFailed: 4411,
-  commitFailed: 4412,
-  commitUnknown: 4413
-} as const

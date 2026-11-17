@@ -101,7 +101,12 @@ export class RetryFailedRepairUseCase {
         repairContext,
         replies: []
       }
-      requireAcceptable(execution, { baselineState: 'unchanged', lockState: baseline.lockState })
+      requireAcceptable(
+        execution,
+        { baselineState: 'unchanged', lockState: baseline.lockState },
+        undefined,
+        this.context.deps.domain
+      )
       const recorded = await this.context.deps.executions.createExecution(execution)
       this.context.coordinator.startExecution(
         recorded,

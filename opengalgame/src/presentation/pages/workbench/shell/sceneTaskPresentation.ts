@@ -1,6 +1,6 @@
 import type { ExportSavedSceneDTO } from '@application/scene-export/dto/ExportSavedSceneDTO'
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
-import type { SceneExportClient } from '@interfaces/scene-export/client/SceneExportClient'
+import type { SystemPathClient } from '@interfaces/system-path/client/SystemPathClient'
 
 import { requireSuccess } from '@presentation/feedback/failure'
 import type { SceneExportNotice } from './SceneExportStatus'
@@ -56,7 +56,7 @@ export function formatExportBytes(bytes: number): string {
  * @throws {AppException} 打开目录失败时抛出。
  */
 export async function openExportDirectory(
-  client: Pick<SceneExportClient, 'openDirectory'>,
+  client: Pick<SystemPathClient, 'openDirectory'>,
   directoryPath: string
 ): Promise<void> {
   requireSuccess(await client.openDirectory({ path: directoryPath }))

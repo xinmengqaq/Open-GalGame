@@ -4,9 +4,9 @@ import * as fs from 'node:fs'
 import type { SceneGenerationWorkspaceGateway } from '@application/scene-generation/ports/SceneGenerationWorkspaceGateway'
 import type {
   SceneGenerationExecution,
-  SceneGenerationRepairSource,
   SceneGenerationWorkspace
 } from '@application/scene-generation/models/SceneGenerationExecution'
+import type { SceneGenerationRepairSource } from '@application/scene-generation/vo/SceneGenerationVO'
 import {
   AiProjectFileSystemImpl,
   type CandidateWorkspace

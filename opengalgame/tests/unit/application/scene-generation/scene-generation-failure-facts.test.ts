@@ -9,15 +9,17 @@ import { safeFailure } from '@application/scene-generation/services/impl/SceneGe
 import {
   configureDiagnosticHash,
   diagnosticFactPayload,
-  publicFailureOf,
-  recordedFailureOf
+  recordedFailureOf,
+  safeFailureWithDiagnosticRef
 } from '@application/scene-generation/services/impl/SceneGenerationFailureFacts'
+import { publicFailureOf } from '@application/scene-generation/models/SceneGenerationFailureFacts'
 import { toStatusVO } from '@application/scene-generation/mapping/SceneGenerationViewMapper'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes, errorMessages } from '@common/errors/ErrorCodes'
 import { errorFacts } from '@common/errors/errorFacts'
 import { evaluateContextBudget } from '@infrastructure/ai/context/contextBudget'
 import { normalizeAgentError } from '@infrastructure/ai/middleware/retryPolicy'
+import { terminalFailureOf } from '@infrastructure/scene-generation/workflow/WebGalWorkflowFailureMapping'
 
 const secret = 'sk-live-secret'
 const leakedUrl = 'https://provider.example/v1/chat?key=secret'
@@ -222,6 +224,52 @@ describe('场景生成失败事实', () => {
     expect(recordedFailureOf(wrapped)?.diagnosticRef).toBe(safeFailure(original).diagnosticRef)
     expect(recordedFailureOf(recovered)?.diagnosticRef).toBe(safeFailure(original).diagnosticRef)
     expect(recordedFailureOf(original)).toBeUndefined()
+  })
+
+  it('工作流终态映射保留失败分类、错误码、安全文案和诊断编号', () => {
+    const cause = Object.assign(new Error('provider raw'), { name: 'APIError', status: 401 })
+    const source = new AppException({
+      code: ErrorCodes.forbidden,
+      msg: '模型鉴权失败',
+      cause,
+      diagnosticCategory: 'auth'
+    })
+    const reference = createHash('sha256')
+      .update(diagnosticFactPayload(errorFacts(source), 'auth')!)
+      .digest('hex')
+      .slice(0, 12)
+
+    const { fact, publicError } = terminalFailureOf(
+      source,
+      { failureClass: 'modelAuth', message: '模型鉴权失败', retryable: false },
+      execution({}),
+      safeFailureWithDiagnosticRef
+    )
+
+    expect(fact).toEqual({
+      code: ErrorCodes.forbidden,
+      message: '模型鉴权失败',
+      reason: 'modelAccess',
+      failureClass: 'modelAuth',
+      nextActions: NEXT_ACTIONS.modelAuth,
+      category: 'auth',
+      httpStatus: 401,
+      causeName: 'APIError',
+      diagnosticRef: reference
+    })
+    expect(publicError).toBeInstanceOf(SceneGenerationRunFailed)
+    expect(publicError).toMatchObject({
+      code: ErrorCodes.forbidden,
+      message: '模型鉴权失败',
+      failureClass: 'modelAuth'
+    })
+    expect(publicFailureOf(fact)).toMatchObject({
+      code: ErrorCodes.forbidden,
+      message: '模型鉴权失败',
+      reason: 'modelAccess',
+      failureClass: 'modelAuth',
+      reference
+    })
   })
 
   it('失败事实保留可读候选和只读授权，不保留路径或模型原文', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
+import type { SceneExportContentBasis } from '@application/scene-export/vo/SceneExportContentBasis'
 import type {
   SavedSceneExportSource,
   SceneExportSourceGateway
@@ -9,11 +9,11 @@ import type {
   WindowsScenePackageResult,
   WindowsScenePackager
 } from '@application/scene-export/ports/WindowsScenePackager'
-import { SceneExportApplicationServiceImpl } from '@application/scene-export/services/impl/SceneExportApplicationServiceImpl'
+import { ExportSavedScene } from '@application/scene-export/services/impl/ExportSavedScene'
 import { AppException } from '@common/errors/AppException'
 import { SceneExportErrorCodes } from '@domain/scene-export/errors/SceneExportErrorCodes'
 
-const basis: SceneContentBasisVO = {
+const basis: SceneExportContentBasis = {
   digest: 'digest-1',
   parserVersion: '4.6.5',
   engineVersion: '4.6.5'
@@ -36,7 +36,7 @@ const saved: SavedSceneExportSource = {
 describe('单场景 Windows 导出编排', () => {
   it('保存未成功时不调用打包', async () => {
     let packaged = 0
-    const service = new SceneExportApplicationServiceImpl({
+    const service = new ExportSavedScene({
       sources: sources(async () => {
         throw new AppException({
           code: SceneExportErrorCodes.saveNotCommitted,
@@ -74,6 +74,44 @@ describe('单场景 Windows 导出编排', () => {
       service.exportSavedScene({ ...request, outputPath: 'D:/outside' } as never)
     ).rejects.toMatchObject({ code: SceneExportErrorCodes.exportInputRejected })
     expect(reads).toBe(0)
+  })
+
+  it('内容依据版本不是已审计的 4.6.5 时拒绝，且不读取保存内容或调用打包', async () => {
+    let reads = 0
+    let packaged = 0
+    const service = serviceWith(
+      async () => {
+        reads += 1
+        return saved
+      },
+      async () => {
+        packaged += 1
+        return unavailable()
+      }
+    )
+    const failures: AppException[] = []
+    for (const contentBasis of [
+      { ...basis, parserVersion: '4.6.4' },
+      { ...basis, engineVersion: '4.6.6' }
+    ]) {
+      try {
+        await service.exportSavedScene({ ...request, contentBasis })
+      } catch (error) {
+        failures.push(error as AppException)
+      }
+    }
+    expect(failures.map(({ code, message }) => ({ code, message }))).toEqual([
+      {
+        code: 4601,
+        message: '导出只接受已保存的当前场景'
+      },
+      {
+        code: 4601,
+        message: '导出只接受已保存的当前场景'
+      }
+    ])
+    expect(reads).toBe(0)
+    expect(packaged).toBe(0)
   })
 
   it('没有可运行 Windows 产物时返回能力不可用，不返回成功', async () => {
@@ -122,8 +160,8 @@ describe('单场景 Windows 导出编排', () => {
 function serviceWith(
   readSavedScene: SceneExportSourceGateway['readSavedScene'],
   packageWindowsScene: WindowsScenePackager['packageWindowsScene'] = async () => unavailable()
-): SceneExportApplicationServiceImpl {
-  return new SceneExportApplicationServiceImpl({
+): ExportSavedScene {
+  return new ExportSavedScene({
     sources: sources(readSavedScene),
     packager: { packageWindowsScene }
   })

@@ -1,4 +1,4 @@
-import type { DragEvent, RefObject } from 'react'
+import type { DragEvent } from 'react'
 
 import type {
   ProjectFolderDeletionPlanVO,
@@ -35,7 +35,6 @@ export type CatalogTreeEntry =
   | { kind: 'source'; source: ProjectInputSourceSummaryVO; path: string }
 
 export interface UseInputCatalog {
-  panelRef: RefObject<HTMLElement | null>
   query: string
   group: CatalogGroup
   type: CatalogTypeFilter

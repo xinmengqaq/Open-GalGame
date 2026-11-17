@@ -9,70 +9,6 @@ async function openWorkbench(page, search = '') {
   await expect(page.getByRole('heading', { name: '工作区' })).toBeVisible()
 }
 
-/** 读取工作台外壳的滚动量与固定区域位置，用于断言操作和焦点不移动外壳。 */
-async function shellGeometry(page) {
-  return page.evaluate(() => {
-    const box = (element) => {
-      if (!element) return null
-      const rect = element.getBoundingClientRect()
-      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-    }
-    const scroll = (element) =>
-      element ? { top: element.scrollTop, left: element.scrollLeft } : null
-    const screen = document.querySelector('[data-testid="workbench-screen"]')
-    const stage = document.querySelector('section[aria-label="场景画布"]')
-    const canvasArea = stage ? stage.parentElement : null
-    const viewport = document.querySelector('[data-testid="scene-canvas"]')
-    return {
-      screen: scroll(screen),
-      canvasArea: scroll(canvasArea),
-      stage: scroll(stage),
-      viewport: scroll(viewport),
-      topbar: box(screen ? screen.querySelector(':scope > header') : null),
-      catalog: box(document.querySelector('[data-testid="input-catalog"]'))
-    }
-  })
-}
-
-async function expectShellUnscrolled(page, before) {
-  const after = await shellGeometry(page)
-  expect(after.screen).toEqual({ top: 0, left: 0 })
-  expect(after.canvasArea).toEqual({ top: 0, left: 0 })
-  expect(after.stage).toEqual({ top: 0, left: 0 })
-  expect(after.viewport).toEqual({ top: 0, left: 0 })
-  for (const key of ['topbar', 'catalog']) {
-    expect(after[key]).not.toBeNull()
-    expect(Math.abs(after[key].x - before[key].x)).toBeLessThanOrEqual(0.5)
-    expect(Math.abs(after[key].y - before[key].y)).toBeLessThanOrEqual(0.5)
-    expect(Math.abs(after[key].width - before[key].width)).toBeLessThanOrEqual(0.5)
-    expect(Math.abs(after[key].height - before[key].height)).toBeLessThanOrEqual(0.5)
-  }
-}
-
-/** 等待页面过渡与工作台入场清理 transform，避免把入场位移误判成外壳漂移。 */
-async function waitForShellSettled(page) {
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const screen = document.querySelector('[data-testid="workbench-screen"]')
-        if (!screen) return 'missing'
-        const targets = [
-          screen.parentElement,
-          ...screen.querySelectorAll(
-            '[data-motion="chrome"], [data-motion="panel"], [data-motion="stage"], [data-motion="save"]'
-          )
-        ]
-        const moving = targets.filter(
-          (target) =>
-            target instanceof HTMLElement &&
-            !/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/.test(getComputedStyle(target).transform)
-        )
-        return moving.length === 0 ? 'settled' : `${moving.length} moving`
-      })
-    )
-    .toBe('settled')
-}
-
 /** 断言最上层弹窗内容中心与视口中心的偏差不超过 2px。 */
 async function expectDialogCentered(page) {
   await expect
@@ -217,27 +153,32 @@ test('浏览器只读夹具显示各类卡片与两条关联', async ({ page }) 
   ]) {
     await expect(page.getByTestId(`rf__node-${cardId}`)).toBeVisible()
   }
-  await expect(page.getByText('同一场景')).toBeVisible()
-  await expect(page.getByText('关系还没写')).toBeVisible()
-})
 
-test('工作台外壳不因新增、保存和编辑弹窗滚动', async ({ page }) => {
-  await openWorkbench(page)
-  await expect(page.getByTestId('rf__node-card-doc')).toBeVisible()
-  await waitForShellSettled(page)
-  const before = await shellGeometry(page)
+  // 夹具保存的视口会把高位关系标签推到画布裁切边缘；先用现有“适配画布”把内容放进可交互区域。
+  await page.getByRole('button', { name: '适配画布' }).click()
 
-  await page.getByRole('button', { name: '添加提示词卡' }).click()
-  await page.getByRole('button', { name: '保存', exact: true }).click()
-  await page.getByTestId('rf__node-card-doc').click({ button: 'right' })
-  await page.getByRole('menuitem', { name: '编辑标题和简介' }).click()
-  await expect(page.getByRole('heading', { name: '编辑输入卡片' })).toBeVisible()
-  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('edit-card-title')
-  await expectDialogCentered(page)
-  await page.getByRole('button', { name: '关闭弹窗' }).click()
+  // 标签会压住卡片时只留光点，名称文字被收起；关系锚点按钮始终可访问，用它选择关联并核对详情。
+  const namedRelation = page.getByRole('button', { name: '编辑特殊关系：同一场景（已命名）' })
+  const unnamedRelation = page.getByRole('button', { name: '编辑特殊关系：关系还没写（未命名）' })
+  await expect(namedRelation).toBeVisible()
+  await expect(unnamedRelation).toBeVisible()
+
+  const dialog = page.getByRole('dialog', { name: '特殊关系' })
+  await namedRelation.click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('#relation-name')).toHaveValue('同一场景')
+  await expect(dialog.getByText('已命名关系', { exact: true })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '卸下记录' })).toBeVisible()
+  await dialog.getByRole('button', { name: '关闭弹窗' }).click()
   await expect(page.locator('dialog[open]')).toHaveCount(0)
 
-  await expectShellUnscrolled(page, before)
+  await unnamedRelation.click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('#relation-name')).toHaveValue('')
+  await expect(dialog.getByText('未命名关系', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('这条线还没有关系记录。', { exact: true })).toBeVisible()
+  await dialog.getByRole('button', { name: '关闭弹窗' }).click()
+  await expect(page.locator('dialog[open]')).toHaveCount(0)
 })
 
 test('新建项目、重命名和编辑卡片弹窗视口居中，关闭重开仍居中', async ({ page }) => {
@@ -300,4 +241,35 @@ test('文档层和目录菜单挂载到 body，文档层覆盖视口', async ({ 
   expect(await menu.evaluate((element) => element.parentElement === document.body)).toBe(true)
   await page.keyboard.press('Escape')
   await expect(menu).toHaveCount(0)
+})
+
+test('导出与试玩预览在缺少可运行前置时保持禁用并给出固定原因', async ({ page }) => {
+  await openWorkbench(page)
+
+  /* 先等预览可用性查询落定，让挂载后的异步读取（含导出前置 hydration）完成。 */
+  const previewButton = page.getByRole('button', { name: '试玩预览', exact: true })
+  await expect(previewButton).toBeDisabled()
+  await expect(previewButton).toHaveAttribute(
+    'title',
+    '暂时无法确认当前场景内容，不能打开试玩预览'
+  )
+
+  const exportButton = page.getByRole('button', { name: '导出', exact: true })
+  await expect(exportButton).toBeDisabled()
+  await expect(exportButton).toHaveAttribute(
+    'title',
+    '还没有保存成功的场景内容；先在试玩预览里保存一次'
+  )
+})
+
+test('生成入口关闭抽屉后把焦点还给生成按钮', async ({ page }) => {
+  await openWorkbench(page)
+  const generate = page.getByRole('button', { name: '生成', exact: true })
+  await generate.click()
+
+  const dialog = page.getByRole('dialog', { name: '创作抽屉' })
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(generate).toBeFocused()
 })

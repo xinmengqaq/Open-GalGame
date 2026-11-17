@@ -51,4 +51,3 @@ export const projectInputSourceDocumentSchema = z.strictObject({
 })
 
 export type ProjectInputSourceDocument = z.infer<typeof projectInputSourceDocumentSchema>
-export type ProjectInputSourceFormatProbe = z.infer<typeof projectInputSourceFormatProbeSchema>

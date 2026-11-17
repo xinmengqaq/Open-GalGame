@@ -5,7 +5,7 @@ import { AppException } from '@common/errors/AppException'
 
 const page = { offset: 0, limit: 9 }
 
-describe('ProjectApplicationServiceImpl.listProjects', () => {
+describe('ManageProjects.listProjects', () => {
   it('按登记顺序读取当前页并返回总数', async () => {
     const f = createProjectApplicationFixture([{ id: 'story-1', directory: '/story-1' }])
     f.storage.inspect.mockResolvedValue({

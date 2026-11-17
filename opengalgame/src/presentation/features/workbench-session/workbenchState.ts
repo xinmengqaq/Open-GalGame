@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
+
 import type { FailureState } from '../../feedback/failure'
 import { CONTENT_DAMAGED_CODE, UNSUPPORTED_FORMAT_CODE } from '../../feedback/projectFilesFeedback'
 import { useWorkbenchSessionStore } from './workbenchSession.store'
@@ -56,10 +58,6 @@ export type WorkbenchStateInput = {
   arrangementCardCount?: number
 }
 
-/** 与 domain/scene-canvas/errors/SceneCanvasErrorCodes 对齐；表现层只按结构化码判断。 */
-const SCENE_CANVAS_CONTENT_DAMAGED_CODE = 4416
-const SCENE_CANVAS_UNSUPPORTED_FORMAT_CODE = 4417
-
 /**
  * 是否属于“内容/格式已经不能按当前版本读取”，需要检查工程而不是重试。
  * 只按失败码判断，不读取失败消息。
@@ -69,8 +67,8 @@ export function isDamagedFailureCode(code: number | null | undefined): boolean {
   return (
     code === CONTENT_DAMAGED_CODE ||
     code === UNSUPPORTED_FORMAT_CODE ||
-    code === SCENE_CANVAS_CONTENT_DAMAGED_CODE ||
-    code === SCENE_CANVAS_UNSUPPORTED_FORMAT_CODE
+    code === SceneCanvasErrorCodes.contentDamaged ||
+    code === SceneCanvasErrorCodes.unsupportedFormat
   )
 }
 
@@ -201,7 +199,7 @@ function damagedStateOf(
 ): WorkbenchState {
   const arrangement = scope === 'arrangement'
   const formatIssue =
-    code === UNSUPPORTED_FORMAT_CODE || code === SCENE_CANVAS_UNSUPPORTED_FORMAT_CODE
+    code === UNSUPPORTED_FORMAT_CODE || code === SceneCanvasErrorCodes.unsupportedFormat
   return {
     kind: 'damaged',
     scope,

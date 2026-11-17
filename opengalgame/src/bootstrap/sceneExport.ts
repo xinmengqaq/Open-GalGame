@@ -1,14 +1,16 @@
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
 import { ReadLatestPreviewSaveUseCase } from '@application/scene-export/services/ReadLatestPreviewSaveUseCase'
 import type { SceneExportApplicationService } from '@application/scene-export/services/SceneExportApplicationService'
-import { SceneExportApplicationServiceImpl } from '@application/scene-export/services/impl/SceneExportApplicationServiceImpl'
+import { ExportSavedScene } from '@application/scene-export/services/impl/ExportSavedScene'
 import type { ScenePreviewSourceGateway } from '@application/scene-preview/ports/ScenePreviewSourceGateway'
+import type { LoggerGateway } from '@common/logging/LoggerGateway'
 import { LocalPreviewSaveVersionQueryGateway } from '@infrastructure/scene-export/LocalPreviewSaveVersionQueryGateway'
 import { LocalSceneExportSourceGateway } from '@infrastructure/scene-export/LocalSceneExportSourceGateway'
 import { TerreWindowsScenePackager } from '@infrastructure/scene-export/TerreWindowsScenePackager'
 
 export type SceneExportBootstrapOptions = {
   readonly userDirectory: string
+  readonly logger: LoggerGateway
   readonly versioning: ProjectVersioningApplicationService
   readonly sources: ScenePreviewSourceGateway
 }
@@ -21,13 +23,13 @@ export interface SceneExportServices {
 
 export function createSceneExport(options: SceneExportBootstrapOptions): SceneExportServices {
   return {
-    exportSavedScene: new SceneExportApplicationServiceImpl({
+    exportSavedScene: new ExportSavedScene({
       sources: new LocalSceneExportSourceGateway(
         options.userDirectory,
         options.versioning,
         options.sources
       ),
-      packager: new TerreWindowsScenePackager(options.userDirectory)
+      packager: new TerreWindowsScenePackager(options.logger, options.userDirectory)
     }),
     latestPreviewSave: new ReadLatestPreviewSaveUseCase(
       new LocalPreviewSaveVersionQueryGateway(options.userDirectory, options.versioning)

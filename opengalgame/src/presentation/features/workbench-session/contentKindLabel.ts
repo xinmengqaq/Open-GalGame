@@ -8,7 +8,6 @@ import { presetLabelOf, type SessionFieldKind } from './webgalPreset'
 import type {
   SessionCard,
   SessionCardKind,
-  SessionDocumentCard,
   SessionSourceCard
 } from './workbenchSession.types'
 
@@ -82,20 +81,6 @@ export function isPreviewCard(kind: SessionCardKind): boolean {
 
 export function isSourceCard(card: SessionCard): card is SessionSourceCard {
   return card.kind !== 'prompt' && card.kind !== 'animation' && card.kind !== 'effect'
-}
-
-export function isDocumentCard(card: SessionCard): card is SessionDocumentCard {
-  return card.kind === 'document'
-}
-
-/** 通用编辑弹窗只接受拥有标题（和简介）的卡片。 */
-export function isEditableCard(card: SessionCard): boolean {
-  return (
-    card.kind === 'document' ||
-    card.kind === 'image' ||
-    card.kind === 'audio' ||
-    card.kind === 'video'
-  )
 }
 
 /** 文档、图片、音频和视频卡都有摘要字段；文档称简介，媒体称用途说明。 */

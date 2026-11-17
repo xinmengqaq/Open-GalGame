@@ -1,5 +1,5 @@
 import { AppException } from '@common/errors/AppException'
-import { SceneCanvasErrorCodes } from '../errors/SceneCanvasErrorCodes'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import type {
   SceneCanvasArrangement,
   SceneCanvasCard,
@@ -46,6 +46,7 @@ export function connectSceneCanvasCards(
         relationId,
         fromCardId: ends[0]!,
         toCardId: ends[1]!,
+        defaultRelation: 'associated',
         specificName: '',
         recordCardId: null
       }

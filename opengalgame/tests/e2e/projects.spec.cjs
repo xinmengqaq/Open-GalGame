@@ -1,17 +1,7 @@
 const { test, expect } = require('@playwright/test')
 const path = require('node:path')
 
-const importOk = path.join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'prototypes',
-  'home',
-  'e2e',
-  'fixtures',
-  'import-ok'
-)
+const importOk = path.join(__dirname, 'fixtures', 'import-ok')
 
 async function openProjects(page, search = '') {
   await page.goto(`/${search}`)

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { Clapperboard, Package } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react'
 
 import type { SceneGenerationRenderStatusVO } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { ProjectClient } from '@interfaces/client/ProjectClient'
@@ -11,6 +11,7 @@ import type { SceneCanvasClient } from '@interfaces/scene-canvas/client/SceneCan
 import type { SceneExportClient } from '@interfaces/scene-export/client/SceneExportClient'
 import type { SceneGenerationClient } from '@interfaces/scene-generation/client/SceneGenerationClient'
 import type { ScenePreviewClient } from '@interfaces/scene-preview/client/ScenePreviewClient'
+import type { SystemPathClient } from '@interfaces/system-path/client/SystemPathClient'
 import { DocumentLayer } from '../../features/document-layer/DocumentLayer'
 import { InputCatalogPanel } from '../../features/input-catalog/InputCatalogPanel'
 import { ProjectMediaProvider } from '../../features/media-preview/ProjectMediaProvider'
@@ -19,7 +20,7 @@ import {
   createWorkbenchCommands,
   type WorkbenchCommands
 } from '../../features/workbench-session/workbenchCommands'
-import { WorkbenchCommandsProvider } from '../../features/workbench-session/workbenchCommandsContext'
+import { WorkbenchCommandsProvider } from '../../features/workbench-session/workbenchCommandsProvider'
 import { WorkbenchStateBanner } from '../../features/workbench-session/WorkbenchStateBanner'
 import { promptReferenceFailureOf } from '../../features/workbench-session/promptReferences'
 import { saveStatusOf } from '../../features/workbench-session/workbenchSaveStatus'
@@ -27,11 +28,9 @@ import {
   sessionIsDirty,
   useWorkbenchSessionStore
 } from '../../features/workbench-session/workbenchSession.store'
-import { snapshotOf } from '../../features/workbench-session/workbenchSessionMapper'
-import type { SessionSnapshot } from '../../features/workbench-session/workbenchSession.types'
 import { useShallow } from 'zustand/react/shallow'
 
-import { failureOf, requireSuccess } from '../../feedback/failure'
+import { requireSuccess } from '../../feedback/failure'
 import {
   PROJECT_WORKSPACE_NOT_READY_CODE,
   workbenchFeedback
@@ -43,31 +42,24 @@ import { GenerationPanel } from './drawer/generation/GenerationPanel'
 import { GenerationHistory } from './drawer/generation/GenerationHistory'
 import { GenerationInputSummaryView } from './drawer/generation/GenerationInputSummary'
 import {
-  generationHistoryBlockedReason,
   generationPhaseOf,
   isTerminalState
 } from './drawer/generation/generationPresentation'
 import { useSceneGeneration, type SaveCanvasOutcome } from './drawer/generation/useSceneGeneration'
-import { useDrawerTabs } from './drawer/useDrawerTabs'
-import type { DrawerTabTone, WorkbenchDrawerBusy } from './drawer/workbenchDrawer.types'
-import {
-  historyFeedback,
-  undoBlockedReason
-} from './drawer/version-history/versionHistoryPresentation'
+import { useWorkbenchDrawerController } from './drawer/useWorkbenchDrawerController'
+import type { DrawerTabTone } from './drawer/workbenchDrawer.types'
+import { historyFeedback } from './drawer/version-history/versionHistoryPresentation'
 import { SparkleMark } from './drawer/drawerIcons'
 import { HistoryIcon, InspectIcon, RefreshIcon, SaveIcon } from './WorkbenchIcons'
 import { FeedbackLayer } from './shell/FeedbackLayer'
-import { SceneExportStatus, type SceneExportNotice } from './shell/SceneExportStatus'
-import {
-  latestPreviewSaveOfResult,
-  savedSceneVersionOfPreviewSave,
-  sceneExportEntryOf
-} from './shell/sceneExportEntry'
-import { exportNoticeOf, exportRequestOf, openExportDirectory } from './shell/sceneTaskPresentation'
+import { SceneExportStatus } from './shell/SceneExportStatus'
+import { openExportDirectory } from './shell/sceneTaskPresentation'
+import { useWorkbenchExportController } from './shell/useWorkbenchExportController'
+import { useWorkbenchHistoryRecovery } from './shell/useWorkbenchHistoryRecovery'
 import { VersionHistoryRecoveryBar } from './shell/VersionHistoryRecoveryBar'
 import { WorkbenchToolbar } from './shell/WorkbenchToolbar'
 import type { WorkbenchToolbarAction } from './shell/workbenchActions'
-import { WorkbenchPreviewLayer, type SavedSceneVersionFact } from './shell/WorkbenchPreviewLayer'
+import { WorkbenchPreviewLayer } from './shell/WorkbenchPreviewLayer'
 import { useMeasuredWidth, useWorkbenchLayoutInsets } from './shell/workbenchLayout'
 import { useWorkbenchMotion } from './useWorkbenchMotion'
 import { WorkspaceNotReadyPanel } from './WorkspaceNotReadyPanel'
@@ -107,6 +99,7 @@ interface WorkbenchPageProps {
   sceneGenerationClient: SceneGenerationClient
   scenePreviewClient: ScenePreviewClient
   sceneExportClient: SceneExportClient
+  systemPathClient: SystemPathClient
 }
 
 export function WorkbenchPage({
@@ -116,7 +109,8 @@ export function WorkbenchPage({
   projectVersioningClient,
   sceneGenerationClient,
   scenePreviewClient,
-  sceneExportClient
+  sceneExportClient,
+  systemPathClient
 }: WorkbenchPageProps): ReactElement {
   const commands = useMemo(() => createWorkbenchCommands(sceneCanvasClient), [sceneCanvasClient])
   return (
@@ -129,6 +123,7 @@ export function WorkbenchPage({
         sceneGenerationClient={sceneGenerationClient}
         scenePreviewClient={scenePreviewClient}
         sceneExportClient={sceneExportClient}
+        systemPathClient={systemPathClient}
         commands={commands}
       />
     </WorkbenchCommandsProvider>
@@ -143,6 +138,7 @@ function WorkbenchScreen({
   sceneGenerationClient,
   scenePreviewClient,
   sceneExportClient,
+  systemPathClient,
   commands
 }: WorkbenchPageProps & {
   commands: WorkbenchCommands
@@ -172,10 +168,7 @@ function WorkbenchScreen({
     if (state.projectId !== projectId) return { ok: false, message: '工程已切换，生成没有开始。' }
     if (state.saveState === 'saved' || state.saveState === 'idle') return { ok: true }
     const referenceFailure = state.saveError
-      ? promptReferenceFailureOf({
-          code: state.saveError.code,
-          message: state.saveError.msg
-        })
+      ? promptReferenceFailureOf(state.saveError)
       : null
     return {
       ok: false,
@@ -200,32 +193,23 @@ function WorkbenchScreen({
     generation.status !== null && isTerminalState(generation.status.state)
       ? `${generation.status.operationId}:${generation.status.state}:${generation.status.stage}`
       : ''
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const drawerTabs = useDrawerTabs(`${projectId}|${sceneId}`)
-  const [worksBusy, setWorksBusy] = useState<WorkbenchDrawerBusy>(null)
-  const drawerTrigger = useRef<HTMLElement | null>(null)
   const candidateAvailable = candidateTarget !== null
   const candidateSnapshotId = candidateTarget?.candidateSnapshotId ?? null
   const statusSequence = generation.status?.sequence ?? null
-  const syncCandidate = drawerTabs.syncCandidate
-  /* 每次生成状态更新都报告候选可用性；新范围第一份报告只建基线。 */
-  useEffect(() => {
-    syncCandidate(candidateAvailable, candidateSnapshotId)
-  }, [candidateAvailable, candidateSnapshotId, statusSequence, syncCandidate])
+  const drawer = useWorkbenchDrawerController({
+    scopeKey: `${projectId}|${sceneId}`,
+    candidate: {
+      available: candidateAvailable,
+      snapshotId: candidateSnapshotId,
+      sequence: statusSequence
+    },
+    generationActive,
+    onReloadGeneration: generation.reload
+  })
   const currentTone = drawerToneOf(generation.status)
-  const [recoveryDraft, setRecoveryDraft] = useState<SessionSnapshot | null>(null)
-  const [viewStale, setViewStale] = useState(false)
-  const [retryNonce, setRetryNonce] = useState(0)
   const [noticeSlot, setNoticeSlot] = useState<HTMLElement | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
-  const previewReturnFocus = useRef<HTMLElement | null>(null)
-  const [savedSceneVersion, setSavedSceneVersion] = useState<SavedSceneVersionFact | null>(null)
-  const [exportNotice, setExportNotice] = useState<SceneExportNotice | null>(null)
-  const [exporting, setExporting] = useState(false)
-  const exportingRef = useRef(false)
-  const exportRun = useRef(0)
-  const hydrationRun = useRef(0)
-  const previewSavedDuringHydration = useRef(false)
+  const [previewReturnFocus, setPreviewReturnFocus] = useState<HTMLElement | null>(null)
   const name = projectName || opened?.name || '未打开工程'
   const loading = arrangementStatus === 'loading' || arrangementStatus === 'idle'
   const workspaceBlocked =
@@ -263,213 +247,47 @@ function WorkbenchScreen({
           ? '工作台还没准备好，暂不能试玩预览'
           : '打开当前场景的真实 WebGAL 试玩预览'
 
-  const exportEntry = sceneExportEntryOf({
-    savedSceneVersion,
-    exporting,
-    pageBlocked,
-    workspaceBlocked,
-    generationActive,
-    viewStale,
-    saveState: saveStatus.state,
-    saveLabel: saveStatus.label
-  })
-  const exportCanRun = exportEntry.canRun
-  const exportHint = exportEntry.hint
-
-  useEffect(() => {
-    if (generation.status?.state !== 'succeeded') return
-    setSavedSceneVersion(null)
-    setExportNotice(null)
+  const refreshPreviewAvailability = useCallback((): void => {
     void previewAvailability.refetch()
-  }, [generation.status?.state, generation.status?.result?.commitId, previewAvailability.refetch])
+  }, [previewAvailability.refetch])
 
-  useEffect(() => {
-    if (exportNotice?.tone !== 'ok' || exportNotice.directoryPath) return
-    const timer = setTimeout(() => setExportNotice(null), 5000)
-    return () => clearTimeout(timer)
-  }, [exportNotice])
+  const history = useWorkbenchHistoryRecovery({
+    commands,
+    opened,
+    reloadAfterHistoryUndo: page.reloadAfterHistoryUndo,
+    hasUnsavedEdits,
+    saveState: saveStatus.state,
+    pageBlocked,
+    generationActive
+  })
 
-  /* 重载或切换场景后从后端恢复导出前置：只采用已结算的预览保存，不伪造版本。 */
-  useEffect(() => {
-    if (opened === null || projectId.length === 0 || sceneId.length === 0) {
-      setSavedSceneVersion(null)
-      return
+  const exportController = useWorkbenchExportController({
+    sceneExportClient,
+    scope: { opened, projectId, sceneId },
+    entry: {
+      pageBlocked,
+      workspaceBlocked,
+      generationActive,
+      viewStale: history.viewStale,
+      saveState: saveStatus.state,
+      saveLabel: saveStatus.label
+    },
+    commands,
+    refreshPreviewAvailability,
+    generationSettled: {
+      succeeded: generation.status?.state === 'succeeded',
+      commitId: generation.status?.result?.commitId ?? null
     }
-    const run = ++hydrationRun.current
-    previewSavedDuringHydration.current = false
-    setSavedSceneVersion(null)
-    void (async (): Promise<void> => {
-      try {
-        const result = await sceneExportClient.readLatestPreviewSave({ projectId, sceneId })
-        if (run !== hydrationRun.current || previewSavedDuringHydration.current) return
-        setSavedSceneVersion(savedSceneVersionOfPreviewSave(latestPreviewSaveOfResult(result)))
-      } catch {
-        if (run !== hydrationRun.current || previewSavedDuringHydration.current) return
-        setSavedSceneVersion(null)
-      }
-    })()
-    return () => {
-      if (run === hydrationRun.current) hydrationRun.current += 1
-    }
-  }, [opened, projectId, sceneId, sceneExportClient])
-
-  useEffect(
-    () => () => {
-      exportRun.current += 1
-    },
-    []
-  )
-  const writeBlockedReason = viewStale
-    ? historyFeedback.blockedStale
-    : (undoBlockedReason({
-        saveState: saveStatus.state,
-        pageBlocked
-      }) ?? (generationActive ? generationHistoryBlockedReason : null))
-  const canRestoreDraft = recoveryDraft !== null && !hasUnsavedEdits && !viewStale
-  const restoreBlockedReason =
-    recoveryDraft === null
-      ? null
-      : viewStale
-        ? historyFeedback.restoreBlockedStale
-        : hasUnsavedEdits
-          ? historyFeedback.restoreBlockedDirty
-          : null
-
-  const reloadGeneration = generation.reload
-  const handleDrawerOpenChange = useCallback(
-    (next: boolean) => {
-      setDrawerOpen(next)
-      if (next) {
-        reloadGeneration()
-        return
-      }
-      const trigger = drawerTrigger.current
-      drawerTrigger.current = null
-      if (trigger) window.setTimeout(() => trigger.focus({ preventScroll: true }), 0)
-    },
-    [reloadGeneration]
-  )
-
-  const captureDraft = useCallback(async () => {
-    if (!opened) return null
-    await commands.prepareHistoryWrite()
-    const state = useWorkbenchSessionStore.getState()
-    if (state.projectId !== opened.id) return null
-    return sessionIsDirty(state) ? snapshotOf(state) : null
-  }, [commands, opened])
-
-  const onUndoCommitted = useCallback(
-    async (draft: SessionSnapshot | null) => {
-      if (!opened) return
-      if (draft) setRecoveryDraft(draft)
-      setRetryNonce(0)
-      setViewStale(true)
-      commands.setSaveHold(true)
-    },
-    [commands, opened]
-  )
-
-  const retryHistoryReload = useCallback(async () => {
-    if (!opened) return
-    const projectId = opened.id
-    try {
-      const reloaded = await page.reloadAfterHistoryUndo()
-      if (useWorkbenchSessionStore.getState().projectId !== projectId) return
-      if (reloaded) {
-        setViewStale(false)
-        commands.setSaveHold(false)
-        return
-      }
-    } catch {}
-    if (useWorkbenchSessionStore.getState().projectId !== projectId) return
-    setRetryNonce((count) => count + 1)
-  }, [commands, opened, page])
-
-  useEffect(() => {
-    if (!viewStale) return
-    const delay = retryNonce === 0 ? 0 : Math.min(1200 * 2 ** Math.min(retryNonce - 1, 3), 8000)
-    const timer = setTimeout(() => void retryHistoryReload(), delay)
-    return () => clearTimeout(timer)
-  }, [retryHistoryReload, retryNonce, viewStale])
-
-  const restoreDraft = useCallback(() => {
-    if (!recoveryDraft || restoreBlockedReason) return
-    useWorkbenchSessionStore.getState().restoreSessionDraft(recoveryDraft)
-    setRecoveryDraft(null)
-  }, [recoveryDraft, restoreBlockedReason])
-
-  const openGeneration = (): void => {
-    drawerTrigger.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null
-    drawerTabs.open('current')
-    setDrawerOpen(true)
-    reloadGeneration()
-  }
-
+  })
+  const closeDrawerForPreview = drawer.actions.closeForPreview
   const openPreview = useCallback((): void => {
     if (!previewCanOpen) return
-    drawerTrigger.current = null
-    previewReturnFocus.current =
+    setPreviewReturnFocus(
       document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setDrawerOpen(false)
+    )
+    closeDrawerForPreview()
     setPreviewOpen(true)
-  }, [previewCanOpen])
-
-  const handleSavedSceneVersion = useCallback((saved: SavedSceneVersionFact): void => {
-    if (saved.requestId.trim() === '' || saved.contentBasis.digest.trim() === '') return
-    previewSavedDuringHydration.current = true
-    setSavedSceneVersion(saved)
-    setExportNotice(null)
-  }, [])
-
-  const handleOpenDirectory = useCallback(
-    async (directoryPath: string): Promise<void> => {
-      await openExportDirectory(sceneExportClient, directoryPath)
-    },
-    [sceneExportClient]
-  )
-
-  const handleExport = useCallback(async (): Promise<void> => {
-    const version = savedSceneVersion
-    if (!version || exportingRef.current || !exportCanRun) return
-    exportingRef.current = true
-    const run = ++exportRun.current
-    setExporting(true)
-    setExportNotice({
-      tone: 'busy',
-      label: '导出中',
-      detail: '正在保存工作台改动并打包当前场景。'
-    })
-    try {
-      let state = useWorkbenchSessionStore.getState()
-      if (state.projectId !== projectId) return
-      if (sessionIsDirty(state)) {
-        await commands.save('manual')
-        state = useWorkbenchSessionStore.getState()
-        if (run !== exportRun.current || state.projectId !== projectId) return
-        if (sessionIsDirty(state) || (state.saveState !== 'saved' && state.saveState !== 'idle')) {
-          setExportNotice({
-            tone: 'danger',
-            label: '导出已停止',
-            detail: state.saveError?.msg ?? '工作台改动没有保存成功，导出已停止。'
-          })
-          return
-        }
-      }
-      const result = requireSuccess(
-        await sceneExportClient.exportSavedScene(exportRequestOf(projectId, sceneId, version))
-      )
-      if (run !== exportRun.current) return
-      setExportNotice(exportNoticeOf(result))
-    } catch (error) {
-      if (run !== exportRun.current) return
-      const failure = failureOf(error)
-      setExportNotice({ tone: 'danger', label: '导出失败', detail: failure.msg })
-    } finally {
-      exportingRef.current = false
-      if (run === exportRun.current) setExporting(false)
-    }
-  }, [commands, exportCanRun, projectId, savedSceneVersion, sceneExportClient, sceneId])
+  }, [closeDrawerForPreview, previewCanOpen])
 
   const toolbarActions: readonly WorkbenchToolbarAction[] = [
     {
@@ -478,7 +296,7 @@ function WorkbenchScreen({
       icon: <SparkleMark />,
       disabled: !opened || pageBlocked || loading || workspaceBlocked,
       hint: generationActive ? '回到当前生成任务' : '打开生成面板，开始生成本场景',
-      onInvoke: openGeneration
+      onInvoke: drawer.actions.openGeneration
     },
     {
       id: 'history',
@@ -486,12 +304,7 @@ function WorkbenchScreen({
       icon: <HistoryIcon />,
       disabled: !opened || pageBlocked || workspaceBlocked,
       hint: '打开保存历史、撤销与清理入口',
-      onInvoke: () => {
-        drawerTrigger.current =
-          document.activeElement instanceof HTMLElement ? document.activeElement : null
-        drawerTabs.open('works')
-        setDrawerOpen(true)
-      }
+      onInvoke: drawer.actions.openWorks
     },
     {
       id: 'inspect',
@@ -518,18 +331,19 @@ function WorkbenchScreen({
     },
     {
       id: 'export',
-      label: exporting ? '正在导出' : '导出',
+      label: exportController.exporting ? '正在导出' : '导出',
       icon: <Package size={17} strokeWidth={1.75} />,
-      disabled: !exportCanRun,
-      hint: exportHint,
+      disabled: !exportController.entry.canRun,
+      hint: exportController.entry.hint,
       iconOnly: true,
-      onInvoke: () => void handleExport()
+      onInvoke: () => void exportController.runExport()
     },
     {
       id: 'save',
       label: saving ? '正在保存…' : workbenchFeedback.saveAction,
       icon: <SaveIcon />,
-      disabled: saving || pageBlocked || viewStale || generationActive || workspaceBlocked,
+      disabled:
+        saving || pageBlocked || history.viewStale || generationActive || workspaceBlocked,
       hint: generationActive ? '生成进行中，保存已暂停' : (saveStatus.detail ?? saveStatus.label),
       onInvoke: () => void commands.save('manual')
     }
@@ -571,9 +385,11 @@ function WorkbenchScreen({
           saveStatus={saveStatus}
           taskStatus={
             <SceneExportStatus
-              notice={exportNotice}
-              onDismiss={() => setExportNotice(null)}
-              onOpenDirectory={handleOpenDirectory}
+              notice={exportController.notice}
+              onDismiss={exportController.dismissNotice}
+              onOpenDirectory={(directoryPath) =>
+                openExportDirectory(systemPathClient, directoryPath)
+              }
             />
           }
           registerInset={layout.registerInset}
@@ -581,22 +397,22 @@ function WorkbenchScreen({
         />
 
         <FeedbackLayer
-          active={viewStale || recoveryDraft !== null}
+          active={history.viewStale || history.draft.snapshot !== null}
           topOffset={layout.insets.topBar}
           onNoticeSlotChange={setNoticeSlot}
         >
-          {viewStale ? (
+          {history.viewStale ? (
             <div className={styles.staleBar} role="status">
               <span className={styles.staleSpinner} aria-hidden="true" />
               <p>{historyFeedback.staleTitle}</p>
             </div>
           ) : null}
           <VersionHistoryRecoveryBar
-            draft={recoveryDraft}
-            canRestore={canRestoreDraft}
-            blockedReason={restoreBlockedReason}
-            onRestore={restoreDraft}
-            onDiscard={() => setRecoveryDraft(null)}
+            draft={history.draft.snapshot}
+            canRestore={history.draft.canRestore}
+            blockedReason={history.draft.blockedReason}
+            onRestore={history.draft.restore}
+            onDiscard={history.draft.discard}
           />
         </FeedbackLayer>
 
@@ -651,7 +467,7 @@ function WorkbenchScreen({
                   onReload={() => void page.loadWorkspace()}
                 />
               )}
-              {generationActive && !drawerOpen ? (
+              {drawer.generationLockVisible ? (
                 <div className={styles.generationLock} role="status">
                   <div className={styles.generationLockPanel}>
                     <span aria-hidden="true" className={styles.generationLockOrb}>
@@ -661,7 +477,7 @@ function WorkbenchScreen({
                       <strong>生成进行中</strong>
                       画布暂时只读，避免生成读取到一半的编排。
                     </p>
-                    <button onClick={openGeneration} type="button">
+                    <button onClick={drawer.actions.openGeneration} type="button">
                       查看生成进度
                     </button>
                   </div>
@@ -678,14 +494,14 @@ function WorkbenchScreen({
             sceneId={sceneId}
             projectName={name}
             sceneLabel={sceneLabel}
-            returnFocusTo={previewReturnFocus.current}
+            returnFocusTo={previewReturnFocus}
             onExit={() => setPreviewOpen(false)}
-            onSavedVersion={handleSavedSceneVersion}
+            onSavedVersion={exportController.acceptSavedVersion}
           />
         ) : null}
         {opened ? (
           <WorkbenchDrawer
-            captureDraft={captureDraft}
+            captureDraft={history.captureDraft}
             candidatePreviewClient={scenePreviewClient}
             candidateTarget={candidateTarget}
             currentTone={currentTone}
@@ -693,14 +509,14 @@ function WorkbenchScreen({
               <GenerationPanel
                 cards={cards}
                 controller={generation}
-                exportDisabled={!exportCanRun}
-                exportHint={exportHint}
-                exporting={exporting}
-                onExport={() => void handleExport()}
-                onOpenHistory={() => drawerTabs.open('history')}
-                onOpenSummary={() => drawerTabs.open('summary')}
-                onOpenWorks={() => drawerTabs.open('works')}
-                onReturnToCanvas={() => handleDrawerOpenChange(false)}
+                exportDisabled={!exportController.entry.canRun}
+                exportHint={exportController.entry.hint}
+                exporting={exportController.exporting}
+                onExport={() => void exportController.runExport()}
+                onOpenHistory={() => drawer.actions.openTab('history')}
+                onOpenSummary={() => drawer.actions.openTab('summary')}
+                onOpenWorks={() => drawer.actions.openTab('works')}
+                onReturnToCanvas={() => drawer.onOpenChange(false)}
                 projectName={name}
                 sceneLabel={sceneLabel}
               />
@@ -715,20 +531,20 @@ function WorkbenchScreen({
                 client={sceneGenerationClient}
                 key={`${projectId}|${sceneId}`}
                 onCancel={() => void generation.cancel()}
-                onOpenRun={() => drawerTabs.open('current')}
+                onOpenRun={() => drawer.actions.openTab('current')}
                 projectId={projectId}
                 refreshKey={historyRefreshKey}
                 sceneId={sceneId}
               />
             }
-            onActivateTab={drawerTabs.activate}
-            onCloseTab={drawerTabs.close}
-            onMoveTab={drawerTabs.move}
-            onOpenChange={handleDrawerOpenChange}
-            onOpenTab={drawerTabs.open}
-            onUndoCommitted={onUndoCommitted}
-            onWorksBusyChange={setWorksBusy}
-            open={drawerOpen}
+            onActivateTab={drawer.actions.activateTab}
+            onCloseTab={drawer.actions.closeTab}
+            onMoveTab={drawer.actions.moveTab}
+            onOpenChange={drawer.onOpenChange}
+            onOpenTab={drawer.actions.openTab}
+            onUndoCommitted={history.onUndoCommitted}
+            onWorksBusyChange={drawer.setWorksBusy}
+            open={drawer.open}
             projectId={opened.id}
             projectName={name}
             summaryView={
@@ -739,10 +555,10 @@ function WorkbenchScreen({
                 status={generation.status}
               />
             }
-            tabs={drawerTabs.state}
+            tabs={drawer.tabs}
             versioningClient={projectVersioningClient}
-            worksBusy={worksBusy}
-            writeBlockedReason={writeBlockedReason}
+            worksBusy={drawer.worksBusy}
+            writeBlockedReason={history.writeBlockedReason}
           />
         ) : null}
       </section>

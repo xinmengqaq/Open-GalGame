@@ -12,13 +12,17 @@ import type {
   ProjectFileScopeDTO,
   ProjectFolderScopeDTO,
   ReadProjectFileOperationDTO,
+  RecoverProjectFileOperationsDTO,
   ReadProjectInputSourcesDTO,
   ReadProjectMediaDTO,
   RenameProjectFileDTO,
   RenameProjectFolderDTO,
   UpdateProjectTextFileBodyDTO
 } from '../dto/ProjectFilesDTO'
-import type { ProjectFileOperationSettlementVO } from '../vo/ProjectFileOperationVO'
+import type {
+  ProjectFileOperationRecoveryVO,
+  ProjectFileOperationSettlementVO
+} from '../vo/ProjectFileOperationVO'
 import type { ProjectMediaVO } from '../vo/ProjectMediaVO'
 import type { ProjectFilesInspectionVO } from '../vo/ProjectFilesInspectionVO'
 import type {
@@ -130,6 +134,11 @@ export interface ProjectFilesApplicationService {
   readProjectFileOperation(
     request: ReadProjectFileOperationDTO
   ): Promise<ProjectFileOperationSettlementVO>
+
+  /** 明确恢复写入口：按 caller ID 固化终态；只由 open 后的恢复调用。 */
+  recoverProjectFileOperations(
+    request: RecoverProjectFileOperationsDTO
+  ): Promise<readonly ProjectFileOperationRecoveryVO[]>
 
   deleteProjectFolder(request: DeleteProjectFolderDTO): Promise<void>
 }

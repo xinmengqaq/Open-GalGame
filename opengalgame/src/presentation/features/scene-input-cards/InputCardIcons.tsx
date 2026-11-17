@@ -2,7 +2,10 @@ import type { ReactElement, SVGProps } from 'react'
 
 type IconProps = SVGProps<SVGSVGElement>
 
-function Glyph({ children, ...props }: IconProps & { children: ReactElement | ReactElement[] }) {
+function Glyph({
+  children,
+  ...props
+}: IconProps & { children: ReactElement | ReactElement[] }): ReactElement {
   return (
     <svg
       viewBox="0 0 24 24"

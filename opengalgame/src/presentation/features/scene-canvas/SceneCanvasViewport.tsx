@@ -13,6 +13,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
@@ -78,7 +79,8 @@ export function SceneCanvasViewport({
   const drop = useSceneCanvasDragAndDrop(client)
   const cards = useWorkbenchSessionStore((state) => state.cards)
   const storedViewport = useWorkbenchSessionStore((state) => state.viewport)
-  const initialViewport = useRef<Viewport>(useWorkbenchSessionStore.getState().viewport)
+  // 默认视口只取挂载时的快照；之后 store 视口变化仍由下方同步 effect 处理。
+  const [initialViewport] = useState<Viewport>(() => useWorkbenchSessionStore.getState().viewport)
   const lastLocalViewport = useRef<Viewport | null>(null)
   // 最近一次被重定向转发的 mousedown 坐标：只用于判定随后的 click 是否同一次手势。
   const redirectedPressRef = useRef<CanvasPoint | null>(null)
@@ -169,7 +171,9 @@ export function SceneCanvasViewport({
       // 文字仍由它自己的锚点元素接收；解析结果是端口时再交给 shouldRedirectCanvasHit 按 bullseye
       // 与最近中心裁决，避免误开邻近关系。
       if (actual?.kind === 'anchor') {
-        const glyphOf = (id: string) =>
+        const glyphOf = (
+          id: string
+        ): (typeof targets)[number]['candidate'] | undefined =>
           targets.find(
             (item) => item.candidate.kind === 'anchor' && item.candidate.id === id
           )?.candidate
@@ -293,7 +297,7 @@ export function SceneCanvasViewport({
         edges={canvas.edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        defaultViewport={initialViewport.current}
+        defaultViewport={initialViewport}
         minZoom={0.32}
         maxZoom={1.8}
         nodesDraggable

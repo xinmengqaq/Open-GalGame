@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
+import { SceneGenerationVersionConflict } from '@application/scene-generation/errors/SceneGenerationVersionConflict'
 import { SCENE_GENERATION_START_CONFLICT_MESSAGE } from '@application/scene-generation/policies/SceneGenerationStartConflict'
 import type { SceneGenerationRenderDependencies } from '@application/scene-generation/services/impl/SceneGenerationRenderDependencies'
-import { SceneGenerationLaunchServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationLaunchServiceImpl'
+import { LaunchSceneGeneration } from '@application/scene-generation/services/impl/LaunchSceneGeneration'
 import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
 
 import {
@@ -65,8 +66,8 @@ function renderDependencies(): SceneGenerationRenderDependencies {
   }
 }
 
-function launchService(f: SceneGenerationTestFixture): SceneGenerationLaunchServiceImpl {
-  return new SceneGenerationLaunchServiceImpl(
+function launchService(f: SceneGenerationTestFixture): LaunchSceneGeneration {
+  return new LaunchSceneGeneration(
     f.deps,
     renderDependencies(),
     f.generation,
@@ -147,5 +148,26 @@ describe('启动场景生成时的并发拦截', () => {
 
     expect(f.executions.size).toBe(2)
     expect(f.executions.get(status.operationId)?.mode).toBe('generate')
+  })
+})
+
+describe('启动前候选可接受性判定', () => {
+  it.each([
+    ['locked', '目标场景已锁定，不能覆盖'],
+    ['unknown', '目标场景锁定状态不明，不能覆盖']
+  ] as const)('锁定状态为 %s 时按版本冲突拒绝启动，不创建操作', async (lockState, message) => {
+    const f = createSceneGenerationFixture()
+    f.versions.readBaseline.mockResolvedValue({
+      commitId: 'baseline-1',
+      affectedFiles: [],
+      lockState
+    })
+
+    const started = f.service.generateScene(generationRequest)
+    await expect(started).rejects.toBeInstanceOf(SceneGenerationVersionConflict)
+    await expect(started).rejects.toMatchObject({ code: 4103, message })
+    expect(f.workflow.createExecution).not.toHaveBeenCalled()
+    expect(f.artifacts.createWorkspace).not.toHaveBeenCalled()
+    expect(f.executions.size).toBe(0)
   })
 })

@@ -1,6 +1,6 @@
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
 import type { CandidatePreviewSessionLookup } from '@application/scenes/ports/CandidatePreviewSessionLookup'
-import { SceneCandidatePreviewApplicationServiceImpl } from '@application/scene-preview/services/impl/SceneCandidatePreviewApplicationServiceImpl'
+import { ReadCandidatePreview } from '@application/scene-preview/services/impl/ReadCandidatePreview'
 import type { SceneCandidatePreviewApplicationService } from '@application/scene-preview/services/SceneCandidatePreviewApplicationService'
 import { SceneAssetReferenceGatewayImpl } from '@infrastructure/scenes/SceneAssetReferenceGatewayImpl'
 import { SceneScriptParserGatewayImpl } from '@infrastructure/scenes/SceneScriptParserGatewayImpl'
@@ -13,7 +13,7 @@ import { LocalScenePreviewSourceGateway } from '@infrastructure/scene-preview/Lo
 import { SceneCompatibilityGatewayImpl } from '@infrastructure/scene-preview/SceneCompatibilityGatewayImpl'
 import { ScenePreviewArtifactGatewayImpl } from '@infrastructure/scene-preview/ScenePreviewArtifactGatewayImpl'
 import type { PreviewRuntimeGateway } from '@application/scene-preview/ports/PreviewRuntimeGateway'
-import { ScenePreviewApplicationServiceImpl } from '@application/scene-preview/services/impl/ScenePreviewApplicationServiceImpl'
+import { createScenePreviewApplication } from '@application/scene-preview/services/impl/createScenePreviewApplication'
 import type { ScenePreviewApplicationService } from '@application/scene-preview/services/ScenePreviewApplicationService'
 import { PreviewRuntimeGatewayImpl } from '@infrastructure/scene-preview/PreviewRuntimeGatewayImpl'
 import type { CandidateTrustedInputSource } from '@infrastructure/webgal/compatibility/candidateGameStart'
@@ -64,7 +64,7 @@ export function createScenePreviewData(
   const references = new SceneAssetReferenceGatewayImpl()
   const previewSources = new LocalScenePreviewSourceGateway(locations, sources, parser, references)
   return {
-    candidatePreview: new SceneCandidatePreviewApplicationServiceImpl({
+    candidatePreview: new ReadCandidatePreview({
       sessions: new CandidatePreviewSessionGatewayImpl(options.sessionLookup, options.now),
       sources: new SceneSourceReaderGatewayImpl(),
       parser: new SceneScriptParserGatewayImpl(),
@@ -100,7 +100,7 @@ export function createScenePreview(options: ScenePreviewRuntimeOptions): ScenePr
     ...data,
     runtime,
     bridge,
-    currentScenePreview: new ScenePreviewApplicationServiceImpl({
+    currentScenePreview: createScenePreviewApplication({
       ...data.currentScene,
       runtime,
       nextId: options.nextId ?? randomUUID

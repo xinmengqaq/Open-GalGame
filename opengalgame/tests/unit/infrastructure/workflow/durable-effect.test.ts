@@ -7,6 +7,7 @@ import {
   decideDurableEffectRecovery,
   readDurableEffects,
   settleStartedDurableEffects,
+  type EffectVerification,
   writeDurableEffect
 } from '@infrastructure/workflow/execution/durableEffect'
 import type { DurableEffectRecord } from '@infrastructure/workflow/DurableEffectRecord'
@@ -38,6 +39,50 @@ describe('可恢复副作用', () => {
       candidateRevision: 'abc1234'
     })
     expect(verify).not.toHaveBeenCalled()
+  })
+
+  it('完成写入缺少候选修订时不算可靠结果，结果不明就停止', () => {
+    const verify = (): EffectVerification => ({ outcome: 'unknown' as const })
+    for (const kind of ['fileWrite', 'commit'] as const) {
+      for (const record of [
+        { ...completed, kind, candidateRevision: undefined, resultDigest: undefined },
+        { ...completed, kind, candidateRevision: undefined },
+        { ...completed, kind, resultDigest: undefined }
+      ])
+        expect(decideDurableEffectRecovery(record, verify)).toEqual({
+          action: 'stop',
+          reason: '副作用结果不明，已停止恢复'
+        })
+    }
+
+    expect(
+      decideDurableEffectRecovery(
+        { ...completed, kind: 'none', candidateRevision: undefined, resultDigest: undefined },
+        verify
+      )
+    ).toEqual({ action: 'stop', reason: '副作用结果不明，已停止恢复' })
+
+    const noWrite = vi.fn()
+    expect(
+      decideDurableEffectRecovery(
+        { ...completed, kind: 'none', candidateRevision: undefined },
+        noWrite
+      )
+    ).toEqual({ action: 'skip', resultDigest: 'result-1' })
+    expect(noWrite).not.toHaveBeenCalled()
+  })
+
+  it('非完成记录在结果不明时停止恢复，不执行一次', () => {
+    const verify = vi.fn(() => ({ outcome: 'unknown' as const }))
+    for (const status of ['started', 'failed'] as const) {
+      expect(
+        decideDurableEffectRecovery(
+          { ...completed, status, resultDigest: undefined, candidateRevision: undefined },
+          verify
+        )
+      ).toEqual({ action: 'stop', reason: '副作用结果不明，已停止恢复' })
+    }
+    expect(verify).toHaveBeenCalledTimes(2)
   })
 
   it('结果不明时先核对，仍然不明就停止恢复并保留原因', () => {
@@ -91,8 +136,21 @@ describe('可恢复副作用', () => {
     expect(stored).toEqual([completed])
     expect(stored[0]).not.toHaveProperty('questions')
 
-    const option = (id: string) => ({ id, label: '选项', description: '说明' })
-    const question = (questionId: string, optionIds: readonly string[]) => ({
+    const option = (
+      id: string
+    ): { id: string; label: string; description: string } => ({
+      id,
+      label: '选项',
+      description: '说明'
+    })
+    const question = (
+      questionId: string,
+      optionIds: readonly string[]
+    ): {
+      questionId: string
+      prompt: string
+      options: Array<{ id: string; label: string; description: string }>
+    } => ({
       questionId,
       prompt: '题干',
       options: optionIds.map((id) => option(id))
@@ -212,6 +270,53 @@ describe('可恢复副作用', () => {
 
     await writeFile(path, JSON.stringify(started))
     await abandonDurableEffect(stateRoot, scope, started.stepId, started.inputDigest)
+    expect(await readDurableEffects(stateRoot, scope)).toEqual([])
+  })
+
+  it('放弃只移除已开始记录，完成和失败记录保持原样', async () => {
+    const scope = identity()
+    const stateRoot = await temporaryDirectory()
+    const started: DurableEffectRecord = {
+      operationId: scope.operationId,
+      stepId: 'generate-0-initial',
+      inputDigest: 'input-started',
+      status: 'started',
+      kind: 'fileWrite'
+    }
+    const completedHere: DurableEffectRecord = {
+      ...completed,
+      operationId: scope.operationId,
+      stepId: 'generate-1-initial',
+      inputDigest: 'input-completed'
+    }
+    const failed: DurableEffectRecord = {
+      ...started,
+      stepId: 'generate-2-initial',
+      inputDigest: 'input-failed',
+      status: 'failed',
+      candidateRevision: 'abc1234'
+    }
+    await writeDurableEffect(stateRoot, scope, started)
+    await writeDurableEffect(stateRoot, scope, completedHere)
+    await writeDurableEffect(stateRoot, scope, failed)
+
+    await abandonDurableEffect(stateRoot, scope, started.stepId, started.inputDigest)
+    await abandonDurableEffect(stateRoot, scope, completedHere.stepId, completedHere.inputDigest)
+    await abandonDurableEffect(stateRoot, scope, failed.stepId, failed.inputDigest)
+
+    expect(await readDurableEffects(stateRoot, scope)).toEqual(
+      expect.arrayContaining([completedHere, failed])
+    )
+    expect(await readDurableEffects(stateRoot, scope)).toHaveLength(2)
+  })
+
+  it('写入记录必须属于当前操作，越界记录不落盘', async () => {
+    const scope = identity()
+    const stateRoot = await temporaryDirectory()
+
+    await expect(
+      writeDurableEffect(stateRoot, scope, { ...completed, operationId: 'operation-b' })
+    ).rejects.toMatchObject({ code: ErrorCodes.invalidRequest })
     expect(await readDurableEffects(stateRoot, scope)).toEqual([])
   })
 })

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import { createSceneExport } from '@bootstrap/sceneExport'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { SceneExportErrorCodes } from '@domain/scene-export/errors/SceneExportErrorCodes'
@@ -19,6 +19,7 @@ import { SceneAssetReferenceGatewayImpl } from '@infrastructure/scenes/SceneAsse
 import { SceneScriptParserGatewayImpl } from '@infrastructure/scenes/SceneScriptParserGatewayImpl'
 import { SceneSourceReaderGatewayImpl } from '@infrastructure/scenes/SceneSourceReaderGatewayImpl'
 import { RegisteredSceneLocationGatewayImpl } from '@infrastructure/scenes/RegisteredSceneLocationGatewayImpl'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { SceneExportClientImpl } from '@interfaces/scene-export/client/SceneExportClientImpl'
 import { SceneExportController } from '@interfaces/scene-export/ipc/SceneExportController'
@@ -45,6 +46,12 @@ vi.mock('electron', () => ({
 const roots: string[] = []
 const scene = { projectId: 'project-1', sceneId: 'scene-1' }
 const script = '小明:已保存的一句 -figure=hero.png;\r\n'
+const logger: LoggerGateway = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined
+}
 
 afterEach(async () => {
   ipc.handlers.clear()
@@ -123,6 +130,33 @@ describe('已保存场景导出 IPC', () => {
     await expect(readFile(join(world.projectRoot, 'WebGAL.exe'))).rejects.toThrow()
     detach()
   })
+
+  it('内容依据版本不是 4.6.5 时由请求 schema 拒绝，不进入保存核对', async () => {
+    const world = await registeredScene()
+    const trusted = trustedWindow()
+    const detach = register(world.userDirectory, trusted.window)
+    const event = { sender: trusted.sender, senderFrame: trusted.frame }
+    const basis = { digest: 'a'.repeat(64), parserVersion: '4.6.5', engineVersion: '4.6.5' }
+    const missing = {
+      ...scene,
+      contentBasis: basis,
+      versionReference: { kind: 'preview-save', requestId: 'missing-save' }
+    }
+
+    await expect(
+      invoke(event, { ...missing, contentBasis: { ...basis, parserVersion: '4.6.4' } })
+    ).resolves.toMatchObject({
+      code: 4101,
+      msg: '请求参数格式不正确'
+    })
+    await expect(
+      invoke(event, { ...missing, contentBasis: { ...basis, engineVersion: '4.6.6' } })
+    ).resolves.toMatchObject({
+      code: 4101,
+      msg: '请求参数格式不正确'
+    })
+    detach()
+  })
 })
 
 async function invoke(
@@ -142,28 +176,24 @@ function register(userDirectory: string, window: unknown): () => void {
     new SceneScriptParserGatewayImpl(),
     new SceneAssetReferenceGatewayImpl()
   )
+  const services = createSceneExport({ userDirectory, logger, versioning: versionService, sources })
   return registerSceneExportIpc({
     getWindow: () => window as never,
     rendererUrl: 'http://127.0.0.1:5173/',
     sceneExport: new SceneExportController(
-      createSceneExport({ userDirectory, versioning: versionService, sources }),
+      services.exportSavedScene,
+      services.latestPreviewSave,
       exceptions()
     )
   })
 }
 
 function exceptions(): IpcExceptionHandler {
-  const logger: LoggerGateway = {
-    debug: () => undefined,
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined
-  }
-  return new IpcExceptionHandler(logger)
+  return new IpcExceptionHandler(logger, new IpcErrorMapper())
 }
 
-function versioning(userDirectory: string): ProjectVersioningApplicationServiceImpl {
-  return new ProjectVersioningApplicationServiceImpl({
+function versioning(userDirectory: string): ManageProjectVersioning {
+  return new ManageProjectVersioning({
     ...createProjectVersioningGateways(userDirectory),
     nextId: () => `op-export-ipc-${Math.random().toString(16).slice(2)}`
   })

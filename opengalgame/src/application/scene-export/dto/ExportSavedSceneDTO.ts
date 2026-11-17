@@ -1,4 +1,4 @@
-import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
+import type { SceneExportContentBasis } from '../vo/SceneExportContentBasis'
 
 /**
  * 导出这一次已经保存成功的当前场景。
@@ -8,7 +8,7 @@ import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePre
 export type ExportSavedSceneDTO = {
   readonly projectId: string
   readonly sceneId: string
-  readonly contentBasis: SceneContentBasisVO
+  readonly contentBasis: SceneExportContentBasis
   readonly versionReference: {
     readonly kind: 'preview-save'
     readonly requestId: string

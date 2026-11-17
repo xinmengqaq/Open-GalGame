@@ -1,10 +1,11 @@
-import { createHash } from 'node:crypto'
 import type { LangGraphRunnableConfig } from '@langchain/langgraph'
-import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
+import type {
+  SceneGenerationCandidateRevisionRecord,
+  SceneGenerationExecution
+} from '@application/scene-generation/models/SceneGenerationExecution'
 import type { RunOutcome } from '@application/scene-generation/models/SceneGenerationRunOutcome'
 import { toDomainRequest } from '@application/scene-generation/policies/SceneGenerationCandidatePolicy'
 import type { SceneGenerationQuestionVO } from '@application/scene-generation/vo/SceneGenerationVO'
-import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { FinalizeRequested } from '@infrastructure/ai/execution/executionErrors'
@@ -21,6 +22,8 @@ import {
 import type { WebGalSceneAgentOutput } from '../../agents/WebGalSceneAgentTypes'
 import type { WebGalGenerationStateValue } from '../WebGalGenerationState'
 import { classifyRunError, RunFailure } from '../runFailureRouting'
+import { startCandidateHeartbeat } from './candidateHeartbeat'
+import { candidateInputDigest, saveCandidateRevision } from './candidateRevision'
 import type { WebGalGenerationGraphDependencies } from './graphDependencies'
 import { budgetSnapshot, finishCandidateEffect } from './settlement'
 import { assignedQuestions } from './stateFacts'
@@ -40,16 +43,7 @@ export function createWriteCandidateNode(deps: WebGalGenerationGraphDependencies
     const retryCount = state.retryCount ?? 0
     const stepSuffix = retryCount > 0 ? `-r${retryCount}` : ''
     const stepId = `${state.mode}-${execution.budget.correctionsUsed}-${execution.pendingReply?.replyId ?? 'initial'}${stepSuffix}`
-    const inputDigest = createHash('sha256')
-      .update(
-        JSON.stringify({
-          inputs: execution.inputSnapshot,
-          replies: execution.replies,
-          candidate: execution.candidateSnapshotId,
-          mode: state.mode
-        })
-      )
-      .digest('hex')
+    const inputDigest = candidateInputDigest(state.mode, execution)
     const previous = (await readDurableEffects(deps.stateRoot, execution)).find(
       (effect) => effect.stepId === stepId
     )
@@ -95,27 +89,7 @@ export function createWriteCandidateNode(deps: WebGalGenerationGraphDependencies
       status: 'started',
       kind: 'fileWrite'
     })
-    let publishing = false
-    const publishGenerating = (): void => {
-      if (publishing) return
-      publishing = true
-      void runtime
-        .publishProgress({
-          step: 'generating',
-          attempt: execution.attempt,
-          budget: budgetSnapshot(execution, budget)
-        })
-        .then(
-          () => {
-            publishing = false
-          },
-          () => {
-            publishing = false
-          }
-        )
-    }
-    publishGenerating()
-    const heartbeat = setInterval(publishGenerating, 1500)
+    const stopHeartbeat = startCandidateHeartbeat({ runtime, execution, budget })
     const executionMode =
       state.mode === 'repair' ? 'repair' : state.mode === 'finalize' ? 'finalize' : 'generate'
     let output: WebGalSceneAgentOutput | undefined
@@ -152,36 +126,19 @@ export function createWriteCandidateNode(deps: WebGalGenerationGraphDependencies
     } catch (error) {
       agentError = error
     } finally {
-      clearInterval(heartbeat)
+      stopHeartbeat()
     }
     const entryPath = `${execution.source.sceneDirectory}/${execution.source.entryFile}`
     const written = writtenFileFacts(budget).filter((fact) => fact.path.length > 0)
     const writtenFiles = written.map((fact) => fact.path)
     const entryWritten = written.some((fact) => fact.path === entryPath)
-    const saveRevision = async (): Promise<{ candidateSnapshotId: string }> => {
-      let revision: { candidateSnapshotId: string }
-      try {
-        revision = await deps.artifacts.saveCandidateRevision(execution)
-      } catch (saveError) {
-        throw new AppException({
-          code: ErrorCodes.internalError,
-          msg: '候选修订保存失败',
-          cause: agentError ? new AggregateError([agentError, saveError]) : saveError
-        })
-      }
-      try {
-        await runtime.recordCandidateRevision({
-          candidateSnapshotId: revision.candidateSnapshotId
-        })
-      } catch (recordError) {
-        throw new AppException({
-          code: ErrorCodes.internalError,
-          msg: '候选修订记录保存失败',
-          cause: recordError
-        })
-      }
-      return revision
-    }
+    const saveRevision = (): Promise<SceneGenerationCandidateRevisionRecord> =>
+      saveCandidateRevision({
+        artifacts: deps.artifacts,
+        runtime,
+        execution,
+        agentError
+      })
     const withRevision = (
       revision: { candidateSnapshotId: string },
       step: 'reading' | undefined
@@ -198,7 +155,7 @@ export function createWriteCandidateNode(deps: WebGalGenerationGraphDependencies
       cause
     })
     if (!agentError && output) {
-      const action = output.action ?? 'submit_scene_result'
+      const action = output.action
       // 已回答或已丢弃本轮提问后不能再开新题组；候选一旦存在，也只能修正不能重新提问。
       const answeredAlready = execution.replies.some(
         (reply) => reply.reply.kind === 'answers' || reply.reply.kind === 'discard'
@@ -483,7 +440,7 @@ export function createWriteCandidateNode(deps: WebGalGenerationGraphDependencies
 }
 
 export function createValidateCandidateNode(deps: WebGalGenerationGraphDependencies) {
-  const domain = new SceneGenerationDomainServiceImpl()
+  const domain = deps.domain
   return async (state: WebGalGenerationStateValue) => {
     // 写入后的安全检查点已经决定暂停。不能改成等待或可提交，否则新问题会掉进没有回复的中断。
     if (state.status === 'paused' || state.execution.pauseRequested === true) {

@@ -1,5 +1,5 @@
-import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
 import type { ReadLatestPreviewSaveDTO } from '../dto/ReadLatestPreviewSaveDTO'
+import type { SceneExportContentBasis } from '../vo/SceneExportContentBasis'
 
 /** 单条已结算的预览保存记录；带记录时间用于比较先后。 */
 export type PreviewSaveVersionCandidate = {
@@ -7,7 +7,7 @@ export type PreviewSaveVersionCandidate = {
   readonly sceneId: string
   readonly requestId: string
   readonly revisionDigest: string
-  readonly contentBasis: SceneContentBasisVO
+  readonly contentBasis: SceneExportContentBasis
   /** 保存记录文件的最后修改时间（毫秒）。 */
   readonly savedAtMs: number
 }

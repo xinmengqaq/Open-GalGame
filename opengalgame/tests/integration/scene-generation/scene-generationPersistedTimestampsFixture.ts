@@ -25,8 +25,9 @@ import {
   SceneGenerationCoordinator,
   type SceneGenerationDependencies
 } from '@application/scene-generation/services/impl/SceneGenerationCoordinator'
-import { SceneGenerationApplicationServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationApplicationServiceImpl'
+import { RunSceneGeneration } from '@application/scene-generation/services/impl/RunSceneGeneration'
 import type { SceneGenerationProgressVO } from '@application/scene-generation/vo/SceneGenerationVO'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { FileSceneGenerationExecutionRepositoryImpl } from '@infrastructure/scene-generation/execution/FileSceneGenerationExecutionRepositoryImpl'
 import {
   ensureStateRoot,
@@ -59,7 +60,7 @@ export interface Harness {
   stateRoot: string
   repository: FileSceneGenerationExecutionRepositoryImpl
   coordinator: SceneGenerationCoordinator
-  service: SceneGenerationApplicationServiceImpl
+  service: RunSceneGeneration
   workflow: Mocked<SceneGenerationWorkflow>
   progress: SceneGenerationProgressVO[]
   runNext: () => Promise<void>
@@ -163,6 +164,7 @@ export async function createHarness(): Promise<Harness> {
   let currentTime = Date.parse('2026-10-30T00:00:00.000Z')
   let nextIdentity = 0
   const deps: SceneGenerationDependencies = {
+    domain: new SceneGenerationDomainServiceImpl(),
     input,
     workflow,
     executions: repository,
@@ -181,7 +183,7 @@ export async function createHarness(): Promise<Harness> {
     }
   }
   const coordinator = new SceneGenerationCoordinator(deps)
-  const service = new SceneGenerationApplicationServiceImpl(deps, coordinator)
+  const service = new RunSceneGeneration(deps, coordinator)
   return {
     stateRoot,
     repository,

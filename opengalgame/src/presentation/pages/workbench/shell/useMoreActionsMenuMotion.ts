@@ -14,9 +14,11 @@ export function useMoreActionsMenuMotion(
 ): { rendered: boolean } {
   const [rendered, setRendered] = useState(open)
 
-  useEffect(() => {
-    if (open) setRendered(true)
-  }, [open])
+  /* 打开相位在渲染期并入挂载状态：面板与 open 同一次提交挂载，不再用 effect 推后一帧。
+     关闭相位仍由退出动画 onComplete 收尾，中断关闭/重开保持同一套 latch。 */
+  if (open && !rendered) {
+    setRendered(true)
+  }
 
   useEffect(() => {
     if (open || !rendered) return

@@ -10,11 +10,11 @@ import type { SceneGenerationCandidate } from '@application/scene-generation/mod
 import type { SceneGenerationArtifact } from '@domain/scene-generation/models/SceneGenerationArtifact'
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
 import type { VersionSettlementVO } from '@application/project-versioning/vo/ProjectVersioningVO'
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
-import { SceneGenerationVersionConflict } from '@application/scene-generation/policies/SceneGenerationVersionConflict'
+import { SceneGenerationVersionConflict } from '@application/scene-generation/errors/SceneGenerationVersionConflict'
 import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { SceneVersionGatewayImpl } from '@infrastructure/scene-generation/versions/SceneVersionGatewayImpl'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
@@ -321,9 +321,9 @@ function gatewayOver(settlement: VersionSettlementVO): SceneVersionGatewayImpl {
 function versioningFor(
   userDirectory: string,
   ids: readonly string[]
-): ProjectVersioningApplicationServiceImpl {
+): ManageProjectVersioning {
   let cursor = 0
-  return new ProjectVersioningApplicationServiceImpl({
+  return new ManageProjectVersioning({
     ...createProjectVersioningGateways(userDirectory),
     nextId: () => {
       const id = ids[cursor]

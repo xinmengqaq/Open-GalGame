@@ -4,16 +4,14 @@ import type { ProjectVersioningApplicationService } from '@application/project-v
 import type { DialogueTextEdit } from '@domain/scene-preview/models/DialogueTextEdit'
 import type { VersionSettlementVO } from '@application/project-versioning/vo/ProjectVersioningVO'
 import type { ReadDialogueSaveSettlementDTO } from '@application/scene-preview/dto/DialogueSaveDTO'
-import type {
-  PreviewSaveCommitRequest,
-  PreviewSaveCommitResult,
-  PreviewSaveVersionGateway
-} from '@application/scene-preview/ports/PreviewSaveVersionGateway'
-import type { ScenePreviewSourceGateway } from '@application/scene-preview/ports/ScenePreviewSourceGateway'
 import {
   PREVIEW_SAVE_SOURCE_MODULE,
-  PREVIEW_SAVE_TARGET_KIND
+  PREVIEW_SAVE_TARGET_KIND,
+  type PreviewSaveCommitRequest,
+  type PreviewSaveCommitResult,
+  type PreviewSaveVersionGateway
 } from '@application/scene-preview/ports/PreviewSaveVersionGateway'
+import type { ScenePreviewSourceGateway } from '@application/scene-preview/ports/ScenePreviewSourceGateway'
 import type { DialogueSaveSettlementVO } from '@application/scene-preview/vo/DialogueSaveVO'
 import type { PreviewErrorVO } from '@application/scene-preview/vo/PreviewErrorVO'
 import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
@@ -465,6 +463,7 @@ export class LocalPreviewSaveVersionGateway implements PreviewSaveVersionGateway
       await writePreviewSaveRecord(root, { ...record, contentDigest: contentBasis.digest })
       return { ok: true, contentBasis }
     } catch (error) {
+      // Node 预览保存没有注入 logger；保留 console 作为明确例外，失败仍返回待核对。
       console.warn('预览保存结算无法补读内容依据，保持待核对', {
         projectId: request.projectId,
         sceneId: request.sceneId,

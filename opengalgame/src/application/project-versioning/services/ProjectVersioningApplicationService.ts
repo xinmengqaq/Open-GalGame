@@ -5,6 +5,7 @@ import type {
   FindCallerVersionOperationDTO,
   InitializeWorkBaselineDTO,
   ListVersionHistoryDTO,
+  PrepareCallerVersionOperationDTO,
   PrepareVersionOperationDTO,
   PruneVersionRecordsDTO,
   ReadCallerVersionOperationDTO,
@@ -14,6 +15,7 @@ import type {
 } from '../dto/ProjectVersioningDTO'
 import type {
   CallerVersionOperationVO,
+  CallerOperationState,
   PreparedVersionOperationVO,
   VersionCommitVO,
   VersionRollbackVO,
@@ -39,6 +41,11 @@ export interface ProjectVersioningApplicationService {
 
   /** 准备本次操作的身份、范围和持久基线。 */
   prepareOperation(request: PrepareVersionOperationDTO): Promise<PreparedVersionOperationVO>
+
+  /** 同一队列内认领已有 caller/version intent 或创建并绑定新身份。 */
+  prepareOrClaimCallerOperation(
+    request: PrepareCallerVersionOperationDTO
+  ): Promise<PreparedVersionOperationVO>
 
   /** 读取已持久准备的操作。不存在时失败，不生成新的版本身份。 */
   readPreparedOperation(request: ReadVersionOperationDTO): Promise<PreparedVersionOperationVO>
@@ -73,6 +80,30 @@ export interface ProjectVersioningApplicationService {
 
   /** 只读核对本操作的持久结算事实。 */
   readOperationSettlement(request: ReadVersionOperationDTO): Promise<VersionSettlementVO>
+
+  /** 按技术 WAL 恢复指定来源模块的未完成操作；已发布补元数据，未发布按备份门槛恢复。 */
+  recoverProject(projectId: string, sourceModule: string): Promise<void>
+
+  /**
+   * 在恢复后按 caller 身份核实/固化终态；只用于明确的恢复写入口，读接口不调用。
+   * 无 caller link 且无 version intent 时写 notStarted 终态；有提交证据时写 committed/notCommitted。
+   */
+  resolveCallerOperations(
+    projectId: string,
+    sourceModule: string,
+    callerOperationIds: readonly string[]
+  ): Promise<readonly { callerOperationId: string; state: CallerOperationState }[]>
+
+  /** 只读：按 caller 身份查唯一 version intent 与已存在终态；多意图硬错。 */
+  readCallerIdentity(
+    projectId: string,
+    sourceModule: string,
+    callerOperationId: string
+  ): Promise<{
+    operationId: string
+    state: CallerOperationState
+    contentFingerprint: string | null
+  } | null>
 
   /** 通过追加提交受控回退本操作拥有的修改。 */
   rollbackOperation(request: RollbackVersionOperationDTO): Promise<VersionRollbackVO>

@@ -9,17 +9,21 @@ import type {
   SceneGenerationRuntime,
   SceneGenerationWorkflowProgress
 } from '@application/scene-generation/models/SceneGenerationExecution'
-import {
-  SceneGenerationRunFailed,
-  type FailureClass
-} from '@application/scene-generation/models/SceneGenerationRunOutcome'
+import { SceneGenerationRunFailed } from '@application/scene-generation/models/SceneGenerationRunOutcome'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import {
   configureDiagnosticHash,
-  publicFailureOf,
-  type SceneGenerationFailureFact,
-  type SceneGenerationFailureReason,
-  type SceneGenerationPublicFailure
+  safeFailureWithDiagnosticRef
 } from '@application/scene-generation/services/impl/SceneGenerationFailureFacts'
+import {
+  publicFailureOf,
+  type SceneGenerationFailureFact
+} from '@application/scene-generation/models/SceneGenerationFailureFacts'
+import type {
+  FailureClass,
+  SceneGenerationFailureReason,
+  SceneGenerationPublicFailure
+} from '@application/scene-generation/vo/SceneGenerationFailureVO'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { Agent } from '@infrastructure/ai/agents/Agent'
@@ -206,7 +210,8 @@ async function runScenario(scenario: TerminalScenario): Promise<{
   const deps = {
     stateRoot: root,
     saver: new FileCheckpointSaver(root),
-    artifacts
+    artifacts,
+    domain: new SceneGenerationDomainServiceImpl()
   }
   let calls = 0
   const agent: Agent<WebGalSceneAgentInput, WebGalSceneAgentOutput> = {
@@ -264,7 +269,8 @@ async function runScenario(scenario: TerminalScenario): Promise<{
   const workflow = new WebGalSceneGenerationWorkflowImpl(
     deps,
     {} as AiProjectFileSystemImpl,
-    async () => agent
+    async () => agent,
+    safeFailureWithDiagnosticRef
   )
   const error = await workflow.executeGeneration(runtime).catch((reason) => reason)
   expect(error).toBeInstanceOf(SceneGenerationRunFailed)

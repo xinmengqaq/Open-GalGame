@@ -695,6 +695,10 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       realFiles
         ? callDev('readProjectFileOperation', request)
         : Promise.resolve(fileOperationUnavailable()),
+    recoverProjectFileOperations: (request) =>
+      realFiles
+        ? callDev('recoverProjectFileOperations', request)
+        : Promise.resolve(fileOperationUnavailable()),
     pathForDroppedFile: async (file) => {
       if (!realFiles) return fixturePathForDroppedFile(file)
       return stageDevFile(file)
@@ -835,8 +839,12 @@ export function createBrowserDesktopBridge(): DesktopBridge {
     closeSceneGenerationPreview: (request) =>
       devOrBlocked('closeSceneGenerationPreview', request, sceneGenerationUnavailable()),
     subscribeSceneGenerationProgress: (request) => {
-      if (generationFixture)
+      if (generationFixture) {
+        generationFixture.subscribeProgress(request, (event) => {
+          generationListeners.forEach((listener) => listener(event))
+        })
         return Promise.resolve({ code: ErrorCodes.success, msg: '已订阅', data: null })
+      }
       if (!realFiles) return Promise.resolve(sceneGenerationUnavailable())
       listenGenerationProgress(request)
       return callDev('subscribeSceneGenerationProgress', request)

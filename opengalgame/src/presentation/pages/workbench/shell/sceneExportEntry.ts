@@ -2,7 +2,7 @@ import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewS
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 
-import type { WorkbenchSaveState } from '../../../features/workbench-session/workbenchSession.types'
+import type { WorkbenchSaveState } from '@presentation/features/workbench-session/workbenchSession.types'
 import type { SavedSceneVersionFact } from './WorkbenchPreviewLayer'
 
 /** 这些保存状态下工作台还有未落定的改动，导出会读到不确定的场景内容。 */

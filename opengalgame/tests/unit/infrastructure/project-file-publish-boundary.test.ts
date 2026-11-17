@@ -6,7 +6,7 @@ import * as git from 'isomorphic-git'
 import * as fs from 'node:fs'
 
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
-import { ProjectFilesApplicationServiceImpl } from '@application/project-files/services/impl/ProjectFilesApplicationServiceImpl'
+import { ManageProjectFiles } from '@application/project-files/services/impl/ManageProjectFiles'
 import type { ProjectFileOperationGateway } from '@application/project-files/ports/ProjectFileOperationGateway'
 import type { ProjectListQueryGateway } from '@application/projects/ports/ProjectListQueryGateway'
 import type { ProjectStorageGateway } from '@application/projects/ports/ProjectStorageGateway'
@@ -107,6 +107,14 @@ async function importTwo(
       baselineRef: 'baseline-1',
       revisionRef: 'rev-1'
     }),
+    prepareOrClaimCallerOperation: async (request: {
+      callerOperationId: string
+    }) => {
+      const previous = callerOperations.get(request.callerOperationId)
+      const operationId = previous ?? `version-${published + 1}`
+      callerOperations.set(request.callerOperationId, operationId)
+      return { operationId, baselineRef: 'baseline-1', revisionRef: 'rev-1' }
+    },
     bindCallerOperation: async (request: { callerOperationId: string; operationId: string }) => {
       const previous = callerOperations.get(request.callerOperationId)
       if (previous && previous !== request.operationId) throw new Error('调用方身份已绑定')
@@ -119,7 +127,8 @@ async function importTwo(
             projectId: 'project-1',
             sourceModule: 'project-files',
             callerOperationId: request.callerOperationId,
-            operationId
+            operationId,
+            state: 'pending' as const
           }
         : null
     },
@@ -152,7 +161,8 @@ async function importTwo(
     readOperationSettlement: async () => ({
       operationId: 'unread',
       state: '待核对' as const
-    })
+    }),
+    readCallerIdentity: async () => null
   } as ProjectVersioningApplicationService
   const files: ProjectFileOperationGateway = {
     inspectImportFile: async (_project, localFilePath) => ({
@@ -199,7 +209,7 @@ async function importTwo(
     })
   } as unknown as ProjectStorageGateway
   let sourceCount = 0
-  const service = new ProjectFilesApplicationServiceImpl({
+  const service = new ManageProjectFiles({
     listQuery,
     domain: new ProjectDomainServiceImpl(),
     storage,
@@ -230,13 +240,13 @@ async function importTwo(
     files,
     versions: new LocalProjectWorkVersionGatewayImpl(versioning, async () => 'catalog-v1'),
     desktopOpen: { open: async () => undefined },
-    createSourceId: () => `source-${++sourceCount}`,
-    createOperationId: () => `operation-${sourceCount}`
+    createSourceId: () => `source-${++sourceCount}`
   })
   const imported = await service.importProjectFiles({
     projectId: 'project-1',
     parentFolderId: null,
     expectedCatalogVersion: 'catalog-v1',
+    operationIds: ['a-operation', 'b-operation'],
     localFilePaths: ['a.png', 'b.png']
   })
   return {

@@ -22,7 +22,7 @@ import type {
 } from '@domain/scene-generation/models/SceneGenerationArtifact'
 import type { SceneAssetReferenceGateway } from '@application/scenes/ports/SceneAssetReferenceGateway'
 import type { SceneAssetCategory } from '@domain/scenes/models/SceneAssetReference'
-import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
+import type { SceneGenerationDomainService } from '@domain/scene-generation/services/SceneGenerationDomainService'
 import { toDomainRequest } from '@application/scene-generation/policies/SceneGenerationCandidatePolicy'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -58,7 +58,8 @@ export class WebGalSceneArtifactGatewayImpl implements SceneArtifactGateway {
     private readonly files: AiProjectFileSystemImpl,
     private readonly reader: SceneSourceReaderGateway,
     private readonly parser: SceneScriptParserGateway,
-    private readonly references: SceneAssetReferenceGateway
+    private readonly references: SceneAssetReferenceGateway,
+    private readonly domain: SceneGenerationDomainService
   ) {}
 
   /** 人工编辑仅能改当前入口，真实写入后先保存修订再返回。 */
@@ -178,7 +179,7 @@ export class WebGalSceneArtifactGatewayImpl implements SceneArtifactGateway {
       statements
     }
     const report = enrichMissingAssetDiagnostics(
-      new SceneGenerationDomainServiceImpl().validateArtifact(
+      this.domain.validateArtifact(
         artifact,
         toDomainRequest(execution, {
           baselineState: 'unchanged',

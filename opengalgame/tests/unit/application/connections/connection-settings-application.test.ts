@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, type Mock } from 'vitest'
 
-import { ConnectionSettingsApplicationServiceImpl } from '@application/connections/services/impl/ConnectionSettingsApplicationServiceImpl'
+import { ManageConnectionSettings } from '@application/connections/services/impl/ManageConnectionSettings'
 import type { ConnectionSettingsDTO } from '@application/connections/dto/ConnectionSettingsDTO'
 import { AppException } from '@common/errors/AppException'
 import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
@@ -34,7 +34,7 @@ interface ConnectionSettingsHarness {
     listModels: Mock
     validateProviderOptions: Mock
   }
-  service: ConnectionSettingsApplicationServiceImpl
+  service: ManageConnectionSettings
 }
 
 function createService(current: ConnectionSettingsInfo | null = stored): ConnectionSettingsHarness {
@@ -59,7 +59,7 @@ function createService(current: ConnectionSettingsInfo | null = stored): Connect
   return {
     settings,
     model,
-    service: new ConnectionSettingsApplicationServiceImpl({ settings, model })
+    service: new ManageConnectionSettings({ settings, model })
   }
 }
 

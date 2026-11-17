@@ -29,10 +29,13 @@ export interface CandidateRevisionRef {
 export interface LimitedCommitRequest {
   readonly projectRoot: string
   readonly operationId: string
+  readonly sourceModule: string
   readonly expectedBaseline: WorkBaseline
   readonly changes: readonly WorkPathChange[]
   readonly candidate: CandidateRevisionRef
   readonly recheck: (baseline: WorkBaseline) => void | Promise<void>
+  /** 仅 project-files 开启：未发布失败恢复前先完整备份并校验。 */
+  readonly backupBeforeRestore?: boolean
 }
 
 export type OperationCommitState =

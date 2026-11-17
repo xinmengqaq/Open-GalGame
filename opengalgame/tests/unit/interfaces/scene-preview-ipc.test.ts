@@ -5,6 +5,7 @@ import type {
   SaveDialogueChangesDTO
 } from '@application/scene-preview/dto/DialogueSaveDTO'
 import type { ReadCandidatePreviewDTO } from '@application/scene-preview/dto/ReadCandidatePreviewDTO'
+import type { SceneGenerationCandidatePreviewEventVO } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { SceneCandidatePreviewApplicationService } from '@application/scene-preview/services/SceneCandidatePreviewApplicationService'
 import type { ScenePreviewApplicationService } from '@application/scene-preview/services/ScenePreviewApplicationService'
 import type { CandidatePreviewVO } from '@application/scene-preview/vo/CandidatePreviewVO'
@@ -18,13 +19,11 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ScenePreviewErrorCodes } from '@domain/scene-preview/errors/ScenePreviewErrorCodes'
 import type { LoggerGateway } from '@common/logging/LoggerGateway'
 import { createBrowserDesktopBridge } from '@bootstrap/browser/BrowserDesktopBridge'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { ScenePreviewClientImpl } from '@interfaces/scene-preview/client/ScenePreviewClientImpl'
 import { ScenePreviewController } from '@interfaces/scene-preview/ipc/ScenePreviewController'
-import {
-  registerScenePreviewIpc,
-  releaseScenePreviewSubscriptions
-} from '@interfaces/scene-preview/ipc/registerScenePreviewIpc'
+import { registerScenePreviewIpc } from '@interfaces/scene-preview/ipc/registerScenePreviewIpc'
 import { createDesktopBridge } from '@interfaces/preload/DesktopBridge'
 import { parsePreviewCommandResult } from '@interfaces/scene-preview/contracts/ScenePreviewResponseSchema'
 
@@ -63,7 +62,7 @@ const fixedChannels = [
   'scene-preview:candidate-event'
 ]
 
-function basis() {
+function basis(): { digest: string; parserVersion: string; engineVersion: string } {
   return { digest: 'digest-1', parserVersion: '4.6.5', engineVersion: '4.6.5' }
 }
 
@@ -206,7 +205,20 @@ function services(): PreviewServiceFixture {
   return fixture
 }
 
-function controller(partial = services()): {
+function candidateEvents(): {
+  subscribeCandidatePreviewEvents: () => () => void
+  readCandidatePreviewEvent: () => undefined
+} {
+  return {
+    subscribeCandidatePreviewEvents: () => () => undefined,
+    readCandidatePreviewEvent: () => undefined
+  }
+}
+
+function controller(
+  partial = services(),
+  events = candidateEvents()
+): {
   controller: ScenePreviewController
   logs: string[]
   services: PreviewServiceFixture
@@ -224,7 +236,8 @@ function controller(partial = services()): {
     controller: new ScenePreviewController(
       partial.current,
       partial.candidate,
-      new IpcExceptionHandler(logger)
+      new IpcExceptionHandler(logger, new IpcErrorMapper()),
+      events
     )
   }
 }
@@ -234,7 +247,27 @@ function runtimeSequence(value: unknown): number | undefined {
   return typeof value.sequence === 'number' ? value.sequence : undefined
 }
 
-function trustedWindow(id = 7) {
+type TrustedWindow = {
+  sender: {
+    id: number
+    isDestroyed: () => boolean
+    send: (channel: string, value: unknown) => void
+    once: (...args: unknown[]) => unknown
+  }
+  frame: { url: string }
+  window: {
+    isDestroyed: () => boolean
+    webContents: {
+      id: number
+      isDestroyed: () => boolean
+      send: (channel: string, value: unknown) => void
+      once: (...args: unknown[]) => unknown
+      mainFrame: { url: string }
+    }
+  }
+}
+
+function trustedWindow(id = 7): TrustedWindow {
   const sender = {
     id,
     isDestroyed: () => false,
@@ -247,6 +280,52 @@ function trustedWindow(id = 7) {
     webContents: Object.assign(sender, { mainFrame: frame })
   }
   return { sender, frame, window }
+}
+
+interface ControllableWindow {
+  sender: {
+    id: number
+    isDestroyed: () => boolean
+    send: (channel: string, value: unknown) => void
+    once: (event: string, listener: () => void) => void
+  }
+  frame: { url: string }
+  window: {
+    isDestroyed: () => boolean
+    webContents: { mainFrame: { url: string } }
+  }
+  sent: { channel: string; value: unknown }[]
+  destroy: () => void
+}
+
+/** 可独立销毁的窗口，用来观察多窗口订阅与销毁释放。 */
+function controllableWindow(id: number): ControllableWindow {
+  const destroyed = { value: false }
+  const destroyListeners: (() => void)[] = []
+  const sent: { channel: string; value: unknown }[] = []
+  const sender = {
+    id,
+    isDestroyed: () => destroyed.value,
+    send: (channel: string, value: unknown) => sent.push({ channel, value }),
+    once: (name: string, listener: () => void) => {
+      if (name === 'destroyed') destroyListeners.push(listener)
+    }
+  }
+  const frame = { url: 'http://127.0.0.1:5173/' }
+  const window = {
+    isDestroyed: () => destroyed.value,
+    webContents: Object.assign(sender, { mainFrame: frame })
+  }
+  return {
+    sender,
+    frame,
+    window,
+    sent,
+    destroy: () => {
+      destroyed.value = true
+      for (const listener of destroyListeners) listener()
+    }
+  }
 }
 
 describe('场景预览用户接口', () => {
@@ -410,7 +489,6 @@ describe('场景预览用户接口', () => {
     expect(app.calls).toContain('close')
     expect(app.calls.filter((call) => call === 'unsubscribe')).toHaveLength(2)
     detach()
-    releaseScenePreviewSubscriptions()
   })
 
   it('订阅非法或失效会话返回安全错误，不留下 listener', async () => {
@@ -451,11 +529,9 @@ describe('场景预览用户接口', () => {
     expect(app.subscriptions).toHaveLength(0)
     expect(logs.join('\n')).not.toContain('secret')
     detach()
-    releaseScenePreviewSubscriptions()
   })
 
   it('候选事件按会话补投，范围不符或无事件返回 null 且不泄漏路径', async () => {
-    const { controller: scenePreview } = controller()
     const trusted = trustedWindow()
     const ready = {
       type: 'ready' as const,
@@ -471,9 +547,9 @@ describe('场景预览用户接口', () => {
       readCandidatePreviewEvent: (previewSessionId: string) =>
         previewSessionId === 'candidate-1' ? ready : undefined
     } as never
+    const { controller: scenePreview } = controller(undefined, candidatePreview)
     const detach = registerScenePreviewIpc({
       scenePreview,
-      candidatePreview,
       getWindow: () => trusted.window as never,
       rendererUrl: 'http://127.0.0.1:5173/'
     })
@@ -517,7 +593,179 @@ describe('场景预览用户接口', () => {
     expect(deniedResult).toMatchObject({ code: ErrorCodes.forbidden })
     expect(JSON.stringify(deniedResult)).not.toContain('secret')
     detach()
-    releaseScenePreviewSubscriptions()
+  })
+
+  it('候选事件按类型发到三个固定通道，注销时释放主进程订阅', () => {
+    const trusted = trustedWindow()
+    ipc.sent.length = 0
+    let publish: ((event: SceneGenerationCandidatePreviewEventVO) => void) | undefined
+    const unsubscribe = vi.fn()
+    const candidatePreview = {
+      subscribeCandidatePreviewEvents: (
+        listener: (event: SceneGenerationCandidatePreviewEventVO) => void
+      ) => {
+        publish = listener
+        return unsubscribe
+      },
+      readCandidatePreviewEvent: () => undefined
+    } as never
+    const { controller: scenePreview } = controller(undefined, candidatePreview)
+    const detach = registerScenePreviewIpc({
+      scenePreview,
+      getWindow: () => trusted.window as never,
+      rendererUrl: 'http://127.0.0.1:5173/'
+    })
+    const identity = {
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      previewSessionId: 'candidate-1',
+      candidateSnapshotId: 'snapshot-1'
+    }
+
+    publish?.({ type: 'ready', sequence: 1, ...identity, message: '游戏已就绪' })
+    publish?.({ type: 'stageFailed', sequence: 2, ...identity, message: '舞台启动失败' })
+    publish?.({ type: 'invalidated', sequence: 3, ...identity })
+
+    expect(ipc.sent.map((item) => item.channel)).toEqual([
+      'scene-preview:ready',
+      'scene-preview:stage-failed',
+      'scene-preview:invalidated'
+    ])
+    expect(ipc.sent.map((item) => item.value)).toEqual([
+      { type: 'ready', sequence: 1, ...identity, message: '游戏已就绪' },
+      { type: 'stageFailed', sequence: 2, ...identity, message: '舞台启动失败' },
+      { type: 'invalidated', sequence: 3, ...identity }
+    ])
+
+    detach()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it('两个窗口各自订阅运行时，只收到自己的事件，销毁和注销只释放本窗口', async () => {
+    const app = services()
+    const listeners: ((event: PreviewRuntimeEventVO) => void)[] = []
+    vi.mocked(app.current.subscribePreviewRuntime).mockImplementation((_request, listener) => {
+      app.calls.push('subscribe')
+      listeners.push(listener)
+      const unsubscribe = vi.fn(() => app.calls.push('unsubscribe'))
+      app.subscriptions.push(unsubscribe)
+      return unsubscribe
+    })
+    const first = controllableWindow(7)
+    const second = controllableWindow(8)
+    let active = first
+    const { controller: scenePreview } = controller(app)
+    const detach = registerScenePreviewIpc({
+      scenePreview,
+      getWindow: () => active.window as never,
+      rendererUrl: 'http://127.0.0.1:5173/'
+    })
+    const scope = { previewSessionId: 'preview-1', projectId: 'project-1', sceneId: 'scene-1' }
+    const subscribe = async (window: ControllableWindow): Promise<unknown> => {
+      active = window
+      return ipc.handlers.get('scene-preview:subscribe')?.(
+        { sender: window.sender, senderFrame: window.frame },
+        scope
+      )
+    }
+    await subscribe(first)
+    await subscribe(second)
+    expect(listeners).toHaveLength(2)
+
+    active = first
+    listeners[0](stageEvent(1))
+    listeners[0](stageEvent(0))
+    active = second
+    listeners[1](stageEvent(1))
+    expect(first.sent.map((item) => runtimeSequence(item.value))).toEqual([1])
+    expect(second.sent.map((item) => runtimeSequence(item.value))).toEqual([1])
+    expect(first.sent.map((item) => item.channel)).toEqual(['scene-preview:runtime'])
+    expect(second.sent.map((item) => item.channel)).toEqual(['scene-preview:runtime'])
+
+    await subscribe(first)
+    expect(app.calls.filter((call) => call === 'unsubscribe')).toHaveLength(1)
+    expect(listeners).toHaveLength(3)
+    active = second
+    listeners[1](stageEvent(2))
+    expect(second.sent.map((item) => runtimeSequence(item.value))).toEqual([1, 2])
+
+    second.destroy()
+    expect(app.calls.filter((call) => call === 'unsubscribe')).toHaveLength(2)
+    listeners[1](stageEvent(3))
+    expect(second.sent.map((item) => runtimeSequence(item.value))).toEqual([1, 2])
+
+    detach()
+    expect(app.calls.filter((call) => call === 'unsubscribe')).toHaveLength(3)
+    expect(ipc.handlers.size).toBe(0)
+  })
+
+  it('候选事件在打开返回前已送达窗口，销毁后停止且只保留安全身份', async () => {
+    const app = services()
+    const { promise: pendingOpen, resolve: resolveOpen } =
+      Promise.withResolvers<ScenePreviewSessionVO>()
+    vi.mocked(app.current.openScenePreview).mockReturnValueOnce(pendingOpen)
+    const trusted = controllableWindow(7)
+    let publish: ((event: SceneGenerationCandidatePreviewEventVO) => void) | undefined
+    const unsubscribe = vi.fn()
+    const candidatePreview = {
+      subscribeCandidatePreviewEvents: (
+        listener: (event: SceneGenerationCandidatePreviewEventVO) => void
+      ) => {
+        publish = listener
+        return unsubscribe
+      },
+      readCandidatePreviewEvent: () => undefined
+    } as never
+    const { controller: scenePreview } = controller(app, candidatePreview)
+    const detach = registerScenePreviewIpc({
+      scenePreview,
+      getWindow: () => trusted.window as never,
+      rendererUrl: 'http://127.0.0.1:5173/'
+    })
+    const context = { sender: trusted.sender, senderFrame: trusted.frame }
+    const identity = {
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      previewSessionId: 'candidate-1',
+      candidateSnapshotId: 'snapshot-1'
+    }
+
+    publish?.({
+      type: 'ready',
+      sequence: 1,
+      ...identity,
+      message: '游戏已就绪',
+      path: 'D:/secret'
+    } as never)
+    expect(trusted.sent).toEqual([
+      {
+        channel: 'scene-preview:ready',
+        value: { type: 'ready', sequence: 1, ...identity, message: '游戏已就绪' }
+      }
+    ])
+    expect(JSON.stringify(trusted.sent)).not.toContain('secret')
+
+    const opened = ipc.handlers.get('scene-preview:open')?.(context, {
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    publish?.({ type: 'invalidated', sequence: 2, ...identity })
+    expect(trusted.sent.map((item) => item.channel)).toEqual([
+      'scene-preview:ready',
+      'scene-preview:invalidated'
+    ])
+    resolveOpen?.(session())
+    await expect(opened).resolves.toMatchObject({
+      code: ErrorCodes.success,
+      data: { previewSessionId: 'preview-1' }
+    })
+
+    trusted.destroy()
+    publish?.({ type: 'stageFailed', sequence: 3, ...identity, message: '舞台启动失败' })
+    expect(trusted.sent).toHaveLength(2)
+    detach()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    expect(ipc.handlers.size).toBe(0)
   })
 
   it('客户端校验响应并丢弃旧事件，浏览器桥固定返回不支持', async () => {

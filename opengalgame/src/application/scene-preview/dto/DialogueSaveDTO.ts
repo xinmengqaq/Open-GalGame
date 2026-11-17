@@ -25,8 +25,3 @@ export type ReadDialogueSaveSettlementDTO = {
   readonly sceneId: string
   readonly requestId: string
 }
-
-export type RetryPreviewUpdateDTO = {
-  readonly previewSessionId: string
-  readonly requestId: string
-}

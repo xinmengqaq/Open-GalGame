@@ -2,7 +2,8 @@ import type { ReactElement } from 'react'
 
 import { useShallow } from 'zustand/react/shallow'
 
-import { SourceStatus, sourceStatusOf } from '../../components/SourceStatus'
+import { SourceStatus } from '../../components/SourceStatus'
+import { sourceStatusOf } from '../../components/sourceStatusMapping'
 import { AudioInputCard } from './AudioInputCard'
 import { CanvasCardFrame } from './CanvasCardFrame'
 import { DocumentInputCard, DocumentReadAction } from './DocumentInputCard'

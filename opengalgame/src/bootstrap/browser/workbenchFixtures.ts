@@ -7,6 +7,7 @@ import type {
 import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 
 export type WorkbenchFixtureMode = 'mixed' | 'empty' | 'fail' | 'damaged'
 
@@ -173,7 +174,7 @@ export const workbenchSourceDetails: Record<string, ProjectInputSourceVO> = {
   }
 }
 
-/** 只读 v4 编排夹具。每类卡片至少一张，关系一条有名有记录、一条未写关系。 */
+/** 只读 v4 编排夹具。每类卡片至少一张，关系一条有名有记录、一条未写关系。布局满足画布 32 间距，装载时不会触发自动弹开保存。 */
 function mixedArrangement(projectId: string): SceneCanvasArrangementVO {
   return {
     projectId,
@@ -240,7 +241,7 @@ function mixedArrangement(projectId: string): SceneCanvasArrangementVO {
         sourceId: 'gone-source',
         title: '缺失文档',
         summary: '',
-        layout: { x: 32, y: 592, width: 300, height: 200 }
+        layout: { x: 32, y: 596, width: 300, height: 200 }
       }
     ],
     relations: [
@@ -291,7 +292,7 @@ export function fixtureReadArrangement(
     return { code: ErrorCodes.communicationFailed, msg: '当前环境不能读取工程文件' }
   }
   if (mode === 'damaged') {
-    return { code: 4416, msg: '编排内容损坏' }
+    return { code: SceneCanvasErrorCodes.contentDamaged, msg: '编排内容损坏' }
   }
   if (mode === 'empty') {
     return { code: ErrorCodes.success, msg: '没有已保存编排', data: null }

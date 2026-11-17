@@ -13,10 +13,9 @@ import {
   type DevUserDirectoryRecoveryResult
 } from '../devUserDirectoryRecovery'
 import { createSceneExport } from '../sceneExport'
-import { OpenDirectoryApplicationServiceImpl } from '@application/system-path/services/impl/OpenDirectoryApplicationServiceImpl'
+import { OpenDirectory } from '@application/system-path/services/impl/OpenDirectory'
 import { LocalDirectoryOpenGateway } from '@infrastructure/system-path/LocalDirectoryOpenGateway'
 import { SystemPathController } from '@interfaces/system-path/ipc/SystemPathController'
-import '../sceneGenerationFailureFacts'
 import { createScenePreview } from '../scenePreview'
 import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
 import type { PreviewRuntimeEventVO } from '@application/scene-preview/vo/PreviewRuntimeVO'
@@ -45,6 +44,7 @@ import { WebgalRuntimeHostImpl } from '@infrastructure/webgal/runtime/WebgalRunt
 import type { SecretCipher } from '@infrastructure/security/SecretCipher'
 import { ConnectionSettingsController } from '@interfaces/ipc/controllers/ConnectionSettingsController'
 import { ProjectController } from '@interfaces/ipc/controllers/ProjectController'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { parseRequest, type IpcRequestAccess } from '@interfaces/ipc/RequestSchema'
 import { ProjectFilesController } from '@interfaces/project-files/ipc/ProjectFilesController'
@@ -117,7 +117,7 @@ export async function createDevFileBackend(
     logger,
     openPath: openPathWithSystem
   })
-  const exceptions = new IpcExceptionHandler(logger)
+  const exceptions = new IpcExceptionHandler(logger, new IpcErrorMapper())
   const candidatePreviewGateway = new GitCandidatePreviewGatewayImpl(
     new AiProjectFileSystemImpl(userDirectory),
     join(userDirectory, 'ai'),
@@ -152,8 +152,8 @@ export async function createDevFileBackend(
 
   async function ensureConnections(): Promise<ConnectionSettingsController> {
     if (connectionsController) return connectionsController
-    const { ConnectionSettingsApplicationServiceImpl } =
-      await import('@application/connections/services/impl/ConnectionSettingsApplicationServiceImpl')
+    const { ManageConnectionSettings } =
+      await import('@application/connections/services/impl/ManageConnectionSettings')
     const { EncryptedConnectionSettingsGatewayImpl } =
       await import('@infrastructure/connections/EncryptedConnectionSettingsGatewayImpl')
     const { LangChainModelConnectionGatewayImpl } =
@@ -165,7 +165,7 @@ export async function createDevFileBackend(
     )
     loadConnectionSettings = () => gateway.loadSettings()
     connectionsController = new ConnectionSettingsController(
-      new ConnectionSettingsApplicationServiceImpl({
+      new ManageConnectionSettings({
         settings: gateway,
         model: new LangChainModelConnectionGatewayImpl(config.requestTimeoutMs)
       }),
@@ -268,10 +268,12 @@ export async function createDevFileBackend(
     previewController = new ScenePreviewController(
       previewServices.currentScenePreview,
       previewServices.candidatePreview,
-      exceptions
+      exceptions,
+      candidatePreviewGateway
     )
     const exportServices = createSceneExport({
       userDirectory,
+      logger,
       versioning: services.versioning,
       sources: previewServices.currentScene.sources
     })
@@ -295,7 +297,7 @@ export async function createDevFileBackend(
   function ensureSystemPath(): SystemPathController {
     if (!systemPathController) {
       systemPathController = new SystemPathController(
-        new OpenDirectoryApplicationServiceImpl({
+        new OpenDirectory({
           directories: new LocalDirectoryOpenGateway(openPathWithSystem)
         }),
         exceptions
@@ -334,6 +336,8 @@ export async function createDevFileBackend(
       files.readProjectFolderDeletionPlan(input, access),
     deleteProjectFolder: (input, access) => files.deleteProjectFolder(input, access),
     readProjectFileOperation: (input, access) => files.readProjectFileOperation(input, access),
+    recoverProjectFileOperations: (input, access) =>
+      files.recoverProjectFileOperations(input, access),
     readSceneCanvasArrangement: (input, access) => canvas.readSceneCanvasArrangement(input, access),
     createSceneCanvasSourceCard: (input, access) => canvas.createSourceCard(input, access),
     createSceneCanvasPromptCard: (input, access) => canvas.createPromptCard(input, access),
@@ -388,9 +392,7 @@ export async function createDevFileBackend(
     readCandidatePreview: async (input, access) =>
       (await ensurePreview()).readCandidate(input, access),
     readCandidatePreviewEvent: async (input, access) =>
-      (await ensurePreview()).readCandidateEvent(input, access, (previewSessionId) =>
-        candidatePreviewGateway.readCandidatePreviewEvent(previewSessionId)
-      ),
+      (await ensurePreview()).readCandidateEvent(input, access),
     exportSavedScene: async (input, access) =>
       (await ensureExport()).exportSavedScene(input, access),
     readLatestPreviewSave: async (input, access) =>

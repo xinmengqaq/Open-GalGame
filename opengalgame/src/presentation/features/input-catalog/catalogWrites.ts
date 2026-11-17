@@ -10,7 +10,13 @@ import type {
   ProjectInputSourceSummaryVO
 } from '@application/project-files/vo/ProjectInputSourceVO'
 import type { ProjectFilesClient } from '@interfaces/project-files/client/ProjectFilesClient'
+import { AppException } from '@common/errors/AppException'
 import { failureOf, requireSuccess, type FailureState } from '../../feedback/failure'
+import {
+  CATALOG_WRITE_FAILED_CODE,
+  COMMIT_UNCLEAR_CODE,
+  COMMUNICATION_FAILED_CODE
+} from '../../feedback/projectFilesFeedback'
 import { workbenchFeedback } from '../../feedback/workbenchFeedback'
 import { findFreeCanvasPosition } from '../scene-canvas/canvasPlacement'
 import { defaultCardSize, sourceCardKindOf } from '../workbench-session/contentKindLabel'
@@ -25,80 +31,146 @@ import {
 import type { CatalogFolderId, CatalogNameDialog } from './inputCatalog.types'
 
 let writeInFlight = false
-let unresolvedHold: { projectId: string; operationId: string } | null = null
+const unresolvedCatalogProjects = new Map<string, Set<string>>()
 
 /**
- * 该工程是否还有未核对的结果不明写入。
- * @returns 未按操作标识核对完时为 true。其他工程不受影响。
+ * 结果未知或响应丢失的失败才需要按操作标识核对；普通校验失败直接显示。
  */
-export function catalogWriteBlockedFor(projectId: string): boolean {
-  return unresolvedHold?.projectId === projectId
+export function isUncertainCatalogWrite(failure: FailureState): boolean {
+  return (
+    failure.code === COMMIT_UNCLEAR_CODE || failure.code === COMMUNICATION_FAILED_CODE
+  )
 }
 
-/** 尚未核对的操作标识。没有门闩时为 null。 */
-export function unresolvedCatalogHold(): { projectId: string; operationId: string } | null {
-  return unresolvedHold
+/**
+ * 按持久操作事实核对结果。已提交返回；确定未提交抛失败；仍无法核对硬报错。
+ * 不建立长期门闩，不轮询；未提交或无法核对由调用方释放忙碌态。
+ */
+function rememberUnresolved(projectId: string, operationId: string): void {
+  const ids = unresolvedCatalogProjects.get(projectId) ?? new Set<string>()
+  ids.add(operationId)
+  unresolvedCatalogProjects.set(projectId, ids)
 }
 
-/** 结果不明时按工程和操作标识保持门闩。换工程不能清掉。 */
-export function holdUnresolvedCatalogWrite(projectId: string, operationId: string): void {
-  unresolvedHold = { projectId, operationId }
+function clearUnresolved(projectId: string, operationId: string): void {
+  const ids = unresolvedCatalogProjects.get(projectId)
+  if (!ids) return
+  ids.delete(operationId)
+  if (ids.size === 0) unresolvedCatalogProjects.delete(projectId)
 }
 
-/** 只有查到已提交或未提交才放下对应工程的门闩。 */
-export function releaseCatalogWriteHold(
+/** 该工程是否有未核实的文件写；不影响其他工程。 */
+export function catalogProjectNeedsRecovery(projectId: string): boolean {
+  return (unresolvedCatalogProjects.get(projectId)?.size ?? 0) > 0
+}
+
+export async function resolveCatalogWrite(
+  client: ProjectFilesClient,
   projectId: string,
-  operationId: string,
-  settlement: 'committed' | 'notCommitted' | 'unsettled',
-  setBusy: (value: boolean) => void
-): boolean {
-  if (
-    unresolvedHold?.projectId !== projectId ||
-    unresolvedHold.operationId !== operationId ||
-    (settlement !== 'committed' && settlement !== 'notCommitted')
-  ) {
-    return false
+  operationId: string
+): Promise<'committed'> {
+  let fact: {
+    settlement: 'committed' | 'notCommitted' | 'notStarted' | 'unsettled'
+    linked: boolean
   }
-  unresolvedHold = null
-  setBusy(false)
-  return true
+  try {
+    fact = requireSuccess(
+      await client.readProjectFileOperation({ projectId, operationId })
+    )
+  } catch (error) {
+    rememberUnresolved(projectId, operationId)
+    throw new AppException({
+      code: COMMIT_UNCLEAR_CODE,
+      msg: workbenchFeedback.catalogWriteUnverified,
+      cause: error
+    })
+  }
+  if (fact.linked && fact.settlement === 'committed') {
+    clearUnresolved(projectId, operationId)
+    return 'committed'
+  }
+  if (fact.linked && fact.settlement === 'notCommitted') {
+    clearUnresolved(projectId, operationId)
+    throw new AppException({
+      code: CATALOG_WRITE_FAILED_CODE,
+      msg: workbenchFeedback.catalogWriteNotCommitted
+    })
+  }
+  if (fact.linked && fact.settlement === 'notStarted') {
+    clearUnresolved(projectId, operationId)
+    throw new AppException({
+      code: CATALOG_WRITE_FAILED_CODE,
+      msg: workbenchFeedback.catalogWriteNotStarted
+    })
+  }
+  rememberUnresolved(projectId, operationId)
+  throw new AppException({
+    code: COMMIT_UNCLEAR_CODE,
+    msg: workbenchFeedback.catalogWriteUnverified
+  })
 }
 
-/** 同一事件循环内只允许一次写入。未核对完的工程继续拒绝。 */
+async function resolveCatalogWriteOrReport(
+  client: ProjectFilesClient,
+  projectId: string,
+  operationId: string
+): Promise<'committed'> {
+  try {
+    return await resolveCatalogWrite(client, projectId, operationId)
+  } catch (error) {
+    if (stillCurrentProject(projectId)) toast(failureOf(error).msg)
+    throw error
+  }
+}
+
+/** 工程重新打开后调用明确恢复接口固化 caller 终态；pending 保留。 */
+export async function settleCatalogProjectAfterOpen(
+  client: ProjectFilesClient,
+  projectId: string
+): Promise<void> {
+  const ids = [...(unresolvedCatalogProjects.get(projectId) ?? [])]
+  if (ids.length === 0) return
+  try {
+    const resolved = requireSuccess(
+      await client.recoverProjectFileOperations({ projectId, operationIds: ids })
+    )
+    for (const item of resolved) {
+      if (
+        item.state === 'committed' ||
+        item.state === 'notCommitted' ||
+        item.state === 'notStarted'
+      ) {
+        clearUnresolved(projectId, item.operationId)
+      }
+    }
+  } catch {
+    // 恢复写失败：保留 pending，下一次写前继续硬拒。
+  }
+  if (catalogProjectNeedsRecovery(projectId) && stillCurrentProject(projectId)) {
+    toast(workbenchFeedback.catalogWriteNeedsRecovery)
+  }
+}
+
+/** 同一事件循环内只允许一次写入。忙碌态只覆盖当前工程。 */
 export function beginCatalogWrite(
   projectId: string,
   busy: boolean,
   setBusy: (value: boolean) => void
 ): boolean {
-  if (busy || writeInFlight || catalogWriteBlockedFor(projectId)) return false
+  if (busy || writeInFlight) return false
+  if (catalogProjectNeedsRecovery(projectId)) {
+    if (stillCurrentProject(projectId)) toast(workbenchFeedback.catalogWriteNeedsRecovery)
+    return false
+  }
   writeInFlight = true
-  setBusy(true)
+  if (stillCurrentProject(projectId)) setBusy(true)
   return true
 }
 
-/** 释放进行中的写入。未核对完的工程仍保持忙碌。 */
+/** 释放进行中的写入；只有仍在该工程时才通知当前忙碌态。 */
 export function endCatalogWrite(projectId: string, setBusy: (value: boolean) => void): void {
   writeInFlight = false
-  setBusy(catalogWriteBlockedFor(projectId))
-}
-
-/** 回到未核对的工程时查询持久事实。查到已提交或未提交才放下门闩。 */
-export async function settleUnresolvedCatalogWrite(
-  client: ProjectFilesClient,
-  projectId: string,
-  setBusy: (value: boolean) => void
-): Promise<void> {
-  const hold = unresolvedCatalogHold()
-  if (!hold || hold.projectId !== projectId) return
-  setBusy(true)
-  try {
-    const fact = requireSuccess(
-      await client.readProjectFileOperation({ projectId, operationId: hold.operationId })
-    )
-    releaseCatalogWriteHold(projectId, hold.operationId, fact.settlement, setBusy)
-  } catch {
-    setBusy(catalogWriteBlockedFor(projectId))
-  }
+  if (stillCurrentProject(projectId)) setBusy(false)
 }
 
 /** 把拖入的外部文件转成路径后导入。转换失败逐项提示，成功路径走同一导入。 */
@@ -147,10 +219,78 @@ export async function chooseAndImport(
     if (chosen === null || !stillCurrentProject(projectId)) return
     await importLocalPaths(client, queryClient, projectId, parentFolderId, chosen)
   } catch (error) {
-    if (stillCurrentProject(projectId)) toast(failureOf(error).msg)
+    const failure = failureOf(error)
+    if (isUncertainCatalogWrite(failure) || failure.code === CATALOG_WRITE_FAILED_CODE) {
+      throw error
+    }
+    if (stillCurrentProject(projectId)) toast(failure.msg)
   } finally {
     endCatalogWrite(projectId, setBusy)
   }
+}
+
+function importOperationIds(localFilePaths: readonly string[]): string[] {
+  const batchId = crypto.randomUUID()
+  return localFilePaths.map((_, index) => `${batchId}-${index + 1}`)
+}
+
+type ImportRecovery = {
+  readonly committed: number
+  readonly definiteFailed: readonly string[]
+  readonly unverified: readonly string[]
+  readonly pending: boolean
+}
+
+function fileNameOf(localFilePath: string): string {
+  return localFilePath.split(/[\\/]/u).at(-1) || localFilePath
+}
+
+async function resolveImportOperations(
+  client: ProjectFilesClient,
+  projectId: string,
+  operationIds: readonly string[],
+  localFilePaths: readonly string[]
+): Promise<ImportRecovery> {
+  let resolved: Awaited<ReturnType<ProjectFilesClient['recoverProjectFileOperations']>>['data']
+  try {
+    resolved = requireSuccess(
+      await client.recoverProjectFileOperations({ projectId, operationIds })
+    )
+  } catch {
+    for (const operationId of operationIds) rememberUnresolved(projectId, operationId)
+    return {
+      committed: 0,
+      definiteFailed: [],
+      unverified: operationIds.map((_, index) => fileNameOf(localFilePaths[index] ?? '')),
+      pending: true
+    }
+  }
+  const states = new Map(
+    (resolved ?? []).map((item) => [item.operationId, item.state] as const)
+  )
+  let committed = 0
+  const definiteFailed: string[] = []
+  const unverified: string[] = []
+  let pending = false
+  for (const [index, operationId] of operationIds.entries()) {
+    const fileName = fileNameOf(localFilePaths[index] ?? '')
+    const state = states.get(operationId)
+    if (state === 'committed') {
+      committed += 1
+      clearUnresolved(projectId, operationId)
+    } else if (state === 'notCommitted') {
+      definiteFailed.push(fileName)
+      clearUnresolved(projectId, operationId)
+    } else if (state === 'notStarted') {
+      unverified.push(fileName)
+      clearUnresolved(projectId, operationId)
+    } else {
+      rememberUnresolved(projectId, operationId)
+      unverified.push(fileName)
+      pending = true
+    }
+  }
+  return { committed, definiteFailed, unverified, pending }
 }
 
 async function importLocalPaths(
@@ -160,6 +300,7 @@ async function importLocalPaths(
   parentFolderId: CatalogFolderId,
   localFilePaths: readonly string[]
 ): Promise<void> {
+  const operationIds = importOperationIds(localFilePaths)
   try {
     const catalog = queryClient.getQueryData<ProjectInputCatalogVO>(
       projectInputSourcesQueryKey(projectId)
@@ -167,6 +308,7 @@ async function importLocalPaths(
     const result = requireSuccess(
       await client.importProjectFiles({
         projectId,
+        operationIds,
         localFilePaths,
         parentFolderId,
         expectedCatalogVersion: catalog?.catalogVersion ?? ''
@@ -174,9 +316,39 @@ async function importLocalPaths(
     )
     if (stillCurrentProject(projectId)) toastImportResult(result)
   } catch (error) {
-    if (stillCurrentProject(projectId)) toast(failureOf(error).msg)
+    const failure = failureOf(error)
+    if (isUncertainCatalogWrite(failure)) {
+      const recovery = await resolveImportOperations(
+        client,
+        projectId,
+        operationIds,
+        localFilePaths
+      )
+      if (stillCurrentProject(projectId)) {
+        if (recovery.committed > 0) {
+          toast(workbenchFeedback.importImported(recovery.committed))
+        }
+        for (const fileName of recovery.definiteFailed) {
+          toast(workbenchFeedback.importFailedItem(fileName, '提交未完成，请重试'))
+        }
+        for (const fileName of recovery.unverified) {
+          toast(workbenchFeedback.importUnverifiedItem(fileName))
+        }
+        if (recovery.pending) toast(workbenchFeedback.catalogWriteNeedsRecovery)
+      }
+      if (recovery.pending) {
+        throw new AppException({
+          code: COMMIT_UNCLEAR_CODE,
+          msg: workbenchFeedback.catalogWriteNeedsRecovery
+        })
+      }
+    } else if (stillCurrentProject(projectId)) {
+      toast(failure.msg)
+    }
   }
-  if (stillCurrentProject(projectId)) await reloadCatalog(client, queryClient, projectId)
+  if (stillCurrentProject(projectId)) {
+    await reloadCatalog(client, queryClient, projectId)
+  }
 }
 
 function toastImportResult(result: ImportProjectFilesVO): void {
@@ -186,14 +358,6 @@ function toastImportResult(result: ImportProjectFilesVO): void {
   for (const file of result.failedFiles) {
     toast(workbenchFeedback.importFailedItem(file.fileName, file.message))
   }
-}
-
-/** 可读取来源的双击只打开系统程序。画布挂接不走这里。 */
-export function openReadableSource(
-  source: { readable: boolean; sourceId: string },
-  openSource: (sourceId: string) => void
-): void {
-  if (source.readable) openSource(source.sourceId)
 }
 
 /** 用系统默认程序打开工程文件。 */
@@ -288,12 +452,25 @@ export async function submitCatalogName(
 ): Promise<void> {
   if (!dialog || projectId.length === 0) return
   if (!beginCatalogWrite(projectId, busy, setBusy)) return
+  const operationId = crypto.randomUUID()
+  const applySuccess = (): void => {
+    if (!stillCurrentProject(projectId)) return
+    setDialog(null)
+    toast(
+      dialog.kind === 'rename-file'
+        ? workbenchFeedback.fileRenamed
+        : dialog.kind === 'rename-folder'
+          ? workbenchFeedback.folderRenamed
+          : workbenchFeedback.folderCreated
+    )
+  }
   try {
     const expectedCatalogVersion = catalogVersion(queryClient, projectId)
     if (dialog.kind === 'rename-file') {
       requireSuccess(
         await client.renameProjectFile({
           projectId,
+          operationId,
           sourceId: dialog.sourceId,
           newFileName: dialog.name,
           expectedCatalogVersion
@@ -303,6 +480,7 @@ export async function submitCatalogName(
       requireSuccess(
         await client.renameProjectFolder({
           projectId,
+          operationId,
           folderId: dialog.folderId,
           newName: dialog.name,
           expectedCatalogVersion
@@ -312,21 +490,33 @@ export async function submitCatalogName(
       requireSuccess(
         await client.createProjectFolder({
           projectId,
+          operationId,
           parentFolderId: dialog.parentFolderId,
           name: dialog.name,
           expectedCatalogVersion
         })
       )
-      if (stillCurrentProject(projectId)) toast(workbenchFeedback.folderCreated)
     }
-    if (!stillCurrentProject(projectId)) return
-    setDialog(null)
-    await reloadCatalog(client, queryClient, projectId)
+    applySuccess()
   } catch (error) {
-    if (stillCurrentProject(projectId)) {
-      setDialog({ ...dialog, error: failureOf(error).msg })
+    const failure = failureOf(error)
+    if (isUncertainCatalogWrite(failure)) {
+      try {
+        await resolveCatalogWriteOrReport(client, projectId, operationId)
+      } catch (verifyError) {
+        if (stillCurrentProject(projectId)) {
+          setDialog({ ...dialog, error: failureOf(verifyError).msg })
+        }
+        throw verifyError
+      }
+      applySuccess()
+    } else if (stillCurrentProject(projectId)) {
+      setDialog({ ...dialog, error: failure.msg })
     }
   } finally {
+    if (stillCurrentProject(projectId)) {
+      await reloadCatalog(client, queryClient, projectId)
+    }
     endCatalogWrite(projectId, setBusy)
   }
 }
@@ -342,20 +532,34 @@ export async function deleteSourceFile(
 ): Promise<void> {
   if (!target || projectId.length === 0) return
   if (!beginCatalogWrite(projectId, busy, setBusy)) return
+  const operationId = crypto.randomUUID()
+  const applySuccess = (): void => {
+    if (!stillCurrentProject(projectId)) return
+    setDeleteTarget(null)
+    toast(workbenchFeedback.fileDeleted)
+  }
   try {
     requireSuccess(
       await client.deleteProjectFile({
         projectId,
+        operationId,
         sourceId: target.sourceId,
         expectedCatalogVersion: catalogVersion(queryClient, projectId)
       })
     )
-    if (!stillCurrentProject(projectId)) return
-    setDeleteTarget(null)
+    applySuccess()
   } catch (error) {
-    if (stillCurrentProject(projectId)) toast(failureOf(error).msg)
+    const failure = failureOf(error)
+    if (isUncertainCatalogWrite(failure)) {
+      await resolveCatalogWriteOrReport(client, projectId, operationId)
+      applySuccess()
+    } else if (stillCurrentProject(projectId)) {
+      toast(failure.msg)
+    }
   } finally {
-    if (stillCurrentProject(projectId)) await reloadCatalog(client, queryClient, projectId)
+    if (stillCurrentProject(projectId)) {
+      await reloadCatalog(client, queryClient, projectId)
+    }
     endCatalogWrite(projectId, setBusy)
   }
 }
@@ -391,21 +595,35 @@ export async function confirmFolderDeletion(
 ): Promise<void> {
   if (!plan || projectId.length === 0) return
   if (!beginCatalogWrite(projectId, busy, setBusy)) return
+  const operationId = crypto.randomUUID()
+  const applySuccess = (): void => {
+    if (!stillCurrentProject(projectId)) return
+    setPlan(null)
+    toast(workbenchFeedback.folderDeleted)
+  }
   try {
     requireSuccess(
       await client.deleteProjectFolder({
         projectId,
+        operationId,
         folderId: plan.folderId,
         expectedCatalogVersion: plan.catalogVersion,
         expectedDeletionVersion: plan.deletionVersion
       })
     )
-    if (!stillCurrentProject(projectId)) return
-    setPlan(null)
+    applySuccess()
   } catch (error) {
-    if (stillCurrentProject(projectId)) toast(failureOf(error).msg)
+    const failure = failureOf(error)
+    if (isUncertainCatalogWrite(failure)) {
+      await resolveCatalogWriteOrReport(client, projectId, operationId)
+      applySuccess()
+    } else if (stillCurrentProject(projectId)) {
+      toast(failure.msg)
+    }
   } finally {
-    if (stillCurrentProject(projectId)) await reloadCatalog(client, queryClient, projectId)
+    if (stillCurrentProject(projectId)) {
+      await reloadCatalog(client, queryClient, projectId)
+    }
     endCatalogWrite(projectId, setBusy)
   }
 }

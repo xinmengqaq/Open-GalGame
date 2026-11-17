@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
 import type { ReadLatestPreviewSaveDTO } from '@application/scene-export/dto/ReadLatestPreviewSaveDTO'
+import type { SceneExportContentBasis } from '@application/scene-export/vo/SceneExportContentBasis'
 import type {
   PreviewSaveVersionCandidate,
   PreviewSaveVersionQueryGateway
@@ -57,16 +58,17 @@ export class LocalPreviewSaveVersionQueryGateway implements PreviewSaveVersionQu
     })
     if (settlement.state !== '已提交' && settlement.state !== '无变更') return null
     const metadata = await stat(join(directory, name))
+    const contentBasis: SceneExportContentBasis = {
+      digest: record.contentDigest,
+      parserVersion: record.parserVersion,
+      engineVersion: record.engineVersion
+    }
     return {
       projectId: record.projectId,
       sceneId: record.sceneId,
       requestId: record.requestId,
       revisionDigest: record.revisionDigest,
-      contentBasis: {
-        digest: record.contentDigest,
-        parserVersion: record.parserVersion,
-        engineVersion: record.engineVersion
-      },
+      contentBasis,
       savedAtMs: metadata.mtimeMs
     }
   }

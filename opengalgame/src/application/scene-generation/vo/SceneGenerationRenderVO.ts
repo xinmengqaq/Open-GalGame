@@ -1,27 +1,21 @@
-import type { SceneGenerationStateVO } from './SceneGenerationVO'
+import type {
+  SceneGenerationRepairSource,
+  SceneGenerationRunMode,
+  SceneGenerationStateVO
+} from './SceneGenerationVO'
 import type {
   SceneGenerationCandidatePreviewAuthorization,
   SceneGenerationPublicFailure
-} from '../services/impl/SceneGenerationFailureFacts'
-import type {
-  SceneGenerationRepairSource,
-  SceneGenerationRunMode
-} from '../models/SceneGenerationExecution'
+} from './SceneGenerationFailureVO'
 
 /** 公开失败原因只取执行记录已有的窄枚举，不新增原因。 */
 export type SceneGenerationFailureReasonVO = NonNullable<SceneGenerationPublicFailure['reason']>
 
 /**
- * 公开渲染失败。除原有安全文案外，只增加执行记录已有的失败分类、下一步动作
- * 和旧记录近似标记；不暴露诊断分类、HTTP 状态、原因名或路径。
+ * 公开渲染失败。除原有安全文案外，只增加执行记录已有的失败分类和下一步动作；
+ * 不暴露诊断分类、HTTP 状态、原因名或路径。
  */
-export type SceneGenerationRenderFailureVO = SceneGenerationPublicFailure & {
-  /**
-   * failed 且执行记录缺少失败分类或下一步动作时标为旧记录。这是近似标记：
-   * 当前记录遇到未能分类的失败也会缺字段，因此只用于展示“旧记录”，不反推版本。
-   */
-  legacy?: boolean
-}
+export type SceneGenerationRenderFailureVO = SceneGenerationPublicFailure
 
 /** 最近安全进度。只取执行记录时间线里的固定安全文案，不含模型原文或路径。 */
 export type SceneGenerationRecentProgressVO = {
@@ -273,8 +267,6 @@ export type SceneGenerationHistorySummaryVO = {
   createdAt: string
   candidateSnapshotId?: string
   commitId?: string
-  /** 失败时执行记录已有的安全原因；旧记录没有该事实时保持缺失。 */
+  /** 失败时执行记录已有的安全原因；缺失该事实时保持缺失。 */
   failureReason?: SceneGenerationFailureReasonVO
-  /** failed 且执行记录缺少失败分类或下一步动作时标为旧记录；近似边界同渲染状态。 */
-  legacy?: boolean
 }

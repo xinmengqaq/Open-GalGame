@@ -1,24 +1,27 @@
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import { GitCandidatePreviewGatewayImpl } from '@infrastructure/scene-generation/preview/GitCandidatePreviewGatewayImpl'
 import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { createSceneGeneration } from '@bootstrap/sceneGeneration'
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import {
-  arrangementPath,
   documentBodyPath,
   encodeStorageKey,
   sourceDescriptorPath
 } from '@infrastructure/project-files/projectFilePaths'
+import { arrangementPath } from '@infrastructure/scene-canvas/sceneCanvasPaths'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 import { streamingFetch } from '../ai/streamingFetch'
 
 const roots: string[] = []
+/** 64×36 PNG：与媒体预览 e2e 同一确定性图片来源，预览只验证已发布修订中的字节可读。 */
+const backgroundPngBase64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAkCAIAAAC2bqvFAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAU0lEQVR4nO3PUQkAIBTAwFfSKla1jiH8OITBAtzm7PV1wwUNaEEDWtCAFjSgBQ1oQQNa0IAWNKAFDWhBA1rQgBY0oAUNaEEDWtCAFjSgBQ1owWMX4Vmy07qWCGwAAAAASUVORK5CYII='
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
@@ -27,11 +30,13 @@ it('固定候选修订可预览真实素材，下一修订不污染旧根，暂�
   const root = await mkdtemp(join(tmpdir(), 'webgal-preview-smoke-'))
   roots.push(root)
   const projectRoot = join(root, 'project')
-  const sourceRoot = resolve(process.cwd(), '../docs/素材目录')
   await mkdir(join(projectRoot, 'game/scene'), { recursive: true })
+  await mkdir(join(projectRoot, 'assets/background'), { recursive: true })
   await mkdir(join(projectRoot, '.opengalgame'), { recursive: true })
-  await cp(join(sourceRoot, 'game'), join(projectRoot, 'game'), { recursive: true })
-  await cp(join(sourceRoot, 'game'), join(projectRoot, 'assets'), { recursive: true })
+  await writeFile(
+    join(projectRoot, 'assets/background/sora_01.png'),
+    Buffer.from(backgroundPngBase64, 'base64')
+  )
   await writeFile(join(projectRoot, 'game/scene/start.txt'), '旁白:原稿;\n')
   await writeFile(
     join(projectRoot, '.opengalgame/manifest.json'),
@@ -64,11 +69,11 @@ it('固定候选修订可预览真实素材，下一修订不污染旧根，暂�
     sourceId: 'sky-image',
     content: {
       kind: 'asset',
-      name: 'sora_01.jpg',
+      name: 'sora_01.png',
       fileType: 'image',
       description: '天空背景',
       fileId: 'file-sky-image',
-      mediaPath: 'assets/background/sora_01.jpg'
+      mediaPath: 'assets/background/sora_01.png'
     }
   })
 
@@ -196,7 +201,7 @@ it('固定候选修订可预览真实素材，下一修订不污染旧根，暂�
       jobs.push(job)
     },
     publishProgress: () => undefined,
-    versioning: new ProjectVersioningApplicationServiceImpl({
+    versioning: new ManageProjectVersioning({
       ...createProjectVersioningGateways(join(root, 'state')),
       nextId: () => randomUUID()
     }),
@@ -253,7 +258,7 @@ it('固定候选修订可预览真实素材，下一修订不污染旧根，暂�
   expect(firstPreview).toBeDefined()
   const origin = originOf(firstPreview!.url)
   const firstScript = await fetch(`${origin}/game/scene/start.txt`)
-  const firstAsset = await fetch(`${origin}/game/background/sora_01.jpg`)
+  const firstAsset = await fetch(`${origin}/game/background/sora_01.png`)
   expect(firstScript.status, '脚本').toBe(200)
   expect(await firstScript.text(), '脚本内容').toContain('第一候选')
   expect(firstAsset.status, '素材').toBe(200)

@@ -1,6 +1,6 @@
 import type { SceneIdentity } from '@domain/scenes/models/SceneIdentity'
-import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
 
+import type { SceneExportContentBasis } from '../vo/SceneExportContentBasis'
 import type { SceneExportVersionReference } from '../vo/SceneExportVO'
 
 export type SavedSceneReferencedAsset = {
@@ -14,7 +14,7 @@ export type SavedSceneReferencedAsset = {
  */
 export type SavedSceneExportSource = {
   readonly scene: SceneIdentity
-  readonly contentBasis: SceneContentBasisVO
+  readonly contentBasis: SceneExportContentBasis
   readonly versionReference: SceneExportVersionReference
   readonly entryRelativePath: string
   readonly sceneText: string

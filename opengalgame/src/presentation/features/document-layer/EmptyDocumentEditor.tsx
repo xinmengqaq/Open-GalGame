@@ -22,7 +22,7 @@ interface EmptyDocumentEditorProps {
   onSave: (
     request: Omit<
       CreateProjectTextFileDTO,
-      'projectId' | 'expectedCatalogVersion' | 'parentFolderId'
+      'projectId' | 'operationId' | 'expectedCatalogVersion' | 'parentFolderId'
     >
   ) => Promise<void>
 }

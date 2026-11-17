@@ -5,17 +5,14 @@ import {
   InputGroupTextarea
 } from '@presentation/components/ui/input-group'
 import { Spinner } from '@presentation/components/ui/spinner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@presentation/components/ui/tooltip'
 import { cn } from '@presentation/lib/utils'
 import { CornerDownLeftIcon, SquareIcon, XIcon } from 'lucide-react'
 import {
-  Children,
   type ComponentProps,
   type FormEventHandler,
   type HTMLAttributes,
   type KeyboardEventHandler,
   type MouseEvent,
-  type ReactNode,
   useCallback,
   useState
 } from 'react'
@@ -55,12 +52,6 @@ export const PromptInput = ({ className, onSubmit, children, ...props }: PromptI
     </form>
   )
 }
-
-export type PromptInputBodyProps = HTMLAttributes<HTMLDivElement>
-
-export const PromptInputBody = ({ className, ...props }: PromptInputBodyProps) => (
-  <div className={cn('contents', className)} {...props} />
-)
 
 export type PromptInputTextareaProps = ComponentProps<typeof InputGroupTextarea>
 
@@ -116,16 +107,6 @@ export const PromptInputTextarea = ({
   )
 }
 
-export type PromptInputHeaderProps = Omit<ComponentProps<typeof InputGroupAddon>, 'align'>
-
-export const PromptInputHeader = ({ className, ...props }: PromptInputHeaderProps) => (
-  <InputGroupAddon
-    align="block-end"
-    className={cn('order-first flex-wrap gap-1', className)}
-    {...props}
-  />
-)
-
 export type PromptInputFooterProps = Omit<ComponentProps<typeof InputGroupAddon>, 'align'>
 
 export const PromptInputFooter = ({ className, ...props }: PromptInputFooterProps) => (
@@ -135,62 +116,6 @@ export const PromptInputFooter = ({ className, ...props }: PromptInputFooterProp
     {...props}
   />
 )
-
-export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>
-
-export const PromptInputTools = ({ className, ...props }: PromptInputToolsProps) => (
-  <div className={cn('flex min-w-0 items-center gap-1', className)} {...props} />
-)
-
-export type PromptInputButtonTooltip =
-  | string
-  | {
-      content: ReactNode
-      shortcut?: string
-      side?: ComponentProps<typeof TooltipContent>['side']
-    }
-
-export type PromptInputButtonProps = ComponentProps<typeof InputGroupButton> & {
-  tooltip?: PromptInputButtonTooltip
-}
-
-export const PromptInputButton = ({
-  variant = 'ghost',
-  className,
-  size,
-  tooltip,
-  ...props
-}: PromptInputButtonProps) => {
-  const newSize = size ?? (Children.count(props.children) > 1 ? 'sm' : 'icon-sm')
-
-  const button = (
-    <InputGroupButton
-      className={cn(className)}
-      size={newSize}
-      type="button"
-      variant={variant}
-      {...props}
-    />
-  )
-
-  if (!tooltip) {
-    return button
-  }
-
-  const tooltipContent = typeof tooltip === 'string' ? tooltip : tooltip.content
-  const shortcut = typeof tooltip === 'string' ? undefined : tooltip.shortcut
-  const side = typeof tooltip === 'string' ? 'top' : (tooltip.side ?? 'top')
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side={side}>
-        {tooltipContent}
-        {shortcut && <span className="ml-2 text-muted-foreground">{shortcut}</span>}
-      </TooltipContent>
-    </Tooltip>
-  )
-}
 
 export type PromptInputSubmitProps = ComponentProps<typeof InputGroupButton> & {
   status?: PromptInputStatus

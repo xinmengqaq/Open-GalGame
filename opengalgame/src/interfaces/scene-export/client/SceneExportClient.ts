@@ -1,4 +1,3 @@
-import type { OpenDirectoryDTO } from '@application/system-path/dto/OpenDirectoryDTO'
 import type { ReadLatestPreviewSaveDTO } from '@application/scene-export/dto/ReadLatestPreviewSaveDTO'
 import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewSaveVersionVO'
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
@@ -11,6 +10,4 @@ export interface SceneExportClient {
   readLatestPreviewSave(
     request: ReadLatestPreviewSaveDTO
   ): Promise<AjaxResult<PreviewSaveVersionVO | null>>
-  /** 交给系统打开本机已存在的目录；服务端负责校验，客户端不接受任意命令。 */
-  openDirectory(request: OpenDirectoryDTO): Promise<AjaxResult<null>>
 }

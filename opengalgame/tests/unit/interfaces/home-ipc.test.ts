@@ -2,10 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
 import { ProjectClientImpl } from '@interfaces/client/ProjectClientImpl'
+import { desktopBridgeChannels } from '@interfaces/contracts/desktopBridgeChannels'
 import { ConnectionSettingsController } from '@interfaces/ipc/controllers/ConnectionSettingsController'
 import { ProjectController } from '@interfaces/ipc/controllers/ProjectController'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { createDesktopBridge } from '@interfaces/preload/DesktopBridge'
+
+vi.mock('electron', () => ({
+  webUtils: { getPathForFile: (file: { path?: string }) => file.path ?? '' }
+}))
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 describe('首页 IPC 与客户端', () => {
@@ -14,7 +20,7 @@ describe('首页 IPC 与客户端', () => {
       chooseSaveLocation: vi.fn(async () => null),
       clearSaveLocation: vi.fn()
     }
-    const controller = new ProjectController(projects as never, new IpcExceptionHandler(logger))
+    const controller = new ProjectController(projects as never, new IpcExceptionHandler(logger, new IpcErrorMapper()))
     expect(
       await controller.chooseSaveLocation(
         { directory: 'C:/secret' },
@@ -48,7 +54,7 @@ describe('首页 IPC 与客户端', () => {
       })),
       importProject: vi.fn()
     }
-    const controller = new ProjectController(projects, new IpcExceptionHandler(logger))
+    const controller = new ProjectController(projects, new IpcExceptionHandler(logger, new IpcErrorMapper()))
     const forbidden = await controller.createProject(
       { operationId: 'o', name: 'n' },
       { trusted: false, requestId: 'r' }
@@ -108,12 +114,14 @@ describe('首页 IPC 与客户端', () => {
     expect(invoke).toHaveBeenCalledWith('project:list', { offset: 0, limit: 9 })
     await bridge.updateProjectTextFileBody({
       projectId: 'p',
+      operationId: 'home-update-1',
       sourceId: 's',
       expectedSourceVersion: 'v1',
       content: { textKind: 'document', body: '正文' }
     })
     expect(invoke).toHaveBeenCalledWith('project-files:update-text-body', {
       projectId: 'p',
+      operationId: 'home-update-1',
       sourceId: 's',
       expectedSourceVersion: 'v1',
       content: { textKind: 'document', body: '正文' }
@@ -152,7 +160,7 @@ describe('连接设置扩展 JSON 通道', () => {
     }
     const controller = new ConnectionSettingsController(
       settings as never,
-      new IpcExceptionHandler(logger)
+      new IpcExceptionHandler(logger, new IpcErrorMapper())
     )
     expect(
       await controller.saveSettings({ ...request, extension: { kind: 'drop' } }, access)
@@ -207,7 +215,7 @@ describe('工程工作区核对通道', () => {
 
   it('schema 只接受 projectId，控制器返回工作区身份', async () => {
     const projects = { ensureProjectWorkspace: vi.fn(async () => workspace) }
-    const controller = new ProjectController(projects as never, new IpcExceptionHandler(logger))
+    const controller = new ProjectController(projects as never, new IpcExceptionHandler(logger, new IpcErrorMapper()))
 
     expect(
       await controller.ensureProjectWorkspace({ projectId: 'p1', directory: 'C:/secret' }, access)
@@ -225,7 +233,7 @@ describe('工程工作区核对通道', () => {
   it('检查只接受 projectId，并原样返回就绪和身份', async () => {
     const inspection = { ready: false, sceneId: 'scene-a', canvasId: 'canvas-a' }
     const projects = { inspectProjectWorkspace: vi.fn(async () => inspection) }
-    const controller = new ProjectController(projects as never, new IpcExceptionHandler(logger))
+    const controller = new ProjectController(projects as never, new IpcExceptionHandler(logger, new IpcErrorMapper()))
     expect(
       await controller.inspectProjectWorkspace({ projectId: 'p1', directory: 'C:/secret' }, access)
     ).toMatchObject({ code: 4101 })
@@ -281,7 +289,7 @@ describe('项目列表通道与客户端', () => {
 
   it('列表入口先校验来源与分页协议，再原样返回页对象', async () => {
     const projects = { listProjects: vi.fn(async () => page) }
-    const controller = new ProjectController(projects, new IpcExceptionHandler(logger))
+    const controller = new ProjectController(projects, new IpcExceptionHandler(logger, new IpcErrorMapper()))
 
     const forbidden = await controller.listProjects(query, { trusted: false, requestId: 'r' })
     expect(forbidden.code).toBe(4102)
@@ -302,7 +310,7 @@ describe('项目列表通道与客户端', () => {
   it('无登记时返回成功的空页，不冒充失败', async () => {
     const empty = { entries: [], total: 0, offset: 0, limit: 9 }
     const projects = { listProjects: vi.fn(async () => empty) }
-    const controller = new ProjectController(projects, new IpcExceptionHandler(logger))
+    const controller = new ProjectController(projects, new IpcExceptionHandler(logger, new IpcErrorMapper()))
 
     expect(await controller.listProjects(query, { trusted: true, requestId: 'r' })).toEqual({
       code: 2000,
@@ -317,7 +325,7 @@ describe('项目列表通道与客户端', () => {
       renameProject: vi.fn(async () => ({ id: 'p1', name: '新名', synopsis: '' })),
       unregisterProject: vi.fn(async () => ({ id: 'p1' }))
     }
-    const controller = new ProjectController(projects, new IpcExceptionHandler(logger))
+    const controller = new ProjectController(projects, new IpcExceptionHandler(logger, new IpcErrorMapper()))
     const access = { trusted: true, requestId: 'r' }
 
     expect(await controller.openProject({ id: 'p1' }, access)).toMatchObject({
@@ -366,5 +374,205 @@ describe('项目列表通道与客户端', () => {
     const offline = await client.listProjects(query)
     expect(offline).toEqual({ code: 5102, msg: '项目列表加载失败，请重试' })
     expect(offline.msg).not.toContain('待确认')
+  })
+})
+
+/**
+ * R10 冻结的 preload 通道清单：方法名 → 通道名。
+ * 清单是消费者可观察的桥接协议；重构时不得改通道名或增删方法。
+ */
+const INVOKE_CHANNELS = {
+  chooseSaveLocation: 'project:choose-save-location',
+  clearSaveLocation: 'project:clear-save-location',
+  createProject: 'project:create',
+  importProject: 'project:import',
+  listProjects: 'project:list',
+  openProject: 'project:open',
+  renameProject: 'project:rename',
+  unregisterProject: 'project:unregister',
+  ensureProjectWorkspace: 'project:ensure-workspace',
+  inspectProjectWorkspace: 'project:inspect-workspace',
+  inspectProjectFiles: 'project-files:inspect',
+  listProjectInputSources: 'project-files:list-input-sources',
+  readProjectInputSources: 'project-files:read-input-sources',
+  readProjectMedia: 'project-files:read-media',
+  readSceneCanvasArrangement: 'scene-canvas:read-arrangement',
+  createSceneCanvasSourceCard: 'scene-canvas:create-source-card',
+  createSceneCanvasPromptCard: 'scene-canvas:create-prompt-card',
+  createSceneCanvasFieldCard: 'scene-canvas:create-field-card',
+  editSceneCanvasCard: 'scene-canvas:edit-card',
+  editSceneCanvasPromptBody: 'scene-canvas:edit-prompt-body',
+  bindSceneCanvasFieldCardPreset: 'scene-canvas:bind-field-card-preset',
+  editSceneCanvasMediaRole: 'scene-canvas:edit-media-role',
+  copySceneCanvasCard: 'scene-canvas:copy-card',
+  deleteSceneCanvasCard: 'scene-canvas:delete-card',
+  connectSceneCanvasCards: 'scene-canvas:connect-cards',
+  disconnectSceneCanvasCards: 'scene-canvas:disconnect-cards',
+  editSceneCanvasRelationName: 'scene-canvas:edit-relation-name',
+  attachSceneCanvasRelationRecord: 'scene-canvas:attach-relation-record',
+  detachSceneCanvasRelationRecord: 'scene-canvas:detach-relation-record',
+  saveSceneCanvasArrangement: 'scene-canvas:save-arrangement',
+  chooseProjectFiles: 'project-files:choose-files',
+  importProjectFiles: 'project-files:import',
+  openProjectFile: 'project-files:open',
+  renameProjectFile: 'project-files:rename',
+  deleteProjectFile: 'project-files:delete',
+  createProjectTextFile: 'project-files:create-text',
+  updateProjectTextFileBody: 'project-files:update-text-body',
+  createProjectFolder: 'project-files:create-folder',
+  copyProjectFile: 'project-files:copy-file',
+  moveProjectFile: 'project-files:move-file',
+  copyProjectFolder: 'project-files:copy-folder',
+  readProjectFileOperation: 'project-files:read-operation',
+  recoverProjectFileOperations: 'project-files:recover-operations',
+  renameProjectFolder: 'project-files:rename-folder',
+  readProjectFolderDeletionPlan: 'project-files:folder-deletion-plan',
+  deleteProjectFolder: 'project-files:delete-folder',
+  getSettingsSummary: 'connection:get-summary',
+  testConnection: 'connection:test',
+  saveSettings: 'connection:save',
+  listModels: 'connection:list-models',
+  listVersionHistory: 'project-versioning:list-history',
+  undoVersionHistoryEntry: 'project-versioning:undo-history-entry',
+  clearVersionHistory: 'project-versioning:clear-history',
+  startSceneGeneration: 'scene-generation:start',
+  retrySceneGenerationRepair: 'scene-generation:retry-repair',
+  getSceneGenerationStatus: 'scene-generation:status',
+  getLatestSceneGeneration: 'scene-generation:latest',
+  replySceneGeneration: 'scene-generation:reply',
+  pauseSceneGeneration: 'scene-generation:pause',
+  resumeSceneGeneration: 'scene-generation:resume',
+  cancelSceneGeneration: 'scene-generation:cancel',
+  listSceneGenerationHistory: 'scene-generation:list-history',
+  readSceneGenerationCheckpoint: 'scene-generation:read-checkpoint',
+  openSceneGenerationPreview: 'scene-generation:open-preview',
+  closeSceneGenerationPreview: 'scene-generation:close-preview',
+  subscribeSceneGenerationProgress: 'scene-generation:progress',
+  readScenePreviewAvailability: 'scene-preview:availability',
+  openScenePreview: 'scene-preview:open',
+  preparePreviewStage: 'scene-preview:prepare',
+  previewDialogueDraft: 'scene-preview:draft',
+  saveDialogueChanges: 'scene-preview:save',
+  readDialogueSaveSettlement: 'scene-preview:settlement',
+  selectPreviewDialogue: 'scene-preview:select-dialogue',
+  playPreviousDialogue: 'scene-preview:previous-dialogue',
+  playNextDialogue: 'scene-preview:next-dialogue',
+  closeScenePreview: 'scene-preview:close',
+  subscribeScenePreviewRuntime: 'scene-preview:subscribe',
+  readCandidatePreview: 'scene-preview:read-candidate',
+  readCandidatePreviewEvent: 'scene-preview:candidate-event',
+  exportSavedScene: 'scene-export:export-saved-scene',
+  readLatestPreviewSave: 'scene-export:read-latest-preview-save',
+  checkForUpdate: 'app-update:check',
+  downloadUpdate: 'app-update:download',
+  installUpdate: 'app-update:install',
+  readUpdateStatus: 'app-update:read-status',
+  openDirectory: 'system:open-directory'
+} as const satisfies Record<string, string>
+
+/** R10 冻结的订阅通道清单。 */
+const EVENT_CHANNELS = {
+  onProjectProgress: 'project:progress',
+  onSceneGenerationProgress: 'scene-generation:progress',
+  onScenePreviewRuntime: 'scene-preview:runtime',
+  onCandidatePreviewReady: 'scene-preview:ready',
+  onCandidatePreviewStageFailed: 'scene-preview:stage-failed',
+  onCandidatePreviewInvalidated: 'scene-preview:invalidated',
+  onAppUpdateStatus: 'app-update:status'
+} as const satisfies Record<string, string>
+
+const expectedMethods = [
+  ...Object.keys(INVOKE_CHANNELS),
+  ...Object.keys(EVENT_CHANNELS),
+  'pathForDroppedFile'
+].sort()
+
+describe('DesktopBridge 单一通道清单基线', () => {
+  it('preload 的 86 个 invoke、7 个订阅和 92 个唯一通道与冻结清单一致', () => {
+    const bridge = createDesktopBridge({
+      invoke: async () => ({ code: 2000, msg: '成功' }),
+      subscribe: () => () => undefined
+    })
+
+    expect(Object.keys(bridge).sort()).toEqual(expectedMethods)
+
+    const invokeChannels = Object.values(INVOKE_CHANNELS)
+    const eventChannels = Object.values(EVENT_CHANNELS)
+    expect(invokeChannels).toHaveLength(86)
+    expect(eventChannels).toHaveLength(7)
+    expect(new Set([...invokeChannels, ...eventChannels]).size).toBe(92)
+    expect(invokeChannels.filter((channel) => (eventChannels as readonly string[]).includes(channel))).toEqual([
+      'scene-generation:progress'
+    ])
+  })
+
+  it('源通道与冻结协议一致', () => {
+    expect(desktopBridgeChannels.invoke).toEqual(INVOKE_CHANNELS)
+    expect(desktopBridgeChannels.event).toEqual(EVENT_CHANNELS)
+  })
+
+  it('订阅按冻结通道登记，退订后事件不再投递且不串通道', () => {
+    const listenersByChannel = new Map<string, Set<(value: unknown) => void>>()
+    const bridge = createDesktopBridge({
+      invoke: async () => ({ code: 2000, msg: '成功' }),
+      subscribe: (channel, listener) => {
+        const listeners = listenersByChannel.get(channel) ?? new Set()
+        listeners.add(listener)
+        listenersByChannel.set(channel, listeners)
+        return () => {
+          listeners.delete(listener)
+        }
+      }
+    })
+    const received = new Map<string, unknown[]>()
+    const releases: (() => void)[] = []
+
+    for (const [method, channel] of Object.entries(EVENT_CHANNELS)) {
+      const subscribe = bridge[method as keyof DesktopBridge] as unknown as (
+        listener: (value: unknown) => void
+      ) => () => void
+      releases.push(
+        subscribe((value) => {
+          const values = received.get(channel) ?? []
+          values.push(value)
+          received.set(channel, values)
+        })
+      )
+    }
+
+    expect([...listenersByChannel.keys()]).toEqual(Object.values(EVENT_CHANNELS))
+
+    const emit = (channel: string, value: unknown): void => {
+      listenersByChannel.get(channel)?.forEach((listener) => listener(value))
+    }
+    for (const [method, channel] of Object.entries(EVENT_CHANNELS)) {
+      emit(channel, { channel, method })
+      expect(received.get(channel)).toEqual([{ channel, method }])
+    }
+
+    releases.forEach((release) => release())
+
+    for (const [method, channel] of Object.entries(EVENT_CHANNELS)) {
+      emit(channel, { channel, method: `${method}-after-release` })
+    }
+    for (const [method, channel] of Object.entries(EVENT_CHANNELS)) {
+      expect(received.get(channel)).toEqual([{ channel, method }])
+    }
+  })
+
+  it('拖入文件返回本机路径结果', async () => {
+    const bridge = createDesktopBridge({
+      invoke: async () => ({ code: 2000, msg: '成功' }),
+      subscribe: () => () => undefined
+    })
+    const file = { path: 'D:/作品/封面.png' } as unknown as Parameters<
+      DesktopBridge['pathForDroppedFile']
+    >[0]
+
+    await expect(bridge.pathForDroppedFile(file)).resolves.toEqual({
+      code: 2000,
+      msg: '已取得文件路径',
+      data: 'D:/作品/封面.png'
+    })
   })
 })

@@ -26,27 +26,29 @@ import { selectionsCover, waitingKind } from './graph/stateFacts'
 export type { WebGalGenerationGraphDependencies } from './graph/graphDependencies'
 export { generationInteraction } from './graph/stateFacts'
 
-const NODE_NAMES = [
-  'prepare',
-  'writeCandidate',
-  'validateCandidate',
-  'waitForHuman',
-  'finalize',
-  'repair',
-  'retry',
-  'settle'
-] as const
+type NodeName =
+  | 'prepare'
+  | 'writeCandidate'
+  | 'validateCandidate'
+  | 'waitForHuman'
+  | 'finalize'
+  | 'repair'
+  | 'retry'
+  | 'settle'
 
 /** 只构建场景图；运行授权、预算、取消和凭据留在闭包，不序列化进状态。 */
 export type WebGalGenerationGraph = CompiledStateGraph<
   WebGalGenerationStateValue,
   typeof WebGalGenerationState.Update,
-  '__start__' | (typeof NODE_NAMES)[number],
+  '__start__' | NodeName,
   typeof WebGalGenerationState.spec,
   typeof WebGalGenerationState.spec
 >
 
-function prepareNode(deps: WebGalGenerationGraphDependencies, state: WebGalGenerationStateValue) {
+function prepareNode(
+  deps: WebGalGenerationGraphDependencies,
+  state: WebGalGenerationStateValue
+): Partial<WebGalGenerationStateValue> {
   if (!deps.runtime || !deps.agent || !deps.budget)
     throw new AppException({ code: ErrorCodes.internalError, msg: '只读历史图不能执行生成' })
   const execution = {
@@ -72,7 +74,7 @@ function prepareNode(deps: WebGalGenerationGraphDependencies, state: WebGalGener
 function waitForHumanNode(
   deps: WebGalGenerationGraphDependencies,
   state: WebGalGenerationStateValue
-) {
+): Partial<WebGalGenerationStateValue> {
   // 候选一旦存在，题组不再是本次等待的事实；旧检查点里的题组也不再投影。
   const questions = state.execution.candidateSnapshotId ? [] : (state.questions ?? [])
   const kind = waitingKind(state)

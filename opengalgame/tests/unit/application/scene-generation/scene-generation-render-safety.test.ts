@@ -36,11 +36,11 @@ import type { SceneGenerationStateVO } from '@application/scene-generation/vo/Sc
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectErrorCodes } from '@domain/projects/errors/ProjectErrorCodes'
-import { SceneCanvasErrorCodes } from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
-import { SceneGenerationCandidatePreviewServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationCandidatePreviewServiceImpl'
-import { SceneGenerationControlServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationControlServiceImpl'
-import { SceneGenerationLaunchServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationLaunchServiceImpl'
-import { SceneGenerationRenderQueryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationRenderQueryServiceImpl'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
+import { PreviewSceneGenerationCandidate } from '@application/scene-generation/services/impl/PreviewSceneGenerationCandidate'
+import { ControlSceneGeneration } from '@application/scene-generation/services/impl/ControlSceneGeneration'
+import { LaunchSceneGeneration } from '@application/scene-generation/services/impl/LaunchSceneGeneration'
+import { QuerySceneGenerationRender } from '@application/scene-generation/services/impl/QuerySceneGenerationRender'
 import type { SceneGenerationRenderDependencies } from '@application/scene-generation/services/impl/SceneGenerationRenderDependencies'
 import {
   createSceneGenerationFixture,
@@ -167,7 +167,7 @@ it('成功启动绑定素材正文和编排版本，并固定候选审阅', asyn
   })
   expect(JSON.stringify(started)).not.toContain('projectRoot')
 
-  const control = new SceneGenerationControlServiceImpl(f.deps, f.coordinator, f.generation)
+  const control = new ControlSceneGeneration(f.deps, f.coordinator, f.generation)
   await control.pauseSceneGeneration({
     projectId: 'project-1',
     sceneId: 'scene-1',
@@ -222,7 +222,7 @@ it('成功启动绑定素材正文和编排版本，并固定候选审阅', asyn
     modelCallsUsed: 2
   })
 
-  const render = new SceneGenerationRenderQueryServiceImpl(f.deps, f.coordinator)
+  const render = new QuerySceneGenerationRender(f.deps, f.coordinator)
   const status = await render.getSceneGenerationRenderStatus({
     projectId: identity.projectId,
     sceneId: identity.sceneId,
@@ -242,7 +242,7 @@ it('成功启动绑定素材正文和编排版本，并固定候选审阅', asyn
   expect(JSON.stringify(history)).not.toContain('projectRoot')
   expect(JSON.stringify(history)).not.toContain('云还没有走')
 
-  const preview = new SceneGenerationCandidatePreviewServiceImpl(
+  const preview = new PreviewSceneGenerationCandidate(
     f.deps,
     renderDependencies(async () => {}, 'saved-version'),
     f.coordinator
@@ -286,7 +286,7 @@ it('已发布但缺少对白上下文的候选不能打开预览，齐备候选�
     ]
   }
   await f.workflow.writeExecution(execution)
-  const preview = new SceneGenerationCandidatePreviewServiceImpl(
+  const preview = new PreviewSceneGenerationCandidate(
     f.deps,
     renderDependencies(async () => {}, 'saved-version'),
     f.coordinator
@@ -303,7 +303,7 @@ it('已发布但缺少对白上下文的候选不能打开预览，齐备候选�
   await expect(preview.openSceneGenerationCandidatePreview(request)).rejects.toMatchObject({
     code: 4103
   })
-  const status = await new SceneGenerationRenderQueryServiceImpl(
+  const status = await new QuerySceneGenerationRender(
     f.deps,
     f.coordinator
   ).getSceneGenerationRenderStatus(request)
@@ -329,7 +329,7 @@ it('已发布但缺少对白上下文的候选不能打开预览，齐备候选�
     stage: Promise.resolve()
   })
   await expect(
-    new SceneGenerationCandidatePreviewServiceImpl(
+    new PreviewSceneGenerationCandidate(
       f.deps,
       dependencies,
       f.coordinator
@@ -417,7 +417,7 @@ it('暂停后的渲染状态带当前检查点，旧检查点和错绑身份仍�
   expect(JSON.stringify(started)).not.toContain('projectRoot')
   expect(JSON.stringify(started)).not.toContain('/project')
 
-  const control = new SceneGenerationControlServiceImpl(f.deps, f.coordinator, f.generation)
+  const control = new ControlSceneGeneration(f.deps, f.coordinator, f.generation)
   await control.pauseSceneGeneration({
     projectId: 'project-1',
     sceneId: 'scene-1',
@@ -425,7 +425,7 @@ it('暂停后的渲染状态带当前检查点，旧检查点和错绑身份仍�
   })
   await f.runNext()
   const execution = f.executions.get(started.operationId)!
-  const render = new SceneGenerationRenderQueryServiceImpl(f.deps, f.coordinator)
+  const render = new QuerySceneGenerationRender(f.deps, f.coordinator)
   const paused = await render.getSceneGenerationRenderStatus({
     projectId: execution.projectId,
     sceneId: execution.sceneId,
@@ -537,7 +537,7 @@ it('暂停事件读取检查点失败时保留已暂停记录，非暂停写入�
   expect(observed.report.eventCanResume).toBeNull()
   expect(observed.report.pauseCanResume).toBe(false)
   await expect(
-    new SceneGenerationRenderQueryServiceImpl(
+    new QuerySceneGenerationRender(
       observed.fixture.deps,
       observed.fixture.coordinator
     ).getSceneGenerationRenderStatus(observed.expectedRequest)
@@ -584,8 +584,8 @@ function launchFor(
   fixture: SceneGenerationTestFixture,
   saveArrangement: SceneGenerationRenderDependencies['saveArrangement'],
   arrangementVersion: string
-): SceneGenerationLaunchServiceImpl {
-  return new SceneGenerationLaunchServiceImpl(
+): LaunchSceneGeneration {
+  return new LaunchSceneGeneration(
     fixture.deps,
     renderDependencies(saveArrangement, arrangementVersion),
     fixture.generation,
@@ -678,7 +678,7 @@ async function materialInputs(arrangementVersion: string): Promise<SceneGenerati
 
 type PausedProgressObservation = {
   fixture: SceneGenerationTestFixture
-  control: SceneGenerationControlServiceImpl
+  control: ControlSceneGeneration
   expectedRequest: ResumeSceneGenerationDTO
   eventText: string
   report: {
@@ -722,8 +722,8 @@ async function observePausedProgress(
   const started = await launchFor(fixture, async () => {}, 'saved-version').startSceneGeneration(
     startRequest()
   )
-  const render = new SceneGenerationRenderQueryServiceImpl(fixture.deps, fixture.coordinator)
-  const control = new SceneGenerationControlServiceImpl(
+  const render = new QuerySceneGenerationRender(fixture.deps, fixture.coordinator)
+  const control = new ControlSceneGeneration(
     fixture.deps,
     fixture.coordinator,
     fixture.generation
@@ -788,7 +788,7 @@ async function observePausedProgress(
   }
 }
 
-it('失败按原因使用固定安全文案，旧记录映射或回退安全消息，未知原文回退阶段文案', () => {
+it('失败按原因使用固定安全文案，未知原文回退阶段文案', () => {
   const failed = {
     projectId: 'project-1',
     sceneId: 'scene-1',
@@ -827,8 +827,7 @@ it('失败按原因使用固定安全文案，旧记录映射或回退安全消�
   expect(toRenderStatusVO(failed).failure).toEqual({
     code: ErrorCodes.operationConflict,
     message: '模型连接中断，本次生成未完成。',
-    unverified: false,
-    legacy: true
+    unverified: false
   })
   expect(toRenderStatusVO(failed).updatedAt).toBeUndefined()
   expect(toRenderStatusVO({ ...failed, updatedAt: '2026-10-31T12:34:56.789Z' }).updatedAt).toBe(
@@ -852,11 +851,10 @@ it('失败按原因使用固定安全文案，旧记录映射或回退安全消�
     }).failure
   ).toEqual({
     code: ErrorCodes.operationConflict,
-    message: '重复读取没有获得新内容，本次生成已停止',
+    message: '本次生成未完成',
     reference: 'a1b2c3d4e5f6',
     unverified: false,
-    candidateSnapshotId: 'candidate-1',
-    legacy: true
+    candidateSnapshotId: 'candidate-1'
   })
   expect(
     toRenderStatusVO({
@@ -899,21 +897,7 @@ it('失败按原因使用固定安全文案，旧记录映射或回退安全消�
     contextOverflow: '输入超出模型可处理范围，本次生成未完成',
     correctionsExhausted: '自动修正次数已用尽，请审阅候选后手动修改'
   } as const
-  const expectedFailureFacts = {
-    noInformationGain: ['noProgress', ['retryRepair', 'viewCandidate', 'regenerate']],
-    missingCandidateWrite: ['outputContract', ['viewCandidate', 'retryOperation', 'regenerate']],
-    outputTruncated: ['outputContract', ['viewCandidate', 'retryOperation', 'regenerate']],
-    missingStructuredResult: ['outputContract', ['viewCandidate', 'retryOperation', 'regenerate']],
-    structuredOutput: ['outputContract', ['viewCandidate', 'retryOperation', 'regenerate']],
-    modelFailure: ['modelTransient', ['retryOperation', 'viewCandidate']],
-    modelRejected: ['modelRejected', ['reviseRequirement', 'viewInputSummary']],
-    modelAccess: ['modelAuth', ['checkConnection', 'viewInputSummary']],
-    contextOverflow: ['contextOverflow', ['reduceInput', 'viewInputSummary']],
-    correctionsExhausted: ['correctionsExhausted', ['reviseRequirement', 'discard']]
-  } as const
   for (const [reason, message] of Object.entries(expectedMessages)) {
-    const [failureClass, nextActions] =
-      expectedFailureFacts[reason as keyof typeof expectedMessages]
     const failure = toRenderStatusVO({
       ...failed,
       failure: {
@@ -926,13 +910,11 @@ it('失败按原因使用固定安全文案，旧记录映射或回退安全消�
       code: ErrorCodes.operationConflict,
       message,
       reason,
-      failureClass,
-      nextActions,
       reference: 'a1b2c3d4e5f6',
-      unverified: false,
-      // 该用例的执行记录只有原因，没有持久化分类和动作，按旧记录近似标记。
-      legacy: true
+      unverified: false
     })
+    expect(failure).not.toHaveProperty('failureClass')
+    expect(failure).not.toHaveProperty('nextActions')
     expect(failure).not.toHaveProperty('category')
     expect(failure).not.toHaveProperty('httpStatus')
     expect(failure).not.toHaveProperty('causeName')
@@ -990,8 +972,6 @@ it('只有 commitUnknown 标记待核对，5102 本身不改变核对状态', ()
     code: ErrorCodes.operationConflict,
     message: '提交结果待核对',
     reason: 'modelFailure',
-    failureClass: 'modelTransient',
-    nextActions: ['retryOperation', 'viewCandidate'],
     reference: 'c0a17b93e52d',
     unverified: true
   })
@@ -1005,8 +985,6 @@ it('只有 commitUnknown 标记待核对，5102 本身不改变核对状态', ()
     code: ErrorCodes.operationConflict,
     message: '候选或基线冲突，需要重新核对',
     reason: 'modelFailure',
-    failureClass: 'modelTransient',
-    nextActions: ['retryOperation', 'viewCandidate'],
     reference: 'c0a17b93e52d',
     unverified: false
   })
@@ -1018,8 +996,7 @@ it('只有 commitUnknown 标记待核对，5102 本身不改变核对状态', ()
   ).toEqual({
     code: ErrorCodes.communicationFailed,
     message: '提交结果待核对',
-    unverified: false,
-    legacy: true
+    unverified: false
   })
   expect(toRenderStatusVO({ ...failed, failure: undefined }).failure).toBeUndefined()
 })
@@ -1252,7 +1229,6 @@ it('待核对中断可按只读授权查看已有候选，暂停不授予只读�
     unverified: true
   })
   expect(rendered.failure?.nextActions).toEqual(['retryOperation', 'viewCandidate'])
-  expect(rendered.failure?.legacy).toBeUndefined()
 
   const paused = toRenderStatusVO(
     projectionExecution({ ...facts, interruptReason: 'paused', failure: undefined })
@@ -1312,7 +1288,7 @@ it('最近进度只取执行时间线最后 6 条安全文案，旧记录保持�
   expect(recentProgress(projectionExecution())).toBeUndefined()
 })
 
-it('历史摘要补安全失败原因和旧记录标记，旧记录不补造原因', () => {
+it('历史摘要只补执行记录已有的安全失败原因，不补造原因或旧记录标记', () => {
   const createdAt = '2026-11-04T12:00:00.000Z'
   const failed = projectionExecution({
     checkpointId: 'checkpoint-1',
@@ -1332,21 +1308,20 @@ it('历史摘要补安全失败原因和旧记录标记，旧记录不补造原�
     stage: 'failed',
     failureReason: 'modelFailure'
   })
-  expect(toHistorySummary(failed, createdAt)?.legacy).toBeUndefined()
 
-  const legacySummary = toHistorySummary(
+  const missingReason = toHistorySummary(
     projectionExecution({
       checkpointId: 'checkpoint-1',
       failure: { code: ErrorCodes.operationConflict, message: '模型连接中断，本次生成未完成。' }
     }),
     createdAt
   )
-  expect(legacySummary).toMatchObject({ boundary: 'failed', legacy: true })
-  expect(legacySummary && 'failureReason' in legacySummary).toBe(false)
-  expect(JSON.stringify(legacySummary)).not.toContain('projectRoot')
+  expect(missingReason).toMatchObject({ boundary: 'failed' })
+  expect(missingReason && 'failureReason' in missingReason).toBe(false)
+  expect(JSON.stringify(missingReason)).not.toContain('projectRoot')
 })
 
-it('执行记录的安全分类和动作优先于原因映射', () => {
+it('执行记录的安全分类和动作原样投影', () => {
   const rendered = toRenderStatusVO(
     projectionExecution({
       failure: {
@@ -1365,10 +1340,9 @@ it('执行记录的安全分类和动作优先于原因映射', () => {
     nextActions: ['returnToCanvas', 'viewInputSummary'],
     reference: '0123456789ab'
   })
-  expect(rendered.failure?.legacy).toBeUndefined()
 })
 
-it('有安全分类但缺下一步动作的失败标旧记录并按分类补足动作', () => {
+it('有安全分类但缺下一步动作时保持缺失，不在投影补造', () => {
   const execution = projectionExecution({
     checkpointId: 'checkpoint-1',
     failure: {
@@ -1379,18 +1353,16 @@ it('有安全分类但缺下一步动作的失败标旧记录并按分类补足�
     }
   })
   expect(toRenderStatusVO(execution).failure).toMatchObject({
-    failureClass: 'outputContract',
-    nextActions: ['viewCandidate', 'retryOperation', 'regenerate'],
-    legacy: true
+    failureClass: 'outputContract'
   })
+  expect(toRenderStatusVO(execution).failure).not.toHaveProperty('nextActions')
   expect(toHistorySummary(execution, '2026-11-04T12:00:00.000Z')).toMatchObject({
     boundary: 'failed',
-    failureReason: 'missingStructuredResult',
-    legacy: true
+    failureReason: 'missingStructuredResult'
   })
 })
 
-it('待核对或候选冲突中断不补历史失败原因和旧记录标记', () => {
+it('待核对或候选冲突中断不补历史失败原因', () => {
   const createdAt = '2026-11-04T12:00:00.000Z'
   for (const interruptReason of ['commitUnknown', 'candidateConflict'] as const) {
     const execution = projectionExecution({
@@ -1411,7 +1383,6 @@ it('待核对或候选冲突中断不补历史失败原因和旧记录标记', (
     const summary = toHistorySummary(execution, createdAt)
     expect(summary).toMatchObject({ boundary: 'failed', stage: 'failed' })
     expect(summary && 'failureReason' in summary).toBe(false)
-    expect(summary?.legacy).toBeUndefined()
   }
 })
 
@@ -1479,9 +1450,7 @@ it('状态查询在 running 时不透出上一轮人工交互，waiting 仍可�
 })
 
 it('输入摘要附带文档、提示词和关系明细，不泄露正文与路径', () => {
-  const rendered = toRenderStatusVO(
-    projectionExecution({ inputSnapshot: detailInputs() })
-  )
+  const rendered = toRenderStatusVO(projectionExecution({ inputSnapshot: detailInputs() }))
   expect(rendered.inputSummary.details).toEqual({
     documents: ['角色与场景', '世界观'],
     prompts: ['基础生成 · 场景', '卡片提示 · 卡片×2、关系×1'],
@@ -1530,10 +1499,7 @@ it('没有快照明细时不输出 details', () => {
 })
 
 it('提示词没有标题时回退为未命名提示词，重复名称编号且不展示正文', () => {
-  const prompt = (
-    id: string,
-    title: string
-  ): SceneGenerationInputsDTO['prompts'][number] => ({
+  const prompt = (id: string, title: string): SceneGenerationInputsDTO['prompts'][number] => ({
     id,
     title,
     body: '提示词正文不应进入输入摘要',
@@ -1629,10 +1595,7 @@ it('同名关系按数据顺序编号并保留记录说明，唯一名称不编�
 })
 
 it('重复文档标题按数据顺序编号，唯一标题保持原样', () => {
-  const document = (
-    id: string,
-    title: string
-  ): SceneGenerationInputsDTO['documents'][number] => ({
+  const document = (id: string, title: string): SceneGenerationInputsDTO['documents'][number] => ({
     id,
     sourceId: `source-${id}`,
     title,

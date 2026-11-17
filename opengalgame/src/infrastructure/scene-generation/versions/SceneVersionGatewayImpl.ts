@@ -13,7 +13,7 @@ import type { ProjectWorkspaceVO } from '@application/projects/vo/ProjectWorkspa
 import type { VersionSettlementVO } from '@application/project-versioning/vo/ProjectVersioningVO'
 import { SceneGenerationErrorCodes } from '@domain/scene-generation/errors/SceneGenerationErrorCodes'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
-import { SceneGenerationVersionConflict } from '@application/scene-generation/policies/SceneGenerationVersionConflict'
+import { SceneGenerationVersionConflict } from '@application/scene-generation/errors/SceneGenerationVersionConflict'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { readSceneLock } from '@infrastructure/scenes/sceneLockReader'

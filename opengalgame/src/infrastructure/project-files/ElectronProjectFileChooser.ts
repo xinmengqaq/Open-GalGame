@@ -1,6 +1,6 @@
 import { dialog, type BrowserWindow, type OpenDialogOptions } from 'electron'
 
-import type { ProjectFileChooser } from '@interfaces/project-files/ipc/ProjectFileChooser'
+import type { ProjectFileChooser } from '@application/project-files/ports/ProjectFileChooser'
 
 /** 用系统文件选择器取得待导入路径。 */
 export class ElectronProjectFileChooser implements ProjectFileChooser {

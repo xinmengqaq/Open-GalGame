@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { assertUserDirectory } from '@bootstrap/userDirectory'

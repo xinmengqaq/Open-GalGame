@@ -1,4 +1,3 @@
-import type { OpenDirectoryDTO } from '@application/system-path/dto/OpenDirectoryDTO'
 import type { ExportSavedSceneDTO } from '@application/scene-export/dto/ExportSavedSceneDTO'
 import type { ReadLatestPreviewSaveDTO } from '@application/scene-export/dto/ReadLatestPreviewSaveDTO'
 import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewSaveVersionVO'
@@ -6,7 +5,6 @@ import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExpo
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { communicationFailureResult } from '../../client/communicationFailure'
 import type { DesktopBridge } from '../../client/DesktopBridge'
-import { parseOpenDirectoryResult } from '../../system-path/contracts/SystemPathResponseSchema'
 import {
   parseLatestPreviewSaveResult,
   parseSceneExportResult
@@ -35,14 +33,6 @@ export class SceneExportClientImpl implements SceneExportClient {
         parseLatestPreviewSaveResult(await this.bridge.readLatestPreviewSave(request)) ??
         communicationFailureResult()
       )
-    } catch {
-      return communicationFailureResult()
-    }
-  }
-
-  async openDirectory(request: OpenDirectoryDTO): Promise<AjaxResult<null>> {
-    try {
-      return parseOpenDirectoryResult(await this.bridge.openDirectory(request)) ?? communicationFailureResult()
     } catch {
       return communicationFailureResult()
     }

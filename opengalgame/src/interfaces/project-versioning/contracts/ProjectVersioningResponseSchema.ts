@@ -7,11 +7,7 @@ import type {
 } from '@application/project-versioning/vo/VersionHistoryVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-
-const failedResultSchema = z.strictObject({
-  code: z.number().refine((code) => code !== ErrorCodes.success),
-  msg: z.string()
-})
+import { failureResultSchema } from '../../contracts/FailureResultSchema'
 
 const targetSchema = z.strictObject({
   kind: z.string(),
@@ -52,7 +48,7 @@ const historyPageResultSchema = z.union([
     msg: z.string(),
     data: historyPageSchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 
 const undoResultAjaxSchema = z.union([
@@ -61,7 +57,7 @@ const undoResultAjaxSchema = z.union([
     msg: z.string(),
     data: undoResultSchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 
 const clearResultAjaxSchema = z.union([
@@ -70,7 +66,7 @@ const clearResultAjaxSchema = z.union([
     msg: z.string(),
     data: clearResultSchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 
 function parseResult<T>(schema: z.ZodType<T>, value: unknown): T | null {

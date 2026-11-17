@@ -22,7 +22,7 @@ export function useProjectMedia(
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
       if (!context || !enabled || sourceId.length === 0) return () => undefined
-      const acquired = context.cache.acquire(sourceId, generation, onStoreChange)
+      const acquired = context.cache.acquire(sourceId, { generation, onChange: onStoreChange })
       return acquired.release
     },
     [context, enabled, generation, sourceId]
@@ -32,7 +32,7 @@ export function useProjectMedia(
     if (!context || !enabled || sourceId.length === 0 || context.projectId.length === 0) {
       return IDLE
     }
-    return context.cache.peek(sourceId, generation) ?? LOADING
+    return context.cache.peek(sourceId, { generation }) ?? LOADING
   }, [context, enabled, generation, sourceId])
 
   return useSyncExternalStore(subscribe, snapshot, snapshot)

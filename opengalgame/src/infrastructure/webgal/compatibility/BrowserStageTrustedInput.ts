@@ -69,10 +69,6 @@ export function createBrowserStageTrustedInput(): CandidateTrustedInputSource {
   }
 }
 
-export function browserStageInputUrl(baseUrl: string, pageId: string): string {
-  return `${baseUrl}/__opengalgame/stage-input/${encodeURIComponent(pageId)}`
-}
-
 export function serveBrowserStageInput(
   request: IncomingMessage,
   response: ServerResponse
@@ -410,6 +406,7 @@ export function stageInputPage(origin: string): string {
           else if (action.kind === 'activate') await post({ ok: clickText(action.text) })
           else await post({ ok: frame.contentDocument.querySelector('[class*="langSelectButton"]') === null })
         } catch {
+          // 点击结果回报失败可容忍：下一轮轮询继续，不产生未处理拒绝。
           try {
             await post({ ok: false })
           } catch {}

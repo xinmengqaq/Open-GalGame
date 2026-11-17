@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { ProjectWorkspaceServiceImpl } from '@application/projects/services/impl/ProjectWorkspaceServiceImpl'
+import { ManageProjectWorkspace } from '@application/projects/services/impl/ManageProjectWorkspace'
 import type { ProjectBaselineGateway } from '@application/projects/ports/ProjectBaselineGateway'
 import type { ProjectSceneIdentityGateway } from '@application/projects/ports/ProjectSceneIdentityGateway'
 import type { ProjectSceneSeedGateway } from '@application/projects/ports/ProjectSceneSeedGateway'
@@ -20,7 +20,7 @@ function service(overrides?: {
   seeds?: Partial<ProjectSceneSeedGateway>
   baseline?: Partial<ProjectBaselineGateway>
 }): {
-  workspace: ProjectWorkspaceServiceImpl
+  workspace: ManageProjectWorkspace
   identity: ProjectSceneIdentityGateway
   seeds: ProjectSceneSeedGateway
   baseline: ProjectBaselineGateway
@@ -41,7 +41,7 @@ function service(overrides?: {
     ...overrides?.baseline
   }
   return {
-    workspace: new ProjectWorkspaceServiceImpl({ identity, seeds, baseline }),
+    workspace: new ManageProjectWorkspace({ identity, seeds, baseline }),
     identity,
     seeds,
     baseline

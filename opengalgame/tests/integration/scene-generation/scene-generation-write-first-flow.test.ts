@@ -8,7 +8,8 @@ import {
   SceneGenerationCoordinator,
   type SceneGenerationDependencies
 } from '@application/scene-generation/services/impl/SceneGenerationCoordinator'
-import { SceneGenerationRenderQueryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationRenderQueryServiceImpl'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
+import { QuerySceneGenerationRender } from '@application/scene-generation/services/impl/QuerySceneGenerationRender'
 import {
   generationFixture,
   request
@@ -285,6 +286,7 @@ it('运行中操作在历史为空时仍可读取最近一次生成，取消后�
 
   // 运行中记录已经落盘，但没有检查点；历史读空时仍要能按场景恢复运行状态。
   const dependencies: SceneGenerationDependencies = {
+    domain: new SceneGenerationDomainServiceImpl(),
     input: f.app.ports.input,
     executions: f.app.ports.executions,
     workspace: f.app.ports.workspace,
@@ -299,7 +301,7 @@ it('运行中操作在历史为空时仍可读取最近一次生成，取消后�
     publishProgress: () => undefined
   }
   const coordinator = new SceneGenerationCoordinator(dependencies)
-  const renderQuery = new SceneGenerationRenderQueryServiceImpl(dependencies, coordinator)
+  const renderQuery = new QuerySceneGenerationRender(dependencies, coordinator)
   const scope = { projectId: request.projectId, sceneId: request.sceneId }
 
   await vi.waitFor(async () => {

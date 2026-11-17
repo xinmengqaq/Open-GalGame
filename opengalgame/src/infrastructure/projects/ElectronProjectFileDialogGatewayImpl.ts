@@ -102,7 +102,9 @@ export class ElectronProjectFileDialogGatewayImpl implements ProjectFileDialogGa
         { lastSaveLocation: directory } satisfies ProjectPreferencesDocument,
         failure
       )
-    } catch {}
+    } catch {
+      // 记住保存位置失败不影响本次选择；不抛出、不重试。
+    }
   }
 
   /**

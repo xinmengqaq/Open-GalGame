@@ -11,6 +11,10 @@ export const READ_CHANGED_CODE = 4317
 export const READ_FAILED_CODE = 4318
 /** 作品提交结果不明。 */
 export const COMMIT_UNCLEAR_CODE = 4326
+/** 与主进程通信中断，写入结果待确认。 */
+export const COMMUNICATION_FAILED_CODE = 5102
+/** 已确认未提交的文件操作失败。 */
+export const CATALOG_WRITE_FAILED_CODE = 4329
 
 /**
  * @param code - 失败码。

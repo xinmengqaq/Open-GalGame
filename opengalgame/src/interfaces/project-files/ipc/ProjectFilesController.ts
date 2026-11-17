@@ -1,5 +1,9 @@
+import type { ProjectFileChooser } from '@application/project-files/ports/ProjectFileChooser'
 import type { ProjectFilesApplicationService } from '@application/project-files/services/ProjectFilesApplicationService'
-import type { ProjectFileOperationSettlementVO } from '@application/project-files/vo/ProjectFileOperationVO'
+import type {
+  ProjectFileOperationRecoveryVO,
+  ProjectFileOperationSettlementVO
+} from '@application/project-files/vo/ProjectFileOperationVO'
 import type { ProjectFilesInspectionVO } from '@application/project-files/vo/ProjectFilesInspectionVO'
 import type {
   ProjectFolderDeletionPlanVO,
@@ -17,7 +21,6 @@ import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { IpcExceptionHandler } from '../../ipc/errors/IpcExceptionHandler'
 import { createRequestHandler, type IpcRequestHandler } from '../../ipc/requestHandler'
 import type { IpcRequestAccess } from '../../ipc/RequestSchema'
-import type { ProjectFileChooser } from './ProjectFileChooser'
 import {
   chooseProjectFilesSchema,
   copyProjectFileSchema,
@@ -33,6 +36,7 @@ import {
   projectFileScopeSchema,
   projectFolderScopeSchema,
   readProjectFileOperationSchema,
+  recoverProjectFileOperationsSchema,
   readProjectInputSourcesSchema,
   readProjectMediaSchema,
   renameProjectFileSchema,
@@ -243,6 +247,19 @@ export class ProjectFilesController {
   ): Promise<AjaxResult<ProjectFileOperationSettlementVO>> {
     return this.handle(readProjectFileOperationSchema, input, access, '操作事实已核对', (request) =>
       this.projectFiles.readProjectFileOperation(request)
+    )
+  }
+
+  recoverProjectFileOperations(
+    input: unknown,
+    access: IpcRequestAccess
+  ): Promise<AjaxResult<readonly ProjectFileOperationRecoveryVO[]>> {
+    return this.handle(
+      recoverProjectFileOperationsSchema,
+      input,
+      access,
+      '操作终态已恢复',
+      (request) => this.projectFiles.recoverProjectFileOperations(request)
     )
   }
 

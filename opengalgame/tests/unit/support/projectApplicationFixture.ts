@@ -1,12 +1,12 @@
 import { vi } from 'vitest'
 
-import { ProjectApplicationServiceImpl } from '@application/projects/services/impl/ProjectApplicationServiceImpl'
+import { ManageProjects } from '@application/projects/services/impl/ManageProjects'
 import { ProjectDomainServiceImpl } from '@domain/projects/services/impl/ProjectDomainServiceImpl'
 
 export function createProjectApplicationFixture(
   registrations: { id: string; directory: string }[] = []
 ): {
-  service: ProjectApplicationServiceImpl
+  service: ManageProjects
   dialogs: Record<
     'selectDirectory' | 'takeSaveLocation' | 'chooseSaveLocation' | 'clearSaveLocation',
     ReturnType<typeof vi.fn>
@@ -21,6 +21,7 @@ export function createProjectApplicationFixture(
   >
   registration: Record<'registerProject' | 'removeRegistration', ReturnType<typeof vi.fn>>
   logger: Record<'debug' | 'info' | 'warn' | 'error', ReturnType<typeof vi.fn>>
+  recoverProjectFiles: ReturnType<typeof vi.fn>
 } {
   const storage = {
     inspect: vi.fn(),
@@ -46,7 +47,8 @@ export function createProjectApplicationFixture(
     clearSaveLocation: vi.fn()
   }
   const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-  const service = new ProjectApplicationServiceImpl({
+  const recoverProjectFiles = vi.fn(async () => undefined)
+  const service = new ManageProjects({
     dialogs,
     storage,
     journal: {
@@ -66,7 +68,16 @@ export function createProjectApplicationFixture(
     listQuery,
     registration,
     logger,
-    workspace: { ensureProjectWorkspace: vi.fn(), inspectProjectWorkspace: vi.fn() }
+    workspace: { ensureProjectWorkspace: vi.fn(), inspectProjectWorkspace: vi.fn() },
+    recoverProjectFiles
   })
-  return { service, dialogs, storage, listQuery, registration, logger }
+  return {
+    service,
+    dialogs,
+    storage,
+    listQuery,
+    registration,
+    logger,
+    recoverProjectFiles
+  }
 }

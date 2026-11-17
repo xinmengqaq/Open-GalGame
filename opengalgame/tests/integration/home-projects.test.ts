@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as git from 'isomorphic-git'
 import * as fs from 'node:fs'
 
-import { ProjectWorkspaceServiceImpl } from '@application/projects/services/impl/ProjectWorkspaceServiceImpl'
+import { ManageProjectWorkspace } from '@application/projects/services/impl/ManageProjectWorkspace'
 import { AppException } from '@common/errors/AppException'
 import { ProjectErrorCodes } from '@domain/projects/errors/ProjectErrorCodes'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
@@ -14,7 +14,7 @@ import { LocalProjectSceneIdentityGatewayImpl } from '@infrastructure/projects/L
 import { LocalProjectSceneSeedGatewayImpl } from '@infrastructure/projects/LocalProjectSceneSeedGatewayImpl'
 import { createProjectServices } from '@bootstrap/projects'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
-import { arrangementPath } from '@infrastructure/project-files/projectFilePaths'
+import { arrangementPath } from '@infrastructure/scene-canvas/sceneCanvasPaths'
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 const closers: Array<() => Promise<void>> = []
@@ -27,7 +27,7 @@ async function fixture(): Promise<
     root: string
     userDirectory: string
     workspace: string
-    workspaceService: ProjectWorkspaceServiceImpl
+    workspaceService: ManageProjectWorkspace
     dialogs: {
       selectDirectory: ReturnType<typeof vi.fn<() => Promise<{ directory: string } | null>>>
       takeSaveLocation: ReturnType<typeof vi.fn<() => Promise<{ directory: string } | null>>>
@@ -47,7 +47,7 @@ async function fixture(): Promise<
     clearSaveLocation: vi.fn()
   }
   const userDirectory = join(root, 'app')
-  const workspaceService = new ProjectWorkspaceServiceImpl({
+  const workspaceService = new ManageProjectWorkspace({
     identity: new LocalProjectSceneIdentityGatewayImpl(userDirectory),
     seeds: new LocalProjectSceneSeedGatewayImpl(userDirectory),
     baseline: new LocalProjectBaselineGatewayImpl(

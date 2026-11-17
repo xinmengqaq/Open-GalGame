@@ -5,6 +5,7 @@ import type {
   SceneGenerationExecution,
   SceneGenerationRepairContext
 } from '@application/scene-generation/models/SceneGenerationExecution'
+import type { ReplySceneGenerationInteractionDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
 import {
   buildSceneGenerationRepairContext,
   repairContextIssue
@@ -76,7 +77,10 @@ function sourceCheckpoint(execution: SceneGenerationExecution): SceneGenerationC
   }
 }
 
-function reviseReply(body: string, kind: 'revise' | 'clarify' = 'revise') {
+function reviseReply(
+  body: string,
+  kind: 'revise' | 'clarify' = 'revise'
+): ReplySceneGenerationInteractionDTO {
   return {
     projectId: 'project-1',
     sceneId: 'scene-1',

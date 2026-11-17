@@ -8,9 +8,9 @@ import { AppException } from '@common/errors/AppException'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 import type { DialogueEditPlan } from '@domain/scene-preview/models/DialogueEditPlan'
 import { SceneExportErrorCodes } from '@domain/scene-export/errors/SceneExportErrorCodes'
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import type { PreviewRuntimeGateway } from '@application/scene-preview/ports/PreviewRuntimeGateway'
-import { ScenePreviewApplicationServiceImpl } from '@application/scene-preview/services/impl/ScenePreviewApplicationServiceImpl'
+import { createScenePreviewApplication } from '@application/scene-preview/services/impl/createScenePreviewApplication'
 import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
@@ -208,12 +208,15 @@ describe('首版预览数据适配', () => {
     }
     const runtime: PreviewRuntimeGateway = {
       prepare: unexpected,
-      applyDraftDialogue: unexpected,
+      rebaseSession: unexpected,
+      setSceneTextOverlay: unexpected,
+      currentSceneTextOverlayRevision: unexpected,
+      clearSceneTextOverlay: unexpected,
       playDialogue: unexpected,
       subscribe: () => () => undefined,
       release: async () => undefined
     }
-    const service = new ScenePreviewApplicationServiceImpl({
+    const service = createScenePreviewApplication({
       artifacts: new ScenePreviewArtifactGatewayImpl(
         locations,
         new SceneSourceReaderGatewayImpl(),
@@ -274,7 +277,7 @@ describe('首版预览数据适配', () => {
     expect(text).not.toContain('第一次保存')
     const exporting = new LocalSceneExportSourceGateway(
       world.userDirectory,
-      new ProjectVersioningApplicationServiceImpl({
+      new ManageProjectVersioning({
         ...createProjectVersioningGateways(world.userDirectory),
         nextId: () => 'op-export-read'
       }),
@@ -444,12 +447,15 @@ describe('首版预览数据适配', () => {
     const versions = gateway(world.userDirectory, ['op-range-1', 'history-range-1'])
     const runtime: PreviewRuntimeGateway = {
       prepare: unexpectedRuntime,
-      applyDraftDialogue: unexpectedRuntime,
+      rebaseSession: unexpectedRuntime,
+      setSceneTextOverlay: unexpectedRuntime,
+      currentSceneTextOverlayRevision: unexpectedRuntime,
+      clearSceneTextOverlay: unexpectedRuntime,
       playDialogue: unexpectedRuntime,
       subscribe: () => () => undefined,
       release: async () => undefined
     }
-    const service = new ScenePreviewApplicationServiceImpl({
+    const service = createScenePreviewApplication({
       artifacts: new ScenePreviewArtifactGatewayImpl(
         locations,
         new SceneSourceReaderGatewayImpl(),
@@ -462,7 +468,7 @@ describe('首版预览数据适配', () => {
       nextId: () => 'preview-error'
     })
     const before = commitCount(world.projectRoot)
-    const versioning = new ProjectVersioningApplicationServiceImpl({
+    const versioning = new ManageProjectVersioning({
       ...createProjectVersioningGateways(world.userDirectory),
       nextId: () => {
         const next = ['op-lock-1', 'history-lock-1'].shift()
@@ -551,7 +557,7 @@ describe('首版预览数据适配', () => {
     expect(text).not.toContain('锁定后的正文')
     expect(text).not.toContain('缺少范围的正文')
 
-    const unknownVersioning = new ProjectVersioningApplicationServiceImpl({
+    const unknownVersioning = new ManageProjectVersioning({
       ...createProjectVersioningGateways(world.userDirectory),
       nextId: () => 'op-unused'
     })
@@ -803,9 +809,9 @@ async function registeredScene(
 function versioningService(
   userDirectory: string,
   ids: readonly string[]
-): ProjectVersioningApplicationServiceImpl {
+): ManageProjectVersioning {
   const remaining = [...ids]
-  return new ProjectVersioningApplicationServiceImpl({
+  return new ManageProjectVersioning({
     ...createProjectVersioningGateways(userDirectory),
     nextId: () => {
       const next = remaining.shift()

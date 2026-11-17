@@ -59,7 +59,9 @@ export function registerProjectFilesIpc(options: {
         options.projectFiles.deleteProjectFolder(input, access(event)),
       /** 按操作标识核对提交是否已经落地。 */
       'project-files:read-operation': (event, input) =>
-        options.projectFiles.readProjectFileOperation(input, access(event))
+        options.projectFiles.readProjectFileOperation(input, access(event)),
+      'project-files:recover-operations': (event, input) =>
+        options.projectFiles.recoverProjectFileOperations(input, access(event))
     }
 
   for (const [channel, handler] of Object.entries(handlers)) ipcMain.handle(channel, handler)

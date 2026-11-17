@@ -73,7 +73,7 @@ export function createFinalizeNode(deps: WebGalGenerationGraphDependencies) {
     // 结构化输出违约在收尾阶段仍是 outputContract，不能重按“无进展”收尾。
     const contractFailure = classified?.failureClass === 'outputContract' ? classified : undefined
     if (!agentError && output) {
-      const action = output.action ?? 'submit_scene_result'
+      const action = output.action
       if (action === 'report_blocked') {
         const reason = output.blockedReason ?? '模型报告无法继续'
         return {

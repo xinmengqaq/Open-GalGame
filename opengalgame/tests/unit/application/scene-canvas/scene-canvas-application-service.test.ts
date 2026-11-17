@@ -2,15 +2,18 @@ import { describe, expect, it } from 'vitest'
 
 import type { ProjectFilesApplicationService } from '@application/project-files/services/ProjectFilesApplicationService'
 import type { ProjectInputSourceVO } from '@application/project-files/vo/ProjectInputSourceVO'
-import { SceneCanvasApplicationServiceImpl } from '@application/scene-canvas/services/impl/SceneCanvasApplicationServiceImpl'
+import { EditSceneCanvas } from '@application/scene-canvas/services/impl/EditSceneCanvas'
 import type {
   SceneCanvasVersionKeepRequest,
   SceneCanvasVersionSettlement
 } from '@application/scene-canvas/models/SceneCanvasSaveFacts'
-import type { SceneCanvasArrangementPersistenceGateway } from '@application/scene-canvas/ports/SceneCanvasArrangementPersistenceGateway'
+import type {
+  SceneCanvasArrangementPersistenceGateway,
+  SceneCanvasPreservedArrangementFields
+} from '@application/scene-canvas/ports/SceneCanvasArrangementPersistenceGateway'
 import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
 import { AppException } from '@common/errors/AppException'
-import { SceneCanvasErrorCodes } from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import { ProjectErrorCodes } from '@domain/projects/errors/ProjectErrorCodes'
 
 function arrangement(): SceneCanvasArrangementVO {
@@ -53,7 +56,7 @@ function createService(options?: {
   writeError?: Error
   workspaceReady?: boolean
 }): {
-  service: SceneCanvasApplicationServiceImpl
+  service: EditSceneCanvas
   persistence: {
     current: SceneCanvasArrangementVO | null
     writes: SceneCanvasArrangementVO[]
@@ -70,12 +73,21 @@ function createService(options?: {
     writes: [] as SceneCanvasArrangementVO[],
     reads: [] as string[]
   }
+  const emptyPreserved: SceneCanvasPreservedArrangementFields = {
+    cards: new Map(),
+    relations: new Map()
+  }
   const persistence: SceneCanvasArrangementPersistenceGateway = {
     readArrangement: (projectId, sceneId, canvasId) => {
       persistenceState.reads.push(`${projectId}/${sceneId}/${canvasId}`)
       if (options?.readError) return Promise.reject(options.readError)
       return Promise.resolve(
-        persistenceState.current === null ? null : structuredClone(persistenceState.current)
+        persistenceState.current === null
+          ? null
+          : {
+              arrangement: structuredClone(persistenceState.current),
+              preserved: emptyPreserved
+            }
       )
     },
     writeArrangement: (value) => {
@@ -115,7 +127,7 @@ function createService(options?: {
   }
   let sequence = 0
   return {
-    service: new SceneCanvasApplicationServiceImpl({
+    service: new EditSceneCanvas({
       sources,
       persistence,
       versions,

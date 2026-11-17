@@ -1,5 +1,5 @@
 import type { VersionContentSource, VersionSaveMode } from '../dto/ProjectVersioningDTO'
-import type { VersionTarget } from '../models/VersionTarget'
+import type { VersionTarget } from '../dto/VersionTarget'
 
 /** 一条可见的用户历史。不含路径、修订或操作身份。 */
 export type VersionHistoryEntryVO = {

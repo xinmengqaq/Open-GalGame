@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { LangChainAgentFactoryImpl } from '@infrastructure/ai/factories/LangChainAgentFactoryImpl'
@@ -6,12 +7,14 @@ import { FilePromptLoader } from '@infrastructure/ai/prompts/FilePromptLoader'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { WebGalSceneAgentImpl } from '@infrastructure/scene-generation/agents/WebGalSceneAgentImpl'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { createWebGalGenerationGraph } from '@infrastructure/scene-generation/workflow/createWebGalGenerationGraph'
 import { WebGalGenerationCheckpointSaver } from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
 import { langGraphThreadKey } from '@infrastructure/workflow/WorkflowIdentity'
 import {
   generationFixture,
-  request
+  request,
+  validScript
 } from '../../../../harness/acceptance/support/generationFixture'
 
 it('业务智能体实际压缩历史后仍保留当前授权、素材、诊断与已确认要求', async () => {
@@ -19,6 +22,7 @@ it('业务智能体实际压缩历史后仍保留当前授权、素材、诊断�
   await f.app.generation.generateScene({ ...request, reviewCandidate: true })
   await f.run()
   const execution = (await f.app.ports.executions.readExecution(request))!
+  const workspace = new AiProjectFileSystemImpl(f.config.userStateRoot).locateWorkspace(execution)
   const candidate = await f.app.ports.artifacts.readCandidate(
     execution,
     execution.candidateSnapshotId!
@@ -56,7 +60,7 @@ it('业务智能体实际压缩历史后仍保留当前授权、素材、诊断�
       context: {
         budget: new ExecutionBudget({ modelAttempts: 24, toolCalls: 32, activeMs: 60000 }),
         workspace: {
-          root: execution.workspace!.rootDirectory,
+          root: workspace.rootDirectory,
           writable: true,
           writablePaths: ['game/scene/start.txt']
         }
@@ -90,7 +94,12 @@ it('实际业务检查点版本不兼容时历史和恢复共同拒绝继续', a
   const execution = (await f.app.ports.executions.readExecution(request))!
   const stateRoot = join(f.config.userStateRoot, 'ai')
   const saver = new WebGalGenerationCheckpointSaver(stateRoot)
-  const graph = createWebGalGenerationGraph({ stateRoot, saver, artifacts: f.app.ports.artifacts })
+  const graph = createWebGalGenerationGraph({
+    stateRoot,
+    saver,
+    artifacts: f.app.ports.artifacts,
+    domain: new SceneGenerationDomainServiceImpl()
+  })
   const config = await graph.updateState(
     { configurable: { thread_id: langGraphThreadKey(execution) } },
     {
@@ -124,7 +133,8 @@ it('实际业务检查点版本不兼容时历史和恢复共同拒绝继续', a
     })
   ).rejects.toThrow('不兼容')
   expect(f.bodies).toHaveLength(count)
-  expect(
-    new AiProjectFileSystemImpl(f.config.userStateRoot).locateWorkspace(execution).rootDirectory
-  ).toBe(execution.workspace!.rootDirectory)
+  const workspace = new AiProjectFileSystemImpl(f.config.userStateRoot).locateWorkspace(execution)
+  expect(await readFile(join(workspace.rootDirectory, 'game/scene/start.txt'), 'utf8')).toBe(
+    validScript
+  )
 })

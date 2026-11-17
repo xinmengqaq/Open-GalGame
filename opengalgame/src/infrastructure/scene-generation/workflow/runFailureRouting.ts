@@ -1,7 +1,7 @@
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import type { FailureClass } from '@application/scene-generation/vo/SceneGenerationFailureVO'
 import {
   SceneGenerationRunFailed,
-  type FailureClass,
   type RunFailureReason
 } from '@application/scene-generation/models/SceneGenerationRunOutcome'
 import { AppException } from '@common/errors/AppException'

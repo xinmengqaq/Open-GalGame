@@ -342,6 +342,18 @@ describe('共享 WebGAL 真实读取链', () => {
     })
   })
 
+  it('原文自带 assets/ 前缀时按字面查找，不剥前缀', async () => {
+    await write('game/scene/start.txt', 'changeBg:assets/background/room.png;')
+    await write('game/background/room.png', 'game')
+    await write('assets/background/room.png', 'assets')
+    const snapshot = await read()
+    const scene = parser.parseSceneScript(snapshot)
+    const facts = await references.checkSceneAssetReferences(snapshot, scene)
+    expect(facts.map((fact) => [fact.rawReference, fact.status])).toEqual([
+      ['assets/background/room.png', 'missing']
+    ])
+  })
+
   it('遵守已核对引擎参数，清除立绘不报缺失，未知参数和非法数值可定位', async () => {
     await write(
       'game/scene/start.txt',

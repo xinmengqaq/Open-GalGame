@@ -5,7 +5,6 @@ import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileE
 import { assertRelativePath } from '@infrastructure/git/containedPath'
 
 export const PROJECT_INPUT_FORMAT_VERSION = 1
-export const PROJECT_ARRANGEMENT_FORMAT_VERSION = 3
 /** 带 `.json` 后缀后不超过常见 255 字符文件名组件。完整路径另受工程根与操作系统限制。 */
 export const MAX_IDENTITY_BYTES = 125
 export const MAX_TEXT_CHARS = 200_000
@@ -17,7 +16,6 @@ const SOURCE_DIRECTORY = '.opengalgame/inputs/sources'
 export const PROJECT_CATALOG_FORMAT_VERSION = 1
 export const PROJECT_CATALOG_PATH = '.opengalgame/inputs/catalog.json'
 const DOCUMENT_DIRECTORY = '.opengalgame/inputs/documents'
-const CANVAS_DIRECTORY = '.opengalgame/canvases'
 const MANIFEST_PATH = '.opengalgame/manifest.json'
 
 /**
@@ -58,14 +56,9 @@ export function documentBodyPath(sourceId: string, extension: 'md' | 'txt'): str
   return `${DOCUMENT_DIRECTORY}/${encodeStorageKey(sourceId)}.${extension}`
 }
 
-export function arrangementPath(sceneId: string, canvasId: string): string {
-  return `${CANVAS_DIRECTORY}/${encodeStorageKey(sceneId)}/${encodeStorageKey(canvasId)}.json`
-}
-
 export const projectFileLocations = {
   manifest: MANIFEST_PATH,
-  sources: SOURCE_DIRECTORY,
-  canvases: CANVAS_DIRECTORY
+  sources: SOURCE_DIRECTORY
 }
 
 /**

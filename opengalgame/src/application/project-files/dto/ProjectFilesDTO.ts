@@ -19,6 +19,8 @@ export type ProjectCatalogWriteScopeDTO = {
 export type ImportProjectFilesDTO = ProjectCatalogWriteScopeDTO & {
   parentFolderId: string | null
   localFilePaths: readonly string[]
+  /** 与 localFilePaths 一一对应。 */
+  operationIds: readonly string[]
 }
 
 export type ProjectFileScopeDTO = {
@@ -33,15 +35,18 @@ export type ReadProjectMediaDTO = {
 }
 
 export type RenameProjectFileDTO = ProjectCatalogWriteScopeDTO & {
+  operationId: string
   sourceId: string
   newFileName: string
 }
 
 export type DeleteProjectFileDTO = ProjectCatalogWriteScopeDTO & {
+  operationId: string
   sourceId: string
 }
 
 export type CreateProjectTextFileDTO = ProjectCatalogWriteScopeDTO & {
+  operationId: string
   parentFolderId: string | null
   fileName: string
   content: { textKind: 'document'; format: 'markdown' | 'plainText'; body: string }
@@ -50,12 +55,14 @@ export type CreateProjectTextFileDTO = ProjectCatalogWriteScopeDTO & {
 /** 只更新已导入文档的正文。文件名、格式和目录不变。 */
 export type UpdateProjectTextFileBodyDTO = {
   projectId: string
+  operationId: string
   sourceId: string
   expectedSourceVersion: string
   content: { textKind: 'document'; body: string }
 }
 
 export type CreateProjectFolderDTO = ProjectCatalogWriteScopeDTO & {
+  operationId: string
   parentFolderId: string | null
   name: string
 }
@@ -80,6 +87,7 @@ export type CopyProjectFolderDTO = ProjectCatalogWriteScopeDTO & {
 }
 
 export type RenameProjectFolderDTO = ProjectCatalogWriteScopeDTO & {
+  operationId: string
   folderId: string
   newName: string
 }
@@ -94,7 +102,13 @@ export type ReadProjectFileOperationDTO = {
   operationId: string
 }
 
+export type RecoverProjectFileOperationsDTO = {
+  projectId: string
+  operationIds: readonly string[]
+}
+
 export type DeleteProjectFolderDTO = ProjectCatalogWriteScopeDTO & {
+  operationId: string
   folderId: string
   expectedDeletionVersion: string
 }

@@ -18,6 +18,7 @@ import type { SceneCanvasClient } from '@interfaces/scene-canvas/client/SceneCan
 import type { SceneExportClient } from '@interfaces/scene-export/client/SceneExportClient'
 import type { SceneGenerationClient } from '@interfaces/scene-generation/client/SceneGenerationClient'
 import type { ScenePreviewClient } from '@interfaces/scene-preview/client/ScenePreviewClient'
+import type { SystemPathClient } from '@interfaces/system-path/client/SystemPathClient'
 
 interface AppProps {
   projectClient: ProjectClient
@@ -29,6 +30,7 @@ interface AppProps {
   sceneGenerationClient: SceneGenerationClient
   scenePreviewClient: ScenePreviewClient
   sceneExportClient: SceneExportClient
+  systemPathClient: SystemPathClient
 }
 
 export function App({
@@ -40,7 +42,8 @@ export function App({
   projectVersioningClient,
   sceneGenerationClient,
   scenePreviewClient,
-  sceneExportClient
+  sceneExportClient,
+  systemPathClient
 }: AppProps): ReactElement {
   const page = useNavigationStore((state) => state.page)
   const openedProjectId = useNavigationStore((state) => state.openedProject?.id ?? 'workbench')
@@ -67,6 +70,7 @@ export function App({
             sceneGenerationClient={sceneGenerationClient}
             scenePreviewClient={scenePreviewClient}
             sceneExportClient={sceneExportClient}
+            systemPathClient={systemPathClient}
           />
         ) : null}
       </PageTransition>

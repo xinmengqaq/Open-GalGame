@@ -3,27 +3,14 @@ import { useRef, type ReactElement } from 'react'
 
 import { workbenchFeedback } from '../feedback/workbenchFeedback'
 import { CardQuestionIcon } from './SourceStatusIcons'
+import type { SourceStatusCode } from './sourceStatusMapping'
 import styles from './SourceStatus.module.css'
 import { useSourceStatusMotion } from './useSourceStatusMotion'
-
-export type SourceStatusCode = 'readable' | 'unreadable' | 'disconnected'
-
-/** 共享状态只声明映射需要的来源事实，不反向依赖领域选择器。 */
-export interface SourceStatusFacts {
-  readable: boolean
-  disconnected?: boolean
-}
 
 const statusLabels: Record<SourceStatusCode, string> = {
   readable: '来源可读取',
   unreadable: '来源不可读取',
   disconnected: workbenchFeedback.disconnected
-}
-
-/** 来源事实到状态码的唯一映射：断开优先于不可读取。 */
-export function sourceStatusOf(facts: SourceStatusFacts): SourceStatusCode {
-  if (facts.disconnected) return 'disconnected'
-  return facts.readable ? 'readable' : 'unreadable'
 }
 
 export interface SourceStatusProps {

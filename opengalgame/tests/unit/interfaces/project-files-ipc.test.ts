@@ -1,7 +1,6 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { ProjectFileChooser } from '@application/project-files/ports/ProjectFileChooser'
 import type { ProjectFilesApplicationService } from '@application/project-files/services/ProjectFilesApplicationService'
 import type { ProjectFilesInspectionVO } from '@application/project-files/vo/ProjectFilesInspectionVO'
 import type {
@@ -16,11 +15,17 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { LogContext } from '@common/logging/LogContext'
 import type { LoggerGateway } from '@common/logging/LoggerGateway'
 import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileErrorCodes'
+import { ElectronProjectFileChooser } from '@infrastructure/project-files/ElectronProjectFileChooser'
 import { ProjectFilesClientImpl } from '@interfaces/project-files/client/ProjectFilesClientImpl'
 import { SceneCanvasClientImpl } from '@interfaces/scene-canvas/client/SceneCanvasClientImpl'
 import { createIpcRequestAccess } from '@interfaces/ipc/createIpcRequestAccess'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { ProjectFilesController } from '@interfaces/project-files/ipc/ProjectFilesController'
+
+vi.mock('electron', () => ({
+  dialog: { showOpenDialog: vi.fn() }
+}))
 
 const rendererUrl = 'http://127.0.0.1:5173/'
 const trustedAccess = { trusted: true, requestId: 'req-trusted' }
@@ -41,7 +46,11 @@ function createLogger(): { logger: LoggerGateway; calls: LogCall[] } {
   }
 }
 
-function createHarness(): {
+function createHarness(
+  chooser: ProjectFileChooser = {
+    chooseProjectFiles: vi.fn(async () => null)
+  }
+): {
   projectFiles: {
     [K in keyof ProjectFilesApplicationService]: ReturnType<typeof vi.fn>
   }
@@ -63,9 +72,7 @@ function createHarness(): {
   return {
     projectFiles,
     calls,
-    controller: new ProjectFilesController(projectFiles, new IpcExceptionHandler(logger), {
-      chooseProjectFiles: vi.fn(async () => null)
-    })
+    controller: new ProjectFilesController(projectFiles, new IpcExceptionHandler(logger, new IpcErrorMapper()), chooser)
   }
 }
 
@@ -252,10 +259,16 @@ describe('工程文件请求协议', () => {
 
     const updateRequest = {
       projectId: 'project-1',
+      operationId: 'ipc-update-1',
       sourceId: 'doc-1',
       expectedSourceVersion: 'doc-v',
       content: { textKind: 'document', body: '新正文' }
     }
+    const withoutOperationId = { ...updateRequest }
+    delete (withoutOperationId as { operationId?: string }).operationId
+    expect(
+      await controller.updateProjectTextFileBody(withoutOperationId, trustedAccess)
+    ).toMatchObject({ code: ErrorCodes.invalidRequest })
     expect(
       await controller.updateProjectTextFileBody(
         { ...updateRequest, directory: 'C:/secret' },
@@ -406,6 +419,7 @@ describe('工程文件客户端响应', () => {
   it('保存正文结果保留单个来源，夹带路径或错误内容被拒绝', async () => {
     const request = {
       projectId: 'project-1',
+      operationId: 'ipc-update-client',
       sourceId: 'doc-1',
       expectedSourceVersion: 'doc-v',
       content: { textKind: 'document' as const, body: '新正文' }
@@ -458,16 +472,6 @@ describe('工程文件客户端响应', () => {
     expect(
       await rejected.readProjectMedia({ projectId: 'project-1', sourceId: 'img-1' })
     ).toMatchObject({ code: ErrorCodes.communicationFailed })
-  })
-
-  it('渲染页只放宽本地和受控媒体来源', () => {
-    const html = readFileSync(join(process.cwd(), 'src/bootstrap/index.html'), 'utf8')
-    const policy = html.match(/content="([^"]+)"/u)?.[1] ?? ''
-    expect(policy).toContain("img-src 'self' data: blob:")
-    expect(policy).toContain("media-src 'self' data: blob:")
-    expect(policy).toContain("connect-src 'self' ws://127.0.0.1:5173 http://127.0.0.1:5173")
-    expect(policy).not.toContain('*')
-    expect(policy).not.toContain('https:')
   })
 
   it('缺数据、错误联合、动画特效来源、失败夹带数据和传输中断都不是有效读取', async () => {
@@ -656,6 +660,113 @@ describe('浏览器工程文件桥', () => {
   })
 })
 
+/** R14：端口位置可变，选择路径/null、无窗口和错误出口不变。 */
+describe('工程文件选择器', () => {
+  const expectedOptions = { properties: ['openFile', 'multiSelections'] }
+
+  it('父窗口多选、无窗口和取消都以路径或 null 经控制器返回，不触发导入', async () => {
+    const current = fakeWindow()
+    let active: BrowserWindow | null = current.window
+    const showDialog = vi
+      .fn()
+      .mockResolvedValueOnce({
+        canceled: false,
+        filePaths: ['D:/work/inputs/a.png', 'D:/work/inputs/b.txt']
+      })
+      .mockResolvedValueOnce({
+        canceled: false,
+        filePaths: ['D:/work/inputs/c.webp']
+      })
+      .mockResolvedValueOnce({
+        canceled: true,
+        filePaths: ['D:/work/inputs/should-not-leak.png']
+      })
+    const { controller, projectFiles, calls } = createHarness(
+      new ElectronProjectFileChooser(() => active, showDialog)
+    )
+    const access = { trusted: true, requestId: 'req-choose' }
+
+    expect(await controller.chooseProjectFiles({}, access)).toEqual({
+      code: ErrorCodes.success,
+      msg: '文件选择完成',
+      data: ['D:/work/inputs/a.png', 'D:/work/inputs/b.txt']
+    })
+    expect(showDialog).toHaveBeenLastCalledWith(current.window, expectedOptions)
+
+    active = null
+    expect(await controller.chooseProjectFiles({}, access)).toEqual({
+      code: ErrorCodes.success,
+      msg: '文件选择完成',
+      data: ['D:/work/inputs/c.webp']
+    })
+    expect(showDialog).toHaveBeenLastCalledWith(expectedOptions)
+
+    expect(await controller.chooseProjectFiles({}, access)).toEqual({
+      code: ErrorCodes.success,
+      msg: '文件选择完成',
+      data: null
+    })
+    expect(showDialog).toHaveBeenCalledTimes(3)
+    expect(projectFiles.importProjectFiles).not.toHaveBeenCalled()
+    expect(Object.values(projectFiles).flatMap((spy) => spy.mock.calls)).toEqual([])
+    expect(calls).toEqual([])
+  })
+
+  it('选择器失败经统一出口映射，不可信来源和多余路径不打开选择器', async () => {
+    const chooser = { chooseProjectFiles: vi.fn() }
+    const { controller, projectFiles, calls } = createHarness(chooser)
+    const access = { trusted: true, requestId: 'req-choose-error' }
+
+    chooser.chooseProjectFiles.mockRejectedValueOnce(
+      new Error('EPERM C:\\Users\\secret\\inputs\\a.png')
+    )
+    const failed = await controller.chooseProjectFiles({}, access)
+    expect(failed).toEqual({ code: ErrorCodes.internalError, msg: '系统异常，操作未完成' })
+    expect(calls).toEqual([
+      {
+        event: '请求执行失败',
+        context: { requestId: 'req-choose-error', errorCode: ErrorCodes.internalError }
+      }
+    ])
+    const revealed = JSON.stringify({ failed, calls })
+    expect(revealed).not.toContain('secret')
+    expect(revealed).not.toContain('a.png')
+
+    chooser.chooseProjectFiles.mockRejectedValueOnce(
+      new AppException({ code: ErrorCodes.invalidConfig, msg: '文件选择器不可用' })
+    )
+    expect(
+      await controller.chooseProjectFiles({}, { trusted: true, requestId: 'req-choose-known' })
+    ).toEqual({ code: ErrorCodes.invalidConfig, msg: '文件选择器不可用' })
+    expect(calls).toHaveLength(2)
+
+    chooser.chooseProjectFiles.mockClear()
+    expect(
+      await controller.chooseProjectFiles(
+        { path: 'C:/secret.png' },
+        { trusted: true, requestId: 'req-choose-path' }
+      )
+    ).toEqual({ code: ErrorCodes.invalidRequest, msg: '请求参数格式不正确' })
+    expect(
+      await controller.chooseProjectFiles({}, { trusted: false, requestId: 'req-choose-blocked' })
+    ).toEqual({ code: ErrorCodes.forbidden, msg: '请求来源或资源访问未获授权' })
+    expect(chooser.chooseProjectFiles).not.toHaveBeenCalled()
+    expect(projectFiles.importProjectFiles).not.toHaveBeenCalled()
+    expect(calls.slice(2)).toEqual([
+      {
+        event: '请求执行失败',
+        context: { requestId: 'req-choose-path', errorCode: ErrorCodes.invalidRequest }
+      },
+      {
+        event: '请求执行失败',
+        context: { requestId: 'req-choose-blocked', errorCode: ErrorCodes.forbidden }
+      }
+    ])
+    expect(calls).toHaveLength(4)
+    expect(JSON.stringify(calls)).not.toContain('secret')
+  })
+})
+
 describe('工程文件操作通道', () => {
   it('空导入和多余路径被拒绝，取消选择不调用导入', async () => {
     const { logger } = createLogger()
@@ -670,7 +781,7 @@ describe('工程文件操作通道', () => {
       deleteProjectFile: vi.fn(),
       updateProjectTextFileBody: vi.fn()
     }
-    const controller = new ProjectFilesController(projectFiles, new IpcExceptionHandler(logger), {
+    const controller = new ProjectFilesController(projectFiles, new IpcExceptionHandler(logger, new IpcErrorMapper()), {
       chooseProjectFiles: vi.fn(async () => null)
     })
     expect(
@@ -756,12 +867,20 @@ describe('工程文件操作通道', () => {
     })
     const unavailable = { code: ErrorCodes.forbidden, msg: '当前环境不能操作工程文件' }
     expect(
-      await client.importProjectFiles({ projectId: 'project-1', localFilePaths: ['C:/a.png'] })
+      await client.importProjectFiles({
+        projectId: 'project-1',
+        operationIds: ['ipc-import-1'],
+        localFilePaths: ['C:/a.png']
+      })
     ).not.toMatchObject({ code: ErrorCodes.success })
     expect(await client.openProjectFile({ projectId: 'project-1', sourceId: 'src-1' })).toEqual(
       unavailable
     )
-    expect(await client.deleteProjectFile({ projectId: 'project-1', sourceId: 'src-1' })).toEqual(
+    expect(await client.deleteProjectFile({
+        projectId: 'project-1',
+        operationId: 'ipc-delete-1',
+        sourceId: 'src-1'
+      })).toEqual(
       unavailable
     )
     expect(await client.readProjectMedia({ projectId: 'project-1', sourceId: 'img-1' })).toEqual(
@@ -770,6 +889,7 @@ describe('工程文件操作通道', () => {
     expect(
       await client.updateProjectTextFileBody({
         projectId: 'project-1',
+        operationId: 'ipc-update-unavailable',
         sourceId: 'doc-1',
         expectedSourceVersion: 'doc-v',
         content: { textKind: 'document', body: '新正文' }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { SceneExportClient } from '@interfaces/scene-export/client/SceneExportClient'
+import type { SystemPathClient } from '@interfaces/system-path/client/SystemPathClient'
 import {
   exportNoticeOf,
   exportRequestOf,
@@ -80,7 +80,7 @@ describe('工作台场景工具呈现', () => {
 
   it('打开产物目录只把绝对路径交给 client', async () => {
     const openDirectory = vi.fn(async () => ({ code: 2000, msg: '已打开目录', data: null }))
-    const client: Pick<SceneExportClient, 'openDirectory'> = { openDirectory }
+    const client: Pick<SystemPathClient, 'openDirectory'> = { openDirectory }
 
     await openExportDirectory(client, directoryPath)
 
@@ -89,7 +89,7 @@ describe('工作台场景工具呈现', () => {
   })
 
   it('打开产物目录失败时不吞错误', async () => {
-    const client: Pick<SceneExportClient, 'openDirectory'> = {
+    const client: Pick<SystemPathClient, 'openDirectory'> = {
       openDirectory: vi.fn(async () => ({ code: 4101, msg: '不允许打开该目录' }))
     }
 

@@ -32,7 +32,7 @@ module.exports = defineConfig({
     video: 'off'
   },
   webServer: {
-    command: `npx vite --config vite.renderer.config.ts --host 127.0.0.1 --port ${port} --strictPort --open false`,
+    command: `npx vite --config vite.renderer.config.ts --host 127.0.0.1 --port ${port} --strictPort`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120000,

@@ -4,12 +4,14 @@ import type {
   SceneGenerationVersionFacts
 } from '../models/SceneGenerationExecution'
 import type { SceneGenerationRequest } from '@domain/scene-generation/models/SceneGenerationRequest'
-import type { SceneValidationReport } from '@domain/scene-generation/models/SceneValidationReport'
+import {
+  isVersionConflictIssueCode,
+  type SceneValidationReport
+} from '@domain/scene-generation/models/SceneValidationReport'
 import type { SceneGenerationDomainService } from '@domain/scene-generation/services/SceneGenerationDomainService'
-import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-import { SceneGenerationVersionConflict } from './SceneGenerationVersionConflict'
+import { SceneGenerationVersionConflict } from '../errors/SceneGenerationVersionConflict'
 
 /** 将应用执行事实转换为不含技术细节的领域请求。 */
 export function toDomainRequest(
@@ -37,8 +39,8 @@ export function toDomainRequest(
 export function requireAcceptableCandidate(
   execution: SceneGenerationExecution,
   facts: SceneGenerationVersionFacts,
-  candidate?: SceneGenerationCandidate,
-  domainService: SceneGenerationDomainService = new SceneGenerationDomainServiceImpl()
+  candidate: SceneGenerationCandidate | undefined,
+  domainService: SceneGenerationDomainService
 ): SceneValidationReport {
   const request = toDomainRequest(execution, facts)
   const report = candidate
@@ -46,13 +48,7 @@ export function requireAcceptableCandidate(
     : { issues: [] }
   const judgment = domainService.evaluateResult(report, request)
   if (judgment.status !== 'acceptable') {
-    if (
-      judgment.report.issues.some((issue) =>
-        ['scene-locked', 'lock-unknown', 'baseline-changed', 'baseline-unknown'].includes(
-          issue.code
-        )
-      )
-    )
+    if (judgment.report.issues.some((issue) => isVersionConflictIssueCode(issue.code)))
       throw new SceneGenerationVersionConflict(
         judgment.report.issues[0]?.message ?? '作品版本不允许覆盖'
       )

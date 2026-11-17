@@ -11,6 +11,24 @@ export type SceneCanvasViewport = {
   zoom: number
 }
 
+/** 卡片挂接的生成使用设置。旧格式没有该字段时由读取映射显式补齐。 */
+export type SceneCanvasUsage = {
+  characterId?: string
+  locationId?: string
+  spokenLine?: string
+  targetIds: readonly string[]
+}
+
+/** 已保存的默认关系。读取不按卡片类别重新推断。 */
+export type SceneCanvasDefaultRelation =
+  | 'actsOn'
+  | 'accompanies'
+  | 'voices'
+  | 'depicts'
+  | 'constrains'
+  | 'sameSubject'
+  | 'associated'
+
 /** 卡片绑定的 WebGAL 命令与名称。未选择时为 null。不解释命令含义。 */
 export type SceneCanvasWebgalPreset = {
   command: string
@@ -28,6 +46,7 @@ export type SceneCanvasDocumentCard = {
   sourceId: string
   title: string
   summary: string
+  usage: SceneCanvasUsage
   layout: SceneCanvasCardLayout
 }
 
@@ -38,6 +57,7 @@ export type SceneCanvasImageCard = {
   role: SceneCanvasImageRole
   title: string
   summary: string
+  usage: SceneCanvasUsage
   layout: SceneCanvasCardLayout
 }
 
@@ -48,6 +68,7 @@ export type SceneCanvasAudioCard = {
   role: SceneCanvasAudioRole
   title: string
   summary: string
+  usage: SceneCanvasUsage
   layout: SceneCanvasCardLayout
 }
 
@@ -57,6 +78,7 @@ export type SceneCanvasVideoCard = {
   sourceId: string
   title: string
   summary: string
+  usage: SceneCanvasUsage
   layout: SceneCanvasCardLayout
 }
 
@@ -68,22 +90,31 @@ export type SceneCanvasPromptReference = {
 export type SceneCanvasPromptCard = {
   kind: 'prompt'
   cardId: string
+  title: string
+  summary: string
   body: string
   references: readonly SceneCanvasPromptReference[]
+  usage: SceneCanvasUsage
   layout: SceneCanvasCardLayout
 }
 
 export type SceneCanvasAnimationCard = {
   kind: 'animation'
   cardId: string
+  title: string
+  summary: string
   webgalPreset: SceneCanvasWebgalPreset | null
+  usage: SceneCanvasUsage
   layout: SceneCanvasCardLayout
 }
 
 export type SceneCanvasEffectCard = {
   kind: 'effect'
   cardId: string
+  title: string
+  summary: string
   webgalPreset: SceneCanvasWebgalPreset | null
+  usage: SceneCanvasUsage
   layout: SceneCanvasCardLayout
 }
 
@@ -98,6 +129,7 @@ export type SceneCanvasRelation = {
   relationId: string
   fromCardId: string
   toCardId: string
+  defaultRelation: SceneCanvasDefaultRelation
   specificName: string
   recordCardId: string | null
 }

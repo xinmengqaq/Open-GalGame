@@ -7,8 +7,8 @@ import { promisify } from 'node:util'
 import { build } from 'esbuild'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
-import { SceneExportApplicationServiceImpl } from '@application/scene-export/services/impl/SceneExportApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
+import { ExportSavedScene } from '@application/scene-export/services/impl/ExportSavedScene'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
 import { encodeStorageKey } from '@infrastructure/project-files/projectFilePaths'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
@@ -27,11 +27,18 @@ import { SceneScriptParserGatewayImpl } from '@infrastructure/scenes/SceneScript
 import { SceneSourceReaderGatewayImpl } from '@infrastructure/scenes/SceneSourceReaderGatewayImpl'
 import { RegisteredSceneLocationGatewayImpl } from '@infrastructure/scenes/RegisteredSceneLocationGatewayImpl'
 import { AppException } from '@common/errors/AppException'
+import type { LoggerGateway } from '@common/logging/LoggerGateway'
 import { SceneExportErrorCodes } from '@domain/scene-export/errors/SceneExportErrorCodes'
 
 const roots: string[] = []
 const scene = { projectId: 'project-1', sceneId: 'scene-1' }
-const script = '小明:已保存的一句 -figure=hero.png -next;\r\nchangeBg:room.webp;\r\n'
+const script = '小明:已保存的一句 -next;\r\nchangeBg:room.webp;\r\nchangeFigure:hero.png;\r\n'
+const logger: LoggerGateway = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined
+}
 const unsaved = {
   ...scene,
   contentBasis: { digest: 'a'.repeat(64), parserVersion: '4.6.5', engineVersion: '4.6.5' },
@@ -68,7 +75,7 @@ describe('最小 Windows 场景导出', () => {
     try {
       const service = exporter(
         world.userDirectory,
-        new TerreWindowsScenePackager(world.userDirectory)
+        new TerreWindowsScenePackager(logger, world.userDirectory)
       )
       const result = await service.exportSavedScene(saved)
       expect(result).toEqual({
@@ -116,7 +123,8 @@ describe('最小 Windows 场景导出', () => {
             async function main() {
               await app.whenReady()
               const source = JSON.parse(await readFile(process.argv[2], 'utf8'))
-              const result = await new TerreWindowsScenePackager(process.argv[4]).packageWindowsScene(source)
+              const logger = { debug() {}, info() {}, warn() {}, error() {} }
+              const result = await new TerreWindowsScenePackager(logger, process.argv[4]).packageWindowsScene(source)
               await writeFile(process.argv[3], JSON.stringify(result))
               app.exit(result.status === 'succeeded' ? 0 : 1)
             }
@@ -164,7 +172,7 @@ describe('最小 Windows 场景导出', () => {
         process.execPath,
         [
           '-e',
-          "const asar=require('@electron/asar'); const root=process.argv[1]; const dest=require('node:os').tmpdir()+'/terre-check'; asar.extractAll(root+'/resources/app.asar', dest); const fs=require('node:fs'); const base=dest+'/public/game/'; console.log(fs.readFileSync(base+'scene/start.txt','utf8')); console.log(fs.readFileSync(base+'figure/hero.png').toString('hex')); console.log(fs.readFileSync(base+'background/room.webp').toString('hex')); console.log(fs.readFileSync(dest+'/public/webgal-engine.json','utf8')); console.log('__USER_STYLE__'+fs.readFileSync(base+'userStyleSheet.css','utf8')); console.log('__MAIN__'+fs.readFileSync(dest+'/main.js','utf8'));",
+          "const asar=require('@electron/asar'); const root=process.argv[1]; const dest=require('node:os').tmpdir()+'/terre-check'; asar.extractAll(root+'/resources/app.asar', dest); const fs=require('node:fs'); const base=dest+'/public/game/'; console.log(fs.readFileSync(base+'scene/start.txt','utf8')); console.log(fs.readFileSync(base+'figure/hero.png').toString('hex')); console.log(fs.readFileSync(base+'background/room.webp').toString('hex')); console.log(fs.readFileSync(dest+'/public/webgal-engine.json','utf8')); console.log('__CONFIG__'+fs.readFileSync(base+'config.txt','utf8')); console.log('__USER_STYLE__'+fs.readFileSync(base+'userStyleSheet.css','utf8')); console.log('__MAIN__'+fs.readFileSync(dest+'/main.js','utf8'));",
           output
         ],
         { cwd: join(process.cwd(), 'node_modules', '@electron', 'asar'), encoding: 'utf8' }
@@ -174,7 +182,10 @@ describe('最小 Windows 场景导出', () => {
       expect(listing).toContain('"version": "4.6.5"')
       expect(listing).toContain('changeBg:')
       expect(listing).not.toContain(world.projectRoot)
-      expect(listing).toContain('__USER_STYLE__html,body{background:#000}')
+      expect(listing).toMatch(
+        /__CONFIG__Game_name:当前场景;\nGame_key:;\nTitle_img:;\nTitle_bgm:;\n/
+      )
+      expect(listing).toContain('__USER_STYLE__html,body{background:#000}\n')
       expect(listing).not.toMatch(/#root\s*\{|\.App\s*\{|#pixiCont|canvas\s*\{[^}]*width/i)
       expect(listing).toMatch(/__MAIN__[\s\S]*setBounds\(area\);\s*win\.maximize\(\)/)
       expect(listing).not.toMatch(/__MAIN__[\s\S]*width:\s*1600/)
@@ -238,7 +249,7 @@ describe('最小 Windows 场景导出', () => {
 
   it('候选、草稿和工程外路径在保存核对前拒绝', async () => {
     const world = await registeredScene()
-    const service = exporter(world.userDirectory, new TerreWindowsScenePackager())
+    const service = exporter(world.userDirectory, new TerreWindowsScenePackager(logger))
     await expect(
       service.exportSavedScene({ ...unsaved, candidateSnapshotId: 'candidate-1' } as never)
     ).rejects.toMatchObject({ code: SceneExportErrorCodes.exportInputRejected })
@@ -278,6 +289,9 @@ describe('最小 Windows 场景导出', () => {
     await mkdir(join(publicDir, 'game/tex'), { recursive: true })
     await writeFile(join(publicDir, 'game/userStyleSheet.css'), '')
     await writeSingleSceneForTest(publicDir, exported, world.userDirectory)
+    expect(await readFile(join(publicDir, 'game/config.txt'), 'utf8')).toBe(
+      'Game_name:当前场景;\nGame_key:;\nTitle_img:;\nTitle_bgm:;\n'
+    )
     expect([...(await readFile(join(publicDir, 'game/background', storageKey, fileName)))]).toEqual(
       [...bytes]
     )
@@ -319,12 +333,12 @@ describe('最小 Windows 场景导出', () => {
 
 function exporter(
   userDirectory: string,
-  packager: ConstructorParameters<typeof SceneExportApplicationServiceImpl>[0]['packager']
-): SceneExportApplicationServiceImpl {
+  packager: ConstructorParameters<typeof ExportSavedScene>[0]['packager']
+): ExportSavedScene {
   const locations = new RegisteredSceneLocationGatewayImpl(userDirectory)
   const sources = new SceneSourceReaderGatewayImpl()
   const parser = new SceneScriptParserGatewayImpl()
-  return new SceneExportApplicationServiceImpl({
+  return new ExportSavedScene({
     sources: new LocalSceneExportSourceGateway(
       userDirectory,
       versioning(userDirectory),
@@ -339,8 +353,8 @@ function exporter(
   })
 }
 
-function versioning(userDirectory: string): ProjectVersioningApplicationServiceImpl {
-  return new ProjectVersioningApplicationServiceImpl({
+function versioning(userDirectory: string): ManageProjectVersioning {
+  return new ManageProjectVersioning({
     ...createProjectVersioningGateways(userDirectory),
     nextId: () => `op-export-${Math.random().toString(16).slice(2)}`
   })

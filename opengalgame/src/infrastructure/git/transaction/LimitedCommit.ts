@@ -10,10 +10,16 @@ import { applyTreeEdits, readCommitFile, resolveRefIfExists } from '../objects/g
 import {
   fingerprintChanges,
   indexEvidence,
+  operationRef,
   readOperationRecord,
   type OperationRecord
 } from './OperationRecord'
-import { assessOperation } from './OperationQuery'
+import {
+  assessOperation,
+  provePublishedOperation,
+  type PublishedCommitProof
+} from './OperationQuery'
+import { readHead } from '../repository/repositoryGuard'
 import {
   baselinesMatch,
   readIndexBytes,
@@ -110,6 +116,19 @@ export async function commitLimited(
           msg: '作品提交树无法生成'
         })
       }
+    }
+    record = await mark(
+      request.projectRoot,
+      record,
+      {
+        paths: record.paths.map((path) => ({
+          ...path,
+          intendedStageOid: written.blobs.get(path.relativePath) ?? null
+        }))
+      },
+      effects
+    )
+    for (const change of loaded) {
       const oid = written.blobs.get(change.relativePath) ?? null
       appliedStageOids.set(change.relativePath, oid)
       await effects.stageBlob(request.projectRoot, change.relativePath, oid)
@@ -134,9 +153,231 @@ export async function commitLimited(
     await mark(request.projectRoot, record, { phase: 'published' }, effects)
     return { commitId }
   } catch (error) {
-    await compensateIfUnpublished(request.projectRoot, record, effects, appliedStageOids, error)
+    const proof = await provePublishedOperation(request.projectRoot, request.operationId).catch(
+      (proofError: unknown) => {
+        throw asGitException(
+          proofError,
+          ProjectVersioningErrorCodes.gitQueryFailed,
+          '提交结果无法核对'
+        )
+      }
+    )
+    if (proof.state === 'committed') {
+      const repaired = await repairPublishedMetadata(
+        request.projectRoot,
+        request.operationId,
+        effects
+      )
+      if (repaired === 'conflict') {
+        throw new AppException({
+          code: ProjectVersioningErrorCodes.gitQueryFailed,
+          msg: '提交结果与记录证据冲突'
+        })
+      }
+      return { commitId: proof.commitId }
+    }
+    if (proof.state === 'conflict') {
+      throw new AppException({
+        code: ProjectVersioningErrorCodes.gitQueryFailed,
+        msg: proof.detail
+      })
+    }
+    const historyProof = await provePublishedFromHistory(
+      request.projectRoot,
+      request.operationId,
+      record.baselineCommitId,
+      loaded
+    )
+    if (historyProof.state === 'committed') {
+      const persisted = await persistPublishedEvidence(
+        request.projectRoot,
+        record,
+        historyProof.commitId,
+        effects
+      )
+      if (persisted === 'conflict') {
+        throw new AppException({
+          code: ProjectVersioningErrorCodes.gitQueryFailed,
+          msg: '提交恢复证据冲突'
+        })
+      }
+      return { commitId: historyProof.commitId }
+    }
+    if (historyProof.state === 'conflict') {
+      throw new AppException({
+        code: ProjectVersioningErrorCodes.gitQueryFailed,
+        msg: historyProof.detail
+      })
+    }
+    await compensateIfUnpublished(
+      request.projectRoot,
+      record,
+      effects,
+      appliedStageOids,
+      error,
+      request.backupBeforeRestore === true
+    )
     throw asGitException(error, ProjectVersioningErrorCodes.gitUnavailable, '作品提交失败')
   }
+}
+
+type PublishedMetadataWriteResult = 'repaired' | 'write-failed' | 'conflict'
+
+/**
+ * 已证明发布后只补缺失的操作引用和 published 阶段。
+ * 不重新提交，不覆盖冲突，不把元数据写入失败改判为发布失败。
+ * @returns 已修复、写入失败（已发布结果不变）或无法核实的冲突。
+ */
+export async function repairPublishedMetadata(
+  projectRoot: string,
+  operationId: string,
+  effects: GitEffects
+): Promise<PublishedMetadataWriteResult> {
+  const proof = await provePublishedOperation(projectRoot, operationId).catch(() => null)
+  if (!proof || proof.state !== 'committed') return 'conflict'
+  const read = await readOperationRecord(projectRoot, operationId).catch(() => null)
+  if (!read || read.kind !== 'ok') return 'conflict'
+  const current = read.record
+  if (current.forwardCommitId !== null && current.forwardCommitId !== proof.commitId) {
+    return 'conflict'
+  }
+  if (current.phase === 'rolled-back' || current.phase === 'rollback-required') {
+    return 'conflict'
+  }
+  let ref: string | null = null
+  try {
+    ref = await resolveRefIfExists({ dir: projectRoot }, operationRef(operationId))
+  } catch {
+    return 'conflict'
+  }
+  if (ref !== null && ref !== proof.commitId) return 'conflict'
+  try {
+    if (ref === null) {
+      await effects.writeOperationRef(projectRoot, operationId, proof.commitId)
+    }
+    if (current.phase !== 'published' || current.forwardCommitId !== proof.commitId) {
+      await effects.writeRecord(projectRoot, {
+        ...current,
+        phase: 'published',
+        forwardCommitId: proof.commitId
+      })
+    }
+  } catch {
+    return 'write-failed'
+  }
+  return 'repaired'
+}
+
+/**
+ * 记录和引用都缺失时，仍从本次基线之后的提交消息和提交内容证明是否已经发布。
+ * 只有基线未前进且找不到本次操作提交时，才允许判为未发布。
+ */
+async function provePublishedFromHistory(
+  projectRoot: string,
+  operationId: string,
+  baselineCommitId: string,
+  loaded: readonly LoadedChange[]
+): Promise<PublishedCommitProof> {
+  const head = await readHead(projectRoot)
+  const entries = await git.log({ fs, dir: projectRoot }).catch((error: unknown) => {
+    throw asGitException(error, ProjectVersioningErrorCodes.gitQueryFailed, '提交历史无法读取')
+  })
+  let sawOperation = false
+  let matched: string | null = null
+  for (const entry of entries) {
+    if (!entry.commit.message.includes(`Operation-Id: ${operationId}`)) continue
+    sawOperation = true
+    if (!entry.commit.parent.includes(baselineCommitId)) continue
+    if (!(await commitMatchesLoaded(projectRoot, entry.oid, loaded))) continue
+    matched = entry.oid
+    break
+  }
+  if (!matched) {
+    if (sawOperation) {
+      return { state: 'conflict', detail: '提交记录与本次基线或内容不一致' }
+    }
+    return head.commitId === baselineCommitId
+      ? { state: 'notCommitted' }
+      : { state: 'conflict', detail: '当前提交已前进，无法证明本次操作未发布' }
+  }
+  const rolledBack = entries.some((entry) =>
+    entry.commit.message.includes(`Rollback-Of: ${matched}`)
+  )
+  return rolledBack
+    ? { state: 'conflict', detail: '本次提交已存在回退提交，不能认领为已发布' }
+    : { state: 'committed', commitId: matched }
+}
+
+async function commitMatchesLoaded(
+  projectRoot: string,
+  commitId: string,
+  loaded: readonly LoadedChange[]
+): Promise<boolean> {
+  for (const change of loaded) {
+    const bytes = await readCommitFile({ dir: projectRoot }, commitId, change.relativePath)
+    const digest = bytes ? digestBytes(bytes) : null
+    if (digest !== change.intendedDigest) return false
+  }
+  return true
+}
+
+/**
+ * 历史补证成功后写回本次操作记录和缺失引用。
+ * 只写同一操作、同一基线/指纹且前向提交一致或缺失的记录；写失败不影响已发布成功。
+ * @returns 已修复、写入失败（已发布结果不变）或无法核实的冲突。
+ */
+async function persistPublishedEvidence(
+  projectRoot: string,
+  record: OperationRecord,
+  commitId: string,
+  effects: GitEffects
+): Promise<PublishedMetadataWriteResult> {
+  const current = await readOperationRecord(projectRoot, record.operationId).catch(() => null)
+  if (!current || current.kind === 'damaged') return 'conflict'
+  let ref: string | null = null
+  try {
+    ref = await resolveRefIfExists({ dir: projectRoot }, operationRef(record.operationId))
+  } catch {
+    return 'conflict'
+  }
+  if (ref !== null && ref !== commitId) return 'conflict'
+  let next: OperationRecord
+  let shouldWriteRecord = false
+  if (current.kind === 'missing') {
+    next = { ...record, phase: 'published', forwardCommitId: commitId }
+    shouldWriteRecord = true
+  } else {
+    const existing = current.record
+    if (
+      existing.operationId !== record.operationId ||
+      existing.baselineCommitId !== record.baselineCommitId ||
+      existing.fingerprint !== record.fingerprint ||
+      (existing.forwardCommitId !== null && existing.forwardCommitId !== commitId)
+    ) {
+      return 'conflict'
+    }
+    if (existing.phase === 'rolled-back' || existing.phase === 'rollback-required') {
+      return 'conflict'
+    }
+    next = { ...existing, phase: 'published', forwardCommitId: commitId }
+    shouldWriteRecord =
+      existing.phase !== 'published' || existing.forwardCommitId !== commitId
+  }
+  if (shouldWriteRecord) {
+    try {
+      await effects.writeRecord(projectRoot, next)
+    } catch {
+      return 'write-failed'
+    }
+  }
+  if (ref !== null) return 'repaired'
+  try {
+    await effects.writeOperationRef(projectRoot, record.operationId, commitId)
+  } catch {
+    // 记录已写回时，读取仍可由记录/历史/内容证明已提交；引用留待后续恢复。
+    return 'write-failed'
+  }
+  return 'repaired'
 }
 
 async function beginRecord(
@@ -157,12 +398,14 @@ async function beginRecord(
       action: change.action,
       originalBytesBase64: current ? encodeBytes(current) : null,
       intendedDigest: change.intendedDigest,
-      originalStageOid: stageOids.get(change.relativePath) ?? null
+      originalStageOid: stageOids.get(change.relativePath) ?? null,
+      intendedStageOid: null
     })
   }
   const record: OperationRecord = {
     formatVersion: 1,
     operationId: request.operationId,
+    sourceModule: request.sourceModule,
     phase: 'prepared',
     baselineCommitId: request.expectedBaseline.headCommitId,
     branch: request.expectedBaseline.branch,
@@ -274,10 +517,13 @@ async function compensateIfUnpublished(
   record: OperationRecord,
   effects: GitEffects,
   appliedStageOids: ReadonlyMap<string, string | null>,
-  error: unknown
+  error: unknown,
+  backupBeforeRestore: boolean
 ): Promise<void> {
   try {
-    await restoreRecordedFiles(projectRoot, record, effects, appliedStageOids)
+    await restoreRecordedFiles(projectRoot, record, effects, appliedStageOids, {
+      backupBeforeRestore
+    })
   } catch (compensationError) {
     throw new AppException({
       code: ErrorCodes.internalError,

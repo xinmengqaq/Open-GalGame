@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { createSceneGeneration } from '@bootstrap/sceneGeneration'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { createWebGalGenerationGraph } from '@infrastructure/scene-generation/workflow/createWebGalGenerationGraph'
 import { WebGalGenerationCheckpointSaver } from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
 import { langGraphThreadKey } from '@infrastructure/workflow/WorkflowIdentity'
@@ -10,15 +11,22 @@ import {
   request,
   validScript
 } from '../../../../harness/acceptance/support/generationFixture'
-import type { SceneGenerationReplyDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
+import type {
+  ReplySceneGenerationInteractionDTO,
+  SceneGenerationReplyDTO
+} from '@application/scene-generation/dto/SceneGenerationDTO'
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
 import type { SceneGenerationStatusVO } from '@application/scene-generation/vo/SceneGenerationVO'
+
+// 用户裁决：生成不测限时。vi.setConfig 只改当前测试文件所在的 worker 配置，文件结束后由 Vitest resetConfig
+// 恢复；0 关闭 runner deadline（hookTimeout 不变），不影响其他文件或全局配置。超时/取消契约测试不在本文件。
+vi.setConfig({ testTimeout: 0 })
 
 function boundReply(
   source: SceneGenerationStatusVO | SceneGenerationExecution,
   replyId: string,
   reply: SceneGenerationReplyDTO
-) {
+): ReplySceneGenerationInteractionDTO {
   const interaction = source.interaction
   if (!interaction) throw new Error('没有可回复的等待')
   return {
@@ -255,7 +263,8 @@ it('澄清后的修正进入审阅，未经接受不提交正式作品', async (
   const graph = createWebGalGenerationGraph({
     stateRoot,
     saver: new WebGalGenerationCheckpointSaver(stateRoot),
-    artifacts: f.app.ports.artifacts
+    artifacts: f.app.ports.artifacts,
+    domain: new SceneGenerationDomainServiceImpl()
   })
   const snapshot = await graph.getState({
     configurable: { thread_id: langGraphThreadKey(current) }
@@ -286,27 +295,29 @@ it('写出后读改两轮仍能提交候选', async () => {
   expect(f.bodies.some((body) => JSON.stringify(body).includes(channel))).toBe(true)
 })
 
-it('重复读取和从不写入都按完成契约停止', async () => {
-  const repeated = await generationFixture({ repeatReadBeforeWrite: 7 })
-  await repeated.app.generation.generateScene(request)
+it('重复读取按完成契约停止', async () => {
+  const f = await generationFixture({ repeatReadBeforeWrite: 7 })
+  await f.app.generation.generateScene(request)
   // 重复读取后先进入一次收尾提交；没有候选时按无进展失败，不产生候选或交互。
-  await expect(repeated.run()).rejects.toThrow(/实际候选脚本写入不一致/)
-  const repeatedExecution = (await repeated.app.ports.executions.readExecution(request))!
-  const repeatedStatus = await repeated.app.status.getSceneGenerationStatus(request)
-  expect(repeated.writes()).toBe(0)
-  expect(repeatedExecution.candidateSnapshotId).toBeUndefined()
-  expect(repeatedStatus.state).toBe('failed')
-  expect(repeatedStatus.failure?.code).toBe(4103)
-  expect(repeatedStatus.failure?.reason).not.toBe('outputTruncated')
-  expect(repeatedStatus.interaction).toBeUndefined()
-  expect(repeated.bodies.length).toBeGreaterThan(0)
-  expect(repeated.bodies.length).toBeLessThan(12)
+  await expect(f.run()).rejects.toThrow(/实际候选脚本写入不一致/)
+  const execution = (await f.app.ports.executions.readExecution(request))!
+  const status = await f.app.status.getSceneGenerationStatus(request)
+  expect(f.writes()).toBe(0)
+  expect(execution.candidateSnapshotId).toBeUndefined()
+  expect(status.state).toBe('failed')
+  expect(status.failure?.code).toBe(4103)
+  expect(status.failure?.reason).not.toBe('outputTruncated')
+  expect(status.interaction).toBeUndefined()
+  expect(f.bodies.length).toBeGreaterThan(0)
+  expect(f.bodies.length).toBeLessThan(12)
+})
 
-  const never = await generationFixture({ neverWrite: true })
-  await never.app.generation.generateScene(request)
-  await expect(never.run()).rejects.toThrow(/实际候选脚本写入不一致/)
-  expect(never.writes()).toBe(0)
-  const failed = await never.app.status.getSceneGenerationStatus(request)
+it('从不写入按完成契约停止', async () => {
+  const f = await generationFixture({ neverWrite: true })
+  await f.app.generation.generateScene(request)
+  await expect(f.run()).rejects.toThrow(/实际候选脚本写入不一致/)
+  expect(f.writes()).toBe(0)
+  const failed = await f.app.status.getSceneGenerationStatus(request)
   expect(failed.state).toBe('failed')
   expect(failed.failure?.code).toBe(4103)
   expect(failed.candidateSnapshotId).toBeUndefined()
@@ -326,7 +337,8 @@ it('非法结构化参数重试有界，不能假装完成', async () => {
   const graph = createWebGalGenerationGraph({
     stateRoot,
     saver: new WebGalGenerationCheckpointSaver(stateRoot),
-    artifacts: f.app.ports.artifacts
+    artifacts: f.app.ports.artifacts,
+    domain: new SceneGenerationDomainServiceImpl()
   })
   const snapshot = await graph.getState({
     configurable: { thread_id: langGraphThreadKey(execution) }

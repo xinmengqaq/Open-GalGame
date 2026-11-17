@@ -8,6 +8,7 @@ import { Command, isInterrupted } from '@langchain/langgraph'
 import type { SceneGenerationRuntime } from '@application/scene-generation/models/SceneGenerationExecution'
 import { safeSceneValidationIssueMessage } from '@application/scene-generation/mapping/SceneGenerationRenderProjection'
 import type { SceneGenerationArtifact } from '@domain/scene-generation/models/SceneGenerationArtifact'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import { recordWrittenFile } from '@infrastructure/ai/execution/writtenFileLedger'
 import { webGalGenerationCompatibility } from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
@@ -367,6 +368,7 @@ async function correctionHarness(
   const graph = createWebGalGenerationGraph({
     stateRoot: root,
     saver: new FileCheckpointSaver(root),
+    domain: new SceneGenerationDomainServiceImpl(),
     budget,
     runtime: {
       get execution() {

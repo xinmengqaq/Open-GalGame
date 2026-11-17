@@ -16,10 +16,8 @@ export function isActiveGenerationExecution(
   return execution.mode === 'generate' && !isTerminalState(execution.state)
 }
 
-/** 启动前预检场景内是否已有进行中的生成；旧格式记录没有 mode，不参与判定。 */
-export function requireNoActiveGeneration(
-  executions: readonly SceneGenerationExecution[]
-): void {
+/** 启动前预检场景内是否已有进行中的生成；当前记录可缺省 mode，缺省不参与判定。 */
+export function requireNoActiveGeneration(executions: readonly SceneGenerationExecution[]): void {
   if (executions.some(isActiveGenerationExecution))
     throw new AppException({
       code: ErrorCodes.operationConflict,

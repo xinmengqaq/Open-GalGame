@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import type { CandidatePreviewSession } from '@application/scenes/models/CandidatePreviewSession'
+import type { PreviewDialogueDraftDTO } from '@application/scene-preview/dto/DialogueSaveDTO'
+import type { PreviewDialoguePlaybackDTO } from '@application/scene-preview/dto/PreviewPlaybackDTO'
 import type { ParsedScene } from '@application/scenes/models/ParsedScene'
 import type { SceneSourceSnapshot } from '@application/scenes/models/SceneSourceSnapshot'
 import type { CandidatePreviewSessionGateway } from '@application/scenes/ports/CandidatePreviewSessionGateway'
@@ -10,21 +12,32 @@ import type { SceneSourceReaderGateway } from '@application/scenes/ports/SceneSo
 import type { ScenePreviewSourceFact } from '@application/scene-preview/models/ScenePreviewSourceFact'
 import type { SceneCompatibilityGateway } from '@application/scene-preview/ports/SceneCompatibilityGateway'
 import type { SceneDialogueRevisionGateway } from '@application/scene-preview/ports/SceneDialogueRevisionGateway'
-import type { ScenePreviewArtifactGateway } from '@application/scene-preview/ports/ScenePreviewArtifactGateway'
-import type {
-  PlayPreviewDialogueRequest,
-  PreviewRuntimeGateway
+import type { ScenePreviewArtifactReport } from '@application/scene-preview/ports/ScenePreviewArtifactGateway'
+import {
+  SceneOverlayRejected,
+  type PlayPreviewDialogueRequest,
+  type PreviewRuntimeGateway
 } from '@application/scene-preview/ports/PreviewRuntimeGateway'
-import { SceneOverlayRejected } from '@application/scene-preview/ports/PreviewRuntimeGateway'
 import type { PreviewSaveVersionGateway } from '@application/scene-preview/ports/PreviewSaveVersionGateway'
-import type { ScenePreviewSourceGateway } from '@application/scene-preview/ports/ScenePreviewSourceGateway'
-import { SceneCandidatePreviewApplicationServiceImpl } from '@application/scene-preview/services/impl/SceneCandidatePreviewApplicationServiceImpl'
-import { ScenePreviewApplicationServiceImpl } from '@application/scene-preview/services/impl/ScenePreviewApplicationServiceImpl'
-import type { DialogueSaveSettlementVO } from '@application/scene-preview/vo/DialogueSaveVO'
+import { ReadCandidatePreview } from '@application/scene-preview/services/impl/ReadCandidatePreview'
+import { createScenePreviewApplication } from '@application/scene-preview/services/impl/createScenePreviewApplication'
+import {
+  ScenePreviewSessionStore,
+  type ActivePreviewSession
+} from '@application/scene-preview/services/impl/ScenePreviewSessionStore'
+import type { ScenePreviewApplicationService } from '@application/scene-preview/services/ScenePreviewApplicationService'
 import type {
+  DialogueSaveRequestIdentityVO,
+  DialogueSaveSettlementVO,
+  SaveDialogueChangesVO
+} from '@application/scene-preview/vo/DialogueSaveVO'
+import type {
+  PreviewDraftResultVO,
+  PreviewRuntimeEventVO,
   PreviewRuntimeListener,
   PreviewStageVO
 } from '@application/scene-preview/vo/PreviewRuntimeVO'
+import type { ScenePreviewSessionVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ScenePreviewErrorCodes } from '@domain/scene-preview/errors/ScenePreviewErrorCodes'
@@ -130,31 +143,63 @@ function stage(
   }
 }
 
-function createPreview() {
+type PreviewHarnessState = {
+  digest: string
+  text: string
+  fileDigest: string
+  releases: number
+  played: string[]
+  playedScenes: ParsedScene[]
+  overlays: string[]
+  rebases: { runtimeGeneration: number; digest: string }[]
+  cleared: number
+  acceptedRevision: number
+  artifactReport: ScenePreviewArtifactReport
+  artifactError: unknown
+  sourceError: unknown
+  prepareMode: 'ready' | 'failed' | 'stale'
+  prepareEntered: number
+  prepareRequests: number[]
+  beforePrepare: Promise<void>
+  beforeRelease: Promise<void> | undefined
+  playStageGenerationOffset: number
+  overlayError: unknown
+  unsubscribed: number
+  override?: ScenePreviewSourceFact
+  beforeCommit: Promise<void>
+  beforeRead: Promise<void>
+  beforeSettlement: Promise<void> | undefined
+  commitEntered: number
+  settlementEntered: number
+  onCommitEntry: (() => void) | undefined
+  onSettlementEntry: (() => void) | undefined
+  commit: 'saved' | 'pending'
+  failNextPlay: boolean
+}
+
+type PreviewHarness = {
+  service: ScenePreviewApplicationService
+  session: (previewSessionId: string) => ActivePreviewSession | undefined
+  readonly releases: number
+  current: PreviewHarnessState
+  holdRead: () => () => void
+  holdCommit: () => () => void
+  holdPrepare: () => () => void
+  holdRelease: () => () => void
+  pendingCommit: () => void
+  holdSettlement: () => () => void
+  waitForCommitEntry: () => Promise<void>
+  writes: string[]
+  waitForSettlementEntry: () => Promise<void>
+  waitForAcceptedSave: (requestId: string) => Promise<void>
+  settlements: Map<string, DialogueSaveSettlementVO>
+  listeners: PreviewRuntimeListener[]
+}
+
+function createPreview(): PreviewHarness {
   const writes: string[] = []
   const settlements = new Map<string, DialogueSaveSettlementVO>()
-  const state: {
-    digest: string
-    text: string
-    fileDigest: string
-    releases: number
-    played: string[]
-    playedScenes: ParsedScene[]
-    overlays: string[]
-    rebases: { runtimeGeneration: number; digest: string }[]
-    cleared: number
-    acceptedRevision: number
-    override?: ScenePreviewSourceFact
-    beforeCommit: Promise<void>
-    beforeRead: Promise<void>
-    beforeSettlement: Promise<void> | undefined
-    commitEntered: number
-    settlementEntered: number
-    onCommitEntry: (() => void) | undefined
-    onSettlementEntry: (() => void) | undefined
-    commit: 'saved' | 'pending'
-    failNextPlay: boolean
-  } = {
+  const state: PreviewHarnessState = {
     digest: basis.digest,
     text: '原来的一句',
     fileDigest: basis.digest,
@@ -165,6 +210,17 @@ function createPreview() {
     rebases: [],
     acceptedRevision: 0,
     cleared: 0,
+    artifactReport: { status: 'available' },
+    artifactError: undefined,
+    sourceError: undefined,
+    prepareMode: 'ready',
+    prepareEntered: 0,
+    prepareRequests: [],
+    beforePrepare: Promise.resolve(),
+    beforeRelease: undefined,
+    playStageGenerationOffset: 0,
+    overlayError: undefined,
+    unsubscribed: 0,
     beforeCommit: Promise.resolve(),
     beforeRead: Promise.resolve(),
     beforeSettlement: undefined,
@@ -226,18 +282,32 @@ function createPreview() {
   }
   const listeners: PreviewRuntimeListener[] = []
   const runtime: PreviewRuntimeGateway = {
-    prepare: async (request) => ({
-      status: 'ready',
-      stage: stage(
-        request.previewSessionId,
-        1,
-        request.contentBasis.digest,
-        request.dialogueId,
-        1,
-        false
-      ),
-      stageUrl: 'http://127.0.0.1:9/index.html'
-    }),
+    prepare: async (request) => {
+      const mode = state.prepareMode
+      state.prepareEntered += 1
+      state.prepareRequests.push(request.runtimeGeneration)
+      await state.beforePrepare
+      if (mode === 'failed') {
+        return {
+          status: 'failed',
+          failure: { code: 'runtimeDisconnected', message: '舞台连接已断开', recovery: 'prepare' }
+        }
+      }
+      const reportedGeneration =
+        mode === 'stale' ? request.runtimeGeneration + 5 : request.runtimeGeneration
+      return {
+        status: 'ready',
+        stage: stage(
+          request.previewSessionId,
+          reportedGeneration,
+          request.contentBasis.digest,
+          request.dialogueId,
+          1,
+          false
+        ),
+        stageUrl: 'http://127.0.0.1:9/index.html'
+      }
+    },
     rebaseSession: async (request) => {
       state.rebases.push({
         runtimeGeneration: request.runtimeGeneration,
@@ -245,6 +315,11 @@ function createPreview() {
       })
     },
     setSceneTextOverlay: async (request) => {
+      if (state.overlayError) {
+        const error = state.overlayError
+        state.overlayError = undefined
+        throw error
+      }
       if (request.editRevision < state.acceptedRevision) {
         throw new SceneOverlayRejected('staleRuntimeGeneration')
       }
@@ -272,7 +347,7 @@ function createPreview() {
         status: 'confirmed',
         stage: stage(
           request.previewSessionId,
-          request.expectedRuntimeGeneration,
+          request.expectedRuntimeGeneration + state.playStageGenerationOffset,
           request.scene.contentDigest,
           request.dialogueId,
           sentence?.engineSentenceIndex ?? 0
@@ -281,17 +356,27 @@ function createPreview() {
     },
     subscribe: (_scope, listener) => {
       listeners.push(listener)
-      return () => undefined
+      return () => {
+        state.unsubscribed += 1
+      }
     },
     release: async () => {
       state.releases += 1
+      if (state.beforeRelease) await state.beforeRelease
     }
   }
+  const sessions = new ScenePreviewSessionStore()
   let sequence = 0
-  const service = new ScenePreviewApplicationServiceImpl({
-    artifacts: { readSceneArtifact: async () => ({ status: 'available' }) },
+  const service = createScenePreviewApplication({
+    artifacts: {
+      readSceneArtifact: async () => {
+        if (state.artifactError) throw state.artifactError
+        return state.artifactReport
+      }
+    },
     sources: {
       readScenePreviewSource: async () => {
+        if (state.sourceError) throw state.sourceError
         await state.beforeRead
         return state.override ?? withFileDigest(source(state.digest, state.text), state.fileDigest)
       }
@@ -305,11 +390,12 @@ function createPreview() {
     } satisfies SceneDialogueRevisionGateway,
     versions,
     runtime,
+    sessions,
     nextId: () => `preview-${++sequence}`
   })
   return {
     service,
-    session: (previewSessionId: string) => service['sessions'].find(previewSessionId),
+    session: (previewSessionId: string) => sessions.find(previewSessionId),
     get releases() {
       return state.releases
     },
@@ -322,6 +408,16 @@ function createPreview() {
     holdCommit() {
       const { promise, resolve } = Promise.withResolvers<void>()
       state.beforeCommit = promise
+      return resolve
+    },
+    holdPrepare() {
+      const { promise, resolve } = Promise.withResolvers<void>()
+      state.beforePrepare = promise
+      return resolve
+    },
+    holdRelease() {
+      const { promise, resolve } = Promise.withResolvers<void>()
+      state.beforeRelease = promise
       return resolve
     },
     pendingCommit() {
@@ -1027,7 +1123,7 @@ function withFileDigest(fact: ScenePreviewSourceFact, fileDigest: string): Scene
   }
 }
 
-function divergentSave(fileDigest: string): ScenePreviewApplicationServiceImpl {
+function divergentSave(fileDigest: string): ScenePreviewApplicationService {
   let phase: 'before' | 'after' = 'before'
   const recordBasis = {
     digest: 'collection-after',
@@ -1046,7 +1142,7 @@ function divergentSave(fileDigest: string): ScenePreviewApplicationServiceImpl {
     subscribe: () => () => undefined,
     release: async () => undefined
   }
-  return new ScenePreviewApplicationServiceImpl({
+  return createScenePreviewApplication({
     artifacts: { readSceneArtifact: async () => ({ status: 'available' }) },
     sources: {
       readScenePreviewSource: async () =>
@@ -1124,7 +1220,7 @@ describe('候选预览只读编排', () => {
     const compatibility: SceneCompatibilityGateway = {
       readSceneCompatibility: async () => ({ parserVersion: 'parser-1', engineVersion: 'engine-1' })
     }
-    const service = new SceneCandidatePreviewApplicationServiceImpl({
+    const service = new ReadCandidatePreview({
       sessions,
       sources,
       parser,
@@ -1142,7 +1238,7 @@ describe('候选预览只读编排', () => {
     const stable: CandidatePreviewSessionGateway = {
       resolveCandidatePreviewSession: async () => ({ status: 'resolved', session })
     }
-    const safe = new SceneCandidatePreviewApplicationServiceImpl({
+    const safe = new ReadCandidatePreview({
       sessions: stable,
       sources: { readSceneSource: async () => source().snapshot },
       parser,
@@ -1157,3 +1253,699 @@ describe('候选预览只读编排', () => {
     expect(JSON.stringify(result)).not.toMatch(/secret|line|\.png/u)
   })
 })
+
+describe('当前场景预览行为护栏', () => {
+  it('可用性查询直接保护产物读取失败，不把异常抛给调用方', async () => {
+    const preview = createPreview()
+    await expect(
+      preview.service.readScenePreviewAvailability({ projectId: 'project-1', sceneId: 'scene-1' })
+    ).resolves.toEqual({ status: 'available' })
+
+    preview.current.artifactReport = { status: 'missing' }
+    await expect(
+      preview.service.readScenePreviewAvailability({ projectId: 'project-1', sceneId: 'scene-1' })
+    ).resolves.toEqual({
+      status: 'blocked',
+      reason: 'noArtifact',
+      message: '当前场景还没有可预览的内容'
+    })
+
+    preview.current.artifactReport = { status: 'unreadable' }
+    await expect(
+      preview.service.readScenePreviewAvailability({ projectId: 'project-1', sceneId: 'scene-1' })
+    ).resolves.toEqual({
+      status: 'blocked',
+      reason: 'readUnavailable',
+      message: '当前场景暂时无法读取'
+    })
+
+    preview.current.artifactError = new AppException({
+      code: ErrorCodes.internalError,
+      msg: 'D:/secret/start.txt'
+    })
+    const unavailable = await preview.service.readScenePreviewAvailability({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    expect(unavailable).toEqual({
+      status: 'blocked',
+      reason: 'sceneUnavailable',
+      message: '当前场景不可用'
+    })
+    expect(JSON.stringify(unavailable)).not.toContain('secret')
+
+    preview.current.artifactError = new Error('D:/secret/start.txt')
+    const unreadable = await preview.service.readScenePreviewAvailability({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    expect(unreadable).toEqual({
+      status: 'blocked',
+      reason: 'readUnavailable',
+      message: '当前场景暂时无法读取'
+    })
+    expect(JSON.stringify(unreadable)).not.toContain('secret')
+
+    preview.current.artifactError = undefined
+    await expect(
+      preview.service.readScenePreviewAvailability({ projectId: '  ', sceneId: 'scene-1' })
+    ).rejects.toMatchObject({ cause: 'invalidRequest' })
+  })
+
+  it('打开场景直接消费可用性失败，成功时交付产物事实', async () => {
+    const preview = createPreview()
+    preview.current.artifactError = new AppException({
+      code: ErrorCodes.invalidRequest,
+      msg: 'D:/secret/start.txt'
+    })
+    await expect(
+      preview.service.openScenePreview({ projectId: 'project-1', sceneId: 'scene-1' })
+    ).rejects.toMatchObject({ cause: 'sceneUnavailable' })
+    expect(preview.current.prepareEntered).toBe(0)
+    await expect(
+      preview.service.preparePreviewStage({ previewSessionId: 'preview-1' })
+    ).rejects.toMatchObject({ cause: 'sessionNotFound' })
+
+    preview.current.artifactError = undefined
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    expect(opened).toMatchObject({
+      previewSessionId: 'preview-1',
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      sceneName: 'start',
+      contentBasis: basis,
+      lockState: 'editable',
+      dialogues: [
+        { dialogueId: '1', text: '原来的一句', editable: true },
+        { dialogueId: '4', text: '后面一句', editable: true }
+      ],
+      issues: []
+    })
+  })
+
+  it('打开失败按产物状态和源读取错误返回稳定原因', async () => {
+    const preview = createPreview()
+    const open = (): Promise<ScenePreviewSessionVO> =>
+      preview.service.openScenePreview({ projectId: 'project-1', sceneId: 'scene-1' })
+
+    preview.current.artifactReport = { status: 'missing' }
+    await expect(open()).rejects.toMatchObject({ cause: 'sceneArtifactMissing' })
+    preview.current.artifactReport = { status: 'unreadable' }
+    await expect(open()).rejects.toMatchObject({ cause: 'contentUnreadable' })
+
+    preview.current.artifactReport = { status: 'available' }
+    preview.current.sourceError = new AppException({
+      code: ErrorCodes.forbidden,
+      msg: 'D:/secret/start.txt'
+    })
+    await expect(open()).rejects.toMatchObject({ cause: 'sceneUnavailable' })
+    preview.current.sourceError = new AppException({
+      code: ErrorCodes.invalidRequest,
+      msg: 'D:/secret/start.txt'
+    })
+    await expect(open()).rejects.toMatchObject({ cause: 'sceneUnavailable' })
+    preview.current.sourceError = new Error('D:/secret/start.txt')
+    await expect(open()).rejects.toMatchObject({ cause: 'contentUnreadable' })
+
+    preview.current.sourceError = undefined
+    preview.current.override = {
+      ...source(),
+      contentBasis: { ...basis, digest: 'unstable-basis' }
+    }
+    await expect(open()).rejects.toMatchObject({ cause: 'contentUnreadable' })
+    await expect(
+      preview.service.preparePreviewStage({ previewSessionId: 'preview-1' })
+    ).rejects.toMatchObject({ cause: 'sessionNotFound' })
+  })
+
+  it('舞台准备进行中重复请求不会第二次触达运行时', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    const release = preview.holdPrepare()
+    const first = preview.service.preparePreviewStage({
+      previewSessionId: opened.previewSessionId
+    })
+    expect(preview.current.prepareEntered).toBe(1)
+    await expect(
+      preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    ).resolves.toMatchObject({
+      status: 'failed',
+      failure: { code: 'prepareAlreadyDone' }
+    })
+    expect(preview.current.prepareEntered).toBe(1)
+    release()
+    await expect(first).resolves.toMatchObject({
+      status: 'ready',
+      stage: { runtimeGeneration: 1 }
+    })
+  })
+
+  it('场景没有台词时准备明确失败且不触达舞台', async () => {
+    const empty = createPreview()
+    empty.current.override = {
+      ...source(),
+      parsed: { ...source().parsed, sentences: [] },
+      dialogues: []
+    }
+    const emptyOpened = await empty.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    await expect(
+      empty.service.preparePreviewStage({ previewSessionId: emptyOpened.previewSessionId })
+    ).resolves.toEqual({
+      status: 'failed',
+      failure: { code: 'prepareFailed', message: '舞台准备失败', recovery: 'prepare' }
+    })
+    expect(empty.current.prepareEntered).toBe(0)
+  })
+
+  it('草稿按已准备、代次和修订递增过滤，拒绝时不留草稿也不写源', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    const draft = (
+      overrides: Partial<PreviewDialogueDraftDTO> = {}
+    ): Promise<PreviewDraftResultVO> =>
+      preview.service.previewDialogueDraft({
+        previewSessionId: opened.previewSessionId,
+        expectedRuntimeGeneration: 1,
+        dialogueId: '1',
+        editRevision: 1,
+        text: '草稿一句',
+        ...overrides
+      })
+
+    await expect(draft()).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'runtimeNotPrepared'
+    })
+    await preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    await expect(draft({ expectedRuntimeGeneration: 2 })).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'staleRuntimeGeneration'
+    })
+    await expect(draft({ editRevision: 0 })).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'staleRuntimeGeneration'
+    })
+    await expect(draft({ editRevision: 1.5 })).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'staleRuntimeGeneration'
+    })
+    await expect(draft({ text: '   ' })).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'dialogueNotMounted'
+    })
+    await expect(draft({ dialogueId: '99' })).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'dialogueNotMounted'
+    })
+    expect(preview.current.overlays).toEqual([])
+    expect(preview.current.played).toEqual([])
+
+    // 拒绝的草稿没有占用修订：rev1 仍可应用。
+    await expect(draft()).resolves.toEqual({
+      status: 'applied',
+      dialogueId: '1',
+      editRevision: 1,
+      runtimeGeneration: 1,
+      sequence: 1
+    })
+    expect(preview.current.overlays.at(-1)).toBe('草稿一句\n后面一句')
+    expect(preview.current.played).toEqual(['1'])
+    expect(preview.writes).toEqual([])
+  })
+
+  it('舞台拒绝草稿覆盖时保留拒绝原因，不占用草稿修订', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    await preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    const draft = (editRevision: number): Promise<PreviewDraftResultVO> =>
+      preview.service.previewDialogueDraft({
+        previewSessionId: opened.previewSessionId,
+        expectedRuntimeGeneration: 1,
+        dialogueId: '1',
+        editRevision,
+        text: '拒绝草稿'
+      })
+
+    preview.current.overlayError = new SceneOverlayRejected('contentBasisChanged')
+    await expect(draft(1)).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'dialogueNotMounted'
+    })
+    preview.current.overlayError = new SceneOverlayRejected('sessionClosed')
+    await expect(draft(2)).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'dialogueNotMounted'
+    })
+    preview.current.overlayError = new SceneOverlayRejected('staleRuntimeGeneration')
+    await expect(draft(3)).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'staleRuntimeGeneration'
+    })
+    preview.current.overlayError = new Error('D:/secret/runtime')
+    await expect(draft(4)).resolves.toEqual({
+      status: 'unavailable',
+      reason: 'runtimeNotReady'
+    })
+    expect(preview.current.overlays).toEqual([])
+
+    // 被舞台拒绝的修订没有写入会话：rev1 仍可应用。
+    await expect(draft(1)).resolves.toMatchObject({
+      status: 'applied',
+      editRevision: 1,
+      runtimeGeneration: 1
+    })
+    expect(preview.current.overlays).toEqual(['拒绝草稿\n后面一句'])
+  })
+
+  it('关闭后的保存只按持久结算回答，未知请求保持关闭错误且不提交', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    await preview.service.closeScenePreview({ previewSessionId: opened.previewSessionId })
+    const edits = [{ dialogueId: '1', text: '关闭后的一句' }]
+    const snapshot = JSON.stringify(edits)
+    const save = (requestId: string): Promise<SaveDialogueChangesVO> =>
+      preview.service.saveDialogueChanges({
+        previewSessionId: opened.previewSessionId,
+        requestId,
+        baseContentBasis: opened.contentBasis,
+        edits
+      })
+    const request = (requestId: string): DialogueSaveRequestIdentityVO => ({
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      requestId
+    })
+
+    await expect(save('closed-unknown')).rejects.toMatchObject({ cause: 'sessionClosed' })
+    await expect(save('   ')).rejects.toMatchObject({ cause: 'invalidRequest' })
+
+    preview.settlements.set(`closed-locked\0${snapshot}`, {
+      status: 'conflict',
+      request: request('closed-locked'),
+      failure: { code: 'contentLocked', message: '当前场景已锁定，不能修改', recovery: 'none' }
+    })
+    await expect(save('closed-locked')).resolves.toEqual({
+      status: 'rejected',
+      failure: { code: 'contentLocked', message: '当前场景已锁定，不能修改', recovery: 'none' }
+    })
+
+    preview.settlements.set(`closed-mapped\0${snapshot}`, {
+      status: 'conflict',
+      request: request('closed-mapped'),
+      failure: {
+        code: 'previewUpdatePending',
+        message: '保存后的预览尚未恢复',
+        recovery: 'retryPreviewUpdate'
+      }
+    })
+    await expect(save('closed-mapped')).resolves.toMatchObject({
+      status: 'rejected',
+      failure: { code: 'saveRequestReused' }
+    })
+
+    preview.settlements.set(`closed-unchanged\0${snapshot}`, {
+      status: 'unchanged',
+      contentBasis: basis,
+      confirmedEdits: edits
+    })
+    await expect(save('closed-unchanged')).resolves.toEqual({
+      status: 'unchanged',
+      contentBasis: basis,
+      confirmedEdits: edits
+    })
+
+    preview.settlements.set(`closed-pending\0${snapshot}`, {
+      status: 'pendingVerification',
+      request: request('closed-pending'),
+      failure: { code: 'saveOutcomeUnknown', message: '保存结果尚未核对', recovery: 'querySettlement' }
+    })
+    await expect(save('closed-pending')).resolves.toMatchObject({
+      status: 'pendingVerification',
+      request: request('closed-pending')
+    })
+
+    preview.settlements.set(`closed-saved\0${snapshot}`, {
+      status: 'saved',
+      contentBasis: basis,
+      committedEdits: edits
+    })
+    await expect(save('closed-saved')).resolves.toEqual({
+      status: 'saved',
+      contentBasis: basis,
+      committedEdits: edits,
+      runtimeGeneration: 0,
+      previewUpdate: { status: 'unavailable', reason: 'sessionClosed' }
+    })
+
+    preview.settlements.set(`closed-refused\0${snapshot}`, {
+      status: 'notCommitted',
+      request: request('closed-refused'),
+      failure: { code: 'contentUnreadable', message: '当前场景内容无法读取', recovery: 'reopen' }
+    })
+    await expect(save('closed-refused')).resolves.toEqual({
+      status: 'rejected',
+      failure: { code: 'contentUnreadable', message: '当前场景内容无法读取', recovery: 'reopen' }
+    })
+
+    expect(preview.current.commitEntered).toBe(0)
+    expect(preview.writes).toEqual([])
+  })
+
+  it('保存请求边界和重复身份在提交前拒绝，同身份不同负载不能重放', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    const request = {
+      previewSessionId: opened.previewSessionId,
+      requestId: 'once',
+      baseContentBasis: opened.contentBasis,
+      edits: [{ dialogueId: '1', text: '第一次' }]
+    }
+
+    await expect(
+      preview.service.saveDialogueChanges({ ...request, requestId: '   ' })
+    ).rejects.toMatchObject({ cause: 'invalidRequest' })
+    await expect(
+      preview.service.saveDialogueChanges({ ...request, edits: [] })
+    ).rejects.toMatchObject({ cause: 'invalidRequest' })
+    await expect(
+      preview.service.saveDialogueChanges({ ...request, previewSessionId: 'missing' })
+    ).rejects.toMatchObject({ cause: 'sessionNotFound' })
+    expect(preview.current.commitEntered).toBe(0)
+
+    await expect(preview.service.saveDialogueChanges(request)).resolves.toMatchObject({
+      status: 'saved',
+      committedEdits: [{ dialogueId: '1', text: '第一次' }]
+    })
+    const commits = preview.current.commitEntered
+    await expect(
+      preview.service.saveDialogueChanges({
+        ...request,
+        edits: [{ dialogueId: '1', text: '另一次' }]
+      })
+    ).rejects.toMatchObject({ cause: 'saveRequestReused' })
+    expect(preview.current.commitEntered).toBe(commits)
+  })
+
+  it('订阅必须是打开的会话且工程场景一致，关闭中和关闭后分别返回会话状态', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    const scope = {
+      previewSessionId: opened.previewSessionId,
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    }
+    expect(
+      failureCause(() =>
+        preview.service.subscribePreviewRuntime(
+          { ...scope, previewSessionId: 'missing' },
+          () => undefined
+        )
+      )
+    ).toBe('sessionNotFound')
+    expect(
+      failureCause(() =>
+        preview.service.subscribePreviewRuntime(
+          { ...scope, projectId: 'project-2' },
+          () => undefined
+        )
+      )
+    ).toBe('sessionNotFound')
+
+    const release = preview.holdRelease()
+    const closing = preview.service.closeScenePreview({
+      previewSessionId: opened.previewSessionId
+    })
+    expect(failureCause(() => preview.service.subscribePreviewRuntime(scope, () => undefined))).toBe(
+      'sessionClosed'
+    )
+    release()
+    await closing
+    expect(failureCause(() => preview.service.subscribePreviewRuntime(scope, () => undefined))).toBe(
+      'sessionNotFound'
+    )
+  })
+
+  it('运行时订阅闭包只投递当前会话、当前代次和递增序号的事件', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    await preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    const seen: string[] = []
+    const unsubscribe = preview.service.subscribePreviewRuntime(
+      {
+        previewSessionId: opened.previewSessionId,
+        projectId: 'project-1',
+        sceneId: 'scene-1'
+      },
+      (event) => seen.push(`${event.runtimeGeneration}:${event.sequence}`)
+    )
+    const deliver = preview.listeners[0]
+    if (!deliver) throw new Error('运行时没有订阅')
+    const emit = (
+      sequence: number,
+      generation = 1,
+      digest = basis.digest,
+      previewSessionId = opened.previewSessionId
+    ): void =>
+      deliver({
+        type: 'stage',
+        ...stage(previewSessionId, generation, digest, '1', sequence)
+      })
+
+    emit(2)
+    emit(2)
+    emit(3, 1, 'other-digest')
+    emit(3, 1, basis.digest, 'other-session')
+    emit(9, 9)
+    expect(seen).toEqual(['1:2'])
+
+    emit(3)
+    expect(seen).toEqual(['1:2', '1:3'])
+
+    unsubscribe()
+    unsubscribe()
+    expect(preview.current.unsubscribed).toBe(1)
+    emit(4)
+    expect(seen).toEqual(['1:2', '1:3'])
+  })
+
+  it('监听器异常被隔离，已消费的序号仍生效', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    await preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    let calls = 0
+    preview.service.subscribePreviewRuntime(
+      {
+        previewSessionId: opened.previewSessionId,
+        projectId: 'project-1',
+        sceneId: 'scene-1'
+      },
+      () => {
+        calls += 1
+        throw new Error('listener boom')
+      }
+    )
+    const deliver = preview.listeners[0]
+    if (!deliver) throw new Error('运行时没有订阅')
+    const event = (sequence: number): PreviewRuntimeEventVO => ({
+      type: 'stage' as const,
+      ...stage(opened.previewSessionId, 1, basis.digest, '1', sequence)
+    })
+
+    expect(() => deliver(event(2))).not.toThrow()
+    expect(calls).toBe(1)
+    expect(() => deliver(event(2))).not.toThrow()
+    expect(calls).toBe(1)
+    expect(() => deliver(event(3))).not.toThrow()
+    expect(calls).toBe(2)
+  })
+
+  it('播放命令在未准备、旧代次和运行时不确认时保持当前句', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    const command = (
+      overrides: Partial<PreviewDialoguePlaybackDTO> = {}
+    ): PreviewDialoguePlaybackDTO => ({
+      previewSessionId: opened.previewSessionId,
+      expectedRuntimeGeneration: 1,
+      dialogueId: '4',
+      ...overrides
+    })
+
+    await expect(preview.service.selectPreviewDialogue(command())).rejects.toMatchObject({
+      cause: 'runtimeNotPrepared'
+    })
+    await preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    await expect(
+      preview.service.selectPreviewDialogue(command({ expectedRuntimeGeneration: 2 }))
+    ).rejects.toMatchObject({ cause: 'staleRuntimeGeneration' })
+    await expect(
+      preview.service.selectPreviewDialogue(command({ dialogueId: '99' }))
+    ).resolves.toMatchObject({ status: 'failed', failure: { code: 'dialogueObjectInvalid' } })
+    await expect(
+      preview.service.playPreviousDialogue(command({ dialogueId: '1' }))
+    ).resolves.toMatchObject({ status: 'failed', failure: { code: 'playbackCompleted' } })
+    expect(preview.current.played).toEqual([])
+
+    preview.current.playStageGenerationOffset = 1
+    await expect(preview.service.selectPreviewDialogue(command())).resolves.toMatchObject({
+      status: 'failed',
+      failure: { code: 'staleRuntimeGeneration' }
+    })
+    // 失败不推进当前句：从准备时的第 1 句继续向后仍定位到第 4 句。
+    preview.current.playStageGenerationOffset = 0
+    await expect(preview.service.playNextDialogue(command())).resolves.toMatchObject({
+      status: 'confirmed',
+      stage: { position: { kind: 'dialogue', dialogueId: '4' } }
+    })
+
+    preview.current.failNextPlay = true
+    await expect(
+      preview.service.selectPreviewDialogue(command({ dialogueId: '1' }))
+    ).resolves.toMatchObject({ status: 'failed', failure: { code: 'locateNotReached' } })
+    await expect(preview.service.playNextDialogue(command())).resolves.toMatchObject({
+      status: 'failed',
+      failure: { code: 'playbackCompleted' }
+    })
+  })
+
+  it('持久结算查询先校验身份再委托持久端口', async () => {
+    const preview = createPreview()
+    await expect(
+      preview.service.readDialogueSaveSettlement({
+        projectId: '  ',
+        sceneId: 'scene-1',
+        requestId: 'request-1'
+      })
+    ).rejects.toMatchObject({ cause: 'invalidRequest' })
+    await expect(
+      preview.service.readDialogueSaveSettlement({
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        requestId: '  '
+      })
+    ).rejects.toMatchObject({ cause: 'invalidRequest' })
+
+    const request = { projectId: 'project-1', sceneId: 'scene-1', requestId: 'request-1' }
+    await expect(preview.service.readDialogueSaveSettlement(request)).resolves.toEqual({
+      status: 'notFound',
+      request
+    })
+  })
+
+  it('关闭重复调用只释放一次，旧会话不能重新准备', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    await preview.service.closeScenePreview({ previewSessionId: opened.previewSessionId })
+    await preview.service.closeScenePreview({ previewSessionId: opened.previewSessionId })
+    expect(preview.releases).toBe(1)
+    await expect(
+      preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    ).rejects.toMatchObject({ cause: 'sessionNotFound' })
+    const reopened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    expect(reopened.previewSessionId).toBe('preview-2')
+  })
+})
+
+describe('舞台准备失败后的状态与重试', () => {
+  it('舞台准备失败后允许用新代次重试，不会把失败当已准备', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    preview.current.prepareMode = 'failed'
+    await expect(
+      preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    ).resolves.toMatchObject({
+      status: 'failed',
+      failure: { code: 'runtimeDisconnected', recovery: 'prepare' }
+    })
+    expect(preview.session(opened.previewSessionId)).toMatchObject({
+      prepare: 'failed',
+      prepared: false,
+      runtimeGeneration: 1
+    })
+
+    preview.current.prepareMode = 'ready'
+    await expect(
+      preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    ).resolves.toMatchObject({
+      status: 'ready',
+      stage: { runtimeGeneration: 2, sequence: 1 }
+    })
+    expect(preview.current.prepareRequests).toEqual([1, 2])
+    expect(preview.session(opened.previewSessionId)).toMatchObject({
+      prepare: 'ready',
+      prepared: true,
+      runtimeGeneration: 2,
+      currentDialogueId: '1'
+    })
+  })
+
+  it('舞台回报旧代次时准备状态应为失败而不是仍准备中', async () => {
+    const preview = createPreview()
+    const opened = await preview.service.openScenePreview({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    preview.current.prepareMode = 'stale'
+    await expect(
+      preview.service.preparePreviewStage({ previewSessionId: opened.previewSessionId })
+    ).resolves.toEqual({
+      status: 'failed',
+      failure: { code: 'prepareFailed', message: '舞台准备失败', recovery: 'prepare' }
+    })
+    expect(preview.session(opened.previewSessionId)).toMatchObject({
+      prepare: 'failed',
+      prepared: false
+    })
+  })
+})
+
+function failureCause(run: () => unknown): unknown {
+  try {
+    run()
+  } catch (error) {
+    return error instanceof AppException ? error.cause : 'unexpected-error'
+  }
+  return 'not-thrown'
+}

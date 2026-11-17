@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ProjectFilesApplicationServiceImpl } from '@application/project-files/services/impl/ProjectFilesApplicationServiceImpl'
+import { ManageProjectFiles } from '@application/project-files/services/impl/ManageProjectFiles'
 import type { ProjectListQueryGateway } from '@application/projects/ports/ProjectListQueryGateway'
 import { AppException } from '@common/errors/AppException'
 import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileErrorCodes'
@@ -17,7 +17,7 @@ import {
   MAX_IDENTITY_BYTES,
   MAX_JSON_BYTES,
   MAX_MEDIA_BYTES
-} from '@infrastructure/project-files/projectFilePaths'
+} from '@infrastructure/project-files/public/projectFileStorage'
 import { LocalProjectStorageGatewayImpl } from '@infrastructure/projects/LocalProjectStorageGatewayImpl'
 
 vi.mock('node:fs/promises', async (importOriginal) => ({
@@ -79,24 +79,27 @@ function sourceKey(sourceId: string): string {
   return encodeStorageKey(sourceId)
 }
 
-function createService(root: string): ProjectFilesApplicationServiceImpl {
+function createService(root: string): ManageProjectFiles {
   const listQuery: ProjectListQueryGateway = {
     listRegistrations: async () => [],
     countRegistrations: async () => 0,
     findRegistration: async (id) =>
       id === 'project-1' ? { id: 'project-1', directory: root } : null
   }
-  return new ProjectFilesApplicationServiceImpl({
+  return new ManageProjectFiles({
     listQuery,
     domain: new ProjectDomainServiceImpl(),
     storage: new LocalProjectStorageGatewayImpl(),
     sources: new LocalProjectInputSourceReaderGatewayImpl(),
     arrangements: new LocalSceneCanvasArrangementInspectionGatewayImpl(),
     files: new LocalProjectFileOperationGatewayImpl(),
-    versions: { readOperation: async () => 'unsettled', publish: async () => undefined },
+    versions: {
+      readOperation: async () => 'unsettled',
+      hasOperationLink: async () => false,
+      publish: async () => undefined
+    },
     desktopOpen: { open: async () => undefined },
-    createSourceId: () => 'unused-source',
-    createOperationId: () => 'unused-operation'
+    createSourceId: () => 'unused-source'
   })
 }
 
@@ -530,7 +533,56 @@ describe('工程文件读取适配', () => {
     expect(listed.sources[0]).toMatchObject({ sourceId: 'doc-1', name: title, readable: true })
   })
 
-  it('当前 v4 编排通过工程检查，旧格式记为不支持而不是损坏', async () => {
+  it('旧 v4 检查按格式不支持拒绝，字段事实由迁移工具保留', async () => {
+    const root = await temporaryRoot()
+    await seedProject(root)
+    await writeRelative(
+      root,
+      `.opengalgame/canvases/${sourceKey('scene-1')}/${sourceKey('canvas-1')}.json`,
+      JSON.stringify({
+        formatVersion: 4,
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        canvasId: 'canvas-1',
+        viewport: { x: 0, y: 0, zoom: 1 },
+        cards: [
+          {
+            kind: 'document',
+            cardId: 'doc',
+            sourceId: 'doc-1',
+            title: '设定标题',
+            summary: '设定摘要',
+            layout: { x: 0, y: 0, width: 100, height: 80 }
+          },
+          {
+            kind: 'prompt',
+            cardId: 'prompt',
+            body: '提示词正文',
+            references: [{ cardId: 'doc' }],
+            layout: { x: 120, y: 0, width: 100, height: 80 }
+          }
+        ],
+        relations: [
+          {
+            relationId: 'rel-1',
+            fromCardId: 'prompt',
+            toCardId: 'doc',
+            specificName: '引用',
+            recordCardId: 'doc'
+          }
+        ]
+      })
+    )
+    const inspection =
+      await new LocalSceneCanvasArrangementInspectionGatewayImpl().inspectSceneCanvasArrangements({
+        projectId: 'project-1',
+        location: { directory: root }
+      })
+    expect(inspection.canvasArrangementFormatSupported).toBe(false)
+    expect(inspection.arrangements).toEqual([])
+  })
+
+  it('旧 v4 与更旧格式都记为不支持而不是损坏', async () => {
     const root = await temporaryRoot()
     await seedProject(root)
     await writeDocument(root, 'doc-1')
@@ -565,7 +617,7 @@ describe('工程文件读取适配', () => {
       Buffer.from([0xff])
     )
     const oversized = JSON.stringify({
-      formatVersion: 4,
+      formatVersion: 5,
       projectId: 'project-1',
       sceneId: 'scene-1',
       canvasId: 'canvas-big',

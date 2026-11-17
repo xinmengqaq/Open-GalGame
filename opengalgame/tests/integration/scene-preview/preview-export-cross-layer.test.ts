@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
-import { SceneExportApplicationServiceImpl } from '@application/scene-export/services/impl/SceneExportApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
+import { ExportSavedScene } from '@application/scene-export/services/impl/ExportSavedScene'
 import type { ScenePreviewSourceGateway } from '@application/scene-preview/ports/ScenePreviewSourceGateway'
 import { createScenePreview } from '@bootstrap/scenePreview'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -17,6 +17,7 @@ import { encodeStorageKey } from '@infrastructure/project-files/projectFilePaths
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 import { LocalSceneExportSourceGateway } from '@infrastructure/scene-export/LocalSceneExportSourceGateway'
 import { TerreWindowsScenePackager } from '@infrastructure/scene-export/TerreWindowsScenePackager'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { ScenePreviewController } from '@interfaces/scene-preview/ipc/ScenePreviewController'
 import { registerScenePreviewIpc } from '@interfaces/scene-preview/ipc/registerScenePreviewIpc'
@@ -42,6 +43,12 @@ vi.mock('electron', () => ({
 const roots: string[] = []
 const scene = { projectId: 'project-1', sceneId: 'scene-1' }
 const script = '小明:原来的正文 -figure=hero.png;\r\n'
+const logger: LoggerGateway = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined
+}
 const fixedChannels = [
   'scene-preview:availability',
   'scene-preview:open',
@@ -135,6 +142,7 @@ describe('预览与导出跨层装配', () => {
     })
 
     const savedBasis = dataOf(settlement).contentBasis
+    expect(savedBasis).toMatchObject({ parserVersion: '4.6.5', engineVersion: '4.6.5' })
     const exported = await assembled.exporter.exportSavedScene({
       ...scene,
       contentBasis: savedBasis as { digest: string; parserVersion: string; engineVersion: string },
@@ -155,7 +163,7 @@ describe('预览与导出跨层装配', () => {
     const world = await registeredScene()
     let packaged = 0
     const assembled = await assemble(world, trustedWindow().window)
-    const exporter = new SceneExportApplicationServiceImpl({
+    const exporter = new ExportSavedScene({
       sources: new LocalSceneExportSourceGateway(
         world.userDirectory,
         versioning(world.userDirectory),
@@ -214,7 +222,7 @@ async function assemble(
   world: { userDirectory: string; projectRoot: string },
   window: unknown
 ): Promise<{
-  exporter: SceneExportApplicationServiceImpl
+  exporter: ExportSavedScene
   sources: ScenePreviewSourceGateway
   release: () => Promise<void>
 }> {
@@ -229,23 +237,28 @@ async function assemble(
     sessionLookup: { findCandidatePreviewSession: () => undefined },
     host
   })
+  const candidateEvents = {
+    subscribeCandidatePreviewEvents: () => () => undefined,
+    readCandidatePreviewEvent: () => undefined
+  }
   const detach = registerScenePreviewIpc({
     getWindow: () => window as never,
     rendererUrl: 'http://127.0.0.1:5173/',
     scenePreview: new ScenePreviewController(
       preview.currentScenePreview,
       preview.candidatePreview,
-      exceptions()
+      exceptions(),
+      candidateEvents
     )
   })
   return {
-    exporter: new SceneExportApplicationServiceImpl({
+    exporter: new ExportSavedScene({
       sources: new LocalSceneExportSourceGateway(
         world.userDirectory,
         versionService,
         preview.currentScene.sources
       ),
-      packager: new TerreWindowsScenePackager(world.userDirectory)
+      packager: new TerreWindowsScenePackager(logger, world.userDirectory)
     }),
     sources: preview.currentScene.sources,
     release: async () => {
@@ -256,21 +269,15 @@ async function assemble(
   }
 }
 
-function versioning(userDirectory: string): ProjectVersioningApplicationServiceImpl {
-  return new ProjectVersioningApplicationServiceImpl({
+function versioning(userDirectory: string): ManageProjectVersioning {
+  return new ManageProjectVersioning({
     ...createProjectVersioningGateways(userDirectory),
     nextId: () => `op-cross-${Math.random().toString(16).slice(2)}`
   })
 }
 
 function exceptions(): IpcExceptionHandler {
-  const logger: LoggerGateway = {
-    debug: () => undefined,
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined
-  }
-  return new IpcExceptionHandler(logger)
+  return new IpcExceptionHandler(logger, new IpcErrorMapper())
 }
 
 function trustedWindow(): {

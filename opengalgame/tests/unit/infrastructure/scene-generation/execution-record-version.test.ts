@@ -1,10 +1,10 @@
+import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
-import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { FileSceneGenerationExecutionRepositoryImpl } from '@infrastructure/scene-generation/execution/FileSceneGenerationExecutionRepositoryImpl'
 import {
   ensureStateRoot,
@@ -18,7 +18,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-it('旧格式执行记录保留原文，不阻断同工程的新线程', async () => {
+it('旧格式执行记录归档后产品文件只留当前记录，不阻断同工程的新线程', async () => {
   const stateRoot = await mkdtemp(join(tmpdir(), 'execution-records-'))
   roots.push(stateRoot)
   const repository = new FileSceneGenerationExecutionRepositoryImpl(stateRoot)
@@ -38,6 +38,7 @@ it('旧格式执行记录保留原文，不阻断同工程的新线程', async (
       prompts: [{ id: 'story', sourceId: 'story', body: '旧正文' }]
     }
   }
+  const sourceBytes = Buffer.from(JSON.stringify({ version: 1, executions: [legacy] }))
   await writeJson(path, { version: 1, executions: [legacy] })
 
   await repository.createExecution(currentExecution())
@@ -49,21 +50,14 @@ it('旧格式执行记录保留原文，不阻断同工程的新线程', async (
     }>
   }
   expect(saved.version).toBe(7)
-  expect(saved.executions[0]).toMatchObject({
-    operationId: 'operation-old',
-    inputSnapshot: { prompts: [{ sourceId: 'story', body: '旧正文' }] }
-  })
-  expect(saved.executions.map((item) => item.operationId)).toEqual([
-    'operation-old',
-    'operation-new'
-  ])
+  expect(saved.executions.map((item) => item.operationId)).toEqual(['operation-new'])
   await expect(
     repository.readExecution({
       projectId: 'project-1',
       sceneId: 'scene-1',
       operationId: 'operation-old'
     })
-  ).rejects.toMatchObject({ code: ErrorCodes.invalidRequest })
+  ).resolves.toBeNull()
   await expect(
     repository.readExecution({
       projectId: 'project-1',
@@ -71,6 +65,46 @@ it('旧格式执行记录保留原文，不阻断同工程的新线程', async (
       operationId: 'operation-new'
     })
   ).resolves.toMatchObject({ operationId: 'operation-new' })
+
+  const archiveDirectory = join(
+    stateRoot,
+    'scene-generation/projects/project-1/legacy-executions',
+    createHash('sha256').update(sourceBytes).digest('hex')
+  )
+  await expect(readFile(join(archiveDirectory, 'source.json'))).resolves.toEqual(sourceBytes)
+  const manifest = JSON.parse(await readFile(join(archiveDirectory, 'manifest.json'), 'utf8')) as {
+    formatVersion: number
+    kind: string
+    reason: string
+    counts: { total: number; current: number; legacy: number }
+    legacyRecords: Array<Record<string, unknown>>
+    readResponsibility: string
+    productDataSource: boolean
+  }
+  expect(manifest).toMatchObject({
+    formatVersion: 1,
+    kind: 'execution-record-legacy-archive',
+    reason: 'pre-migration-backup',
+    counts: { total: 1, current: 0, legacy: 1 },
+    readResponsibility: 'migration-and-restore-tools-only',
+    productDataSource: false
+  })
+  expect(manifest.legacyRecords).toEqual([
+    {
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      operationId: 'operation-old',
+      threadId: 'thread-old',
+      branchId: 'branch-old',
+      fingerprint: 'fingerprint-old',
+      state: 'succeeded',
+      hasCreatedAt: false,
+      hasUpdatedAt: false,
+      hasTimeline: false,
+      rawSha256: createHash('sha256').update(JSON.stringify(legacy)).digest('hex'),
+      reason: 'missing-record-time'
+    }
+  ])
 })
 
 it('创建和写入返回读回的持久记录时间，创建时间不被覆盖', async () => {
@@ -837,9 +871,9 @@ it('版本 6 旧记录按 phase 迁移为 step，终态 phase 归一为终态 st
   }
   expect(saved.version).toBe(7)
   expect(saved.executions.every((item) => !('phase' in item))).toBe(true)
-  expect(
-    saved.executions.find((item) => item.operationId === 'operation-rolling')?.step
-  ).toBe('rollingBack')
+  expect(saved.executions.find((item) => item.operationId === 'operation-rolling')?.step).toBe(
+    'rollingBack'
+  )
 })
 
 function currentExecution(): SceneGenerationExecution {

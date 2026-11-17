@@ -1,3 +1,5 @@
+import type { VersionCallerOperationState } from './VersionOperationRecordGateway'
+
 /**
  * 作品仓库上的短事务事实。
  * 不暴露 Git 阶段、命令或磁盘位置；查询失败必须抛出，不能用空结果表示。
@@ -52,6 +54,19 @@ export interface VersionTransactionGateway {
    * @throws {AppException} 回退前的确定失败。结果不明时返回待核对。
    */
   rollback(input: VersionRollbackRequest): Promise<VersionRollbackExecution>
+
+  /**
+   * 在单个写入边界内按技术 WAL 恢复该工程的未完成操作。
+   * 已发布只补元数据；未发布按备份门槛恢复；冲突/损坏必须抛错。
+   */
+  recoverProject(projectId: string, sourceModule: string): Promise<void>
+
+  /** 同一写队列内恢复 WAL 并固化 caller 终态；显式 ID 可补 tombstone。 */
+  resolveCallerOperations(
+    projectId: string,
+    sourceModule: string,
+    callerOperationIds: readonly string[]
+  ): Promise<readonly { callerOperationId: string; state: VersionCallerOperationState }[]>
 }
 
 /** 基线身份和它指向的作品修订。 */
@@ -131,10 +146,14 @@ export type EnsureDeclaredPathsRequest = {
 export type VersionCommitRequest = {
   readonly projectId: string
   readonly operationId: string
+  readonly callerOperationId?: string
+  readonly sourceModule: string
   readonly baselineRef: string
   readonly contentFingerprint: string
   readonly changes: readonly VersionLimitedChange[]
   readonly verify: (observation: VersionCommitObservation) => Promise<VersionBoundaryDecision>
+  /** 仅 project-files 开启：未发布失败恢复前先完整备份并校验当前工作区/暂存内容。 */
+  readonly backupBeforeRestore?: boolean
 }
 
 /** 事务发布后的可靠结果，或无法证明的待核对。 */
@@ -148,6 +167,8 @@ export type VersionRollbackRequest = {
   readonly operationId: string
   readonly ownedPaths: readonly string[]
   readonly verify: (observation: VersionRollbackObservation) => Promise<VersionBoundaryDecision>
+  /** 仅 project-files 开启：回退前完整备份并校验当前工作区/暂存内容。 */
+  readonly backupBeforeRestore?: boolean
 }
 
 /** 追加回退后的可靠结果，或无法证明的待核对。 */

@@ -1,23 +1,23 @@
-import type { z } from 'zod'
 import type { SceneGenerationProductionContext } from '@application/scene-generation/ports/SceneGenerationProductionContext'
 import type { SceneInputGateway } from '@application/scene-generation/ports/SceneInputGateway'
 import type {
   SceneConfirmedControlDTO,
   SceneGenerationInputsDTO,
   SceneGenerationPromptScopeDTO,
-  SceneGenerationUsageDTO,
   SceneInputSelectionDTO
 } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type { SceneSourceLocation } from '@application/scenes/models/SceneSourceLocation'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-import { validateCanvasArrangement } from '@domain/project-files/services/validateCanvasArrangement'
-import type {
-  ProjectCanvasArrangement,
-  ProjectCanvasCard,
-  ProjectCanvasRelation
-} from '@domain/project-files/models/ProjectCanvasArrangement'
+import { FailureReasons } from '@common/errors/FailureReasons'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileErrorCodes'
+import type {
+  SceneCanvasArrangement,
+  SceneCanvasCard,
+  SceneCanvasRelation
+} from '@domain/scene-canvas/models/SceneCanvasArrangement'
+import { validateSceneCanvasArrangement } from '@domain/scene-canvas/services/validateSceneCanvasArrangement'
 import { identifyMediaFormat } from '@infrastructure/media/identifyMediaFormat'
 import { resolveContained } from '@infrastructure/git/containedPath'
 import {
@@ -25,23 +25,21 @@ import {
   sceneCanvasArrangementDocumentSchema as currentArrangementDocumentSchema,
   sceneCanvasArrangementFormatProbeSchema
 } from '@infrastructure/scene-canvas/documents/SceneCanvasArrangementDocument'
-import { sceneCanvasArrangementDocumentSchema as legacyArrangementDocumentSchema } from '@infrastructure/project-files/documents/SceneCanvasArrangementDocument'
+import { toArrangementVersion } from '@infrastructure/scene-canvas/mapping/SceneCanvasArrangementReadFactsMapper'
+import {
+  copyUsage,
+  currentDocumentToModel
+} from '@infrastructure/scene-canvas/sceneArrangementCurrentMapping'
+import { arrangementPath } from '@infrastructure/scene-canvas/sceneCanvasPaths'
+import type { CanvasArrangementMigration } from '@infrastructure/scene-canvas/migration/CanvasArrangementMigration'
 import { projectInputSourceDocumentSchema } from '@infrastructure/project-files/documents/ProjectInputSourceDocument'
 import {
-  toArrangementVersion,
-  toCanvasArrangement
-} from '@infrastructure/project-files/mapping/ProjectFileReadFactsMapper'
-import {
-  arrangementPath,
   documentBodyPath,
   encodeStorageKey,
-  PROJECT_ARRANGEMENT_FORMAT_VERSION,
-  sourceDescriptorPath
-} from '@infrastructure/project-files/projectFilePaths'
-import {
+  sourceDescriptorPath,
   withProjectFileRead,
   type ProjectFileReadWindow
-} from '@infrastructure/project-files/reading/ProjectFileReadWindow'
+} from '@infrastructure/project-files/public/projectFileStorage'
 import { parseJsonDocumentContent } from '@infrastructure/storage/jsonDocument'
 import { sourceLocationSchema } from '../execution/SceneGenerationExecutionDocument'
 
@@ -71,6 +69,7 @@ export class SceneInputGatewayImpl implements SceneInputGateway {
   /** 只登记受限工程位置。输入正文从已保存编排和真实来源读取。 */
   constructor(
     registrations: readonly SceneGenerationRegistration[],
+    private readonly migration: CanvasArrangementMigration,
     private readonly production?: SceneGenerationProductionContext
   ) {
     this.registrations = registrations.map((item) => {
@@ -116,10 +115,26 @@ export class SceneInputGatewayImpl implements SceneInputGateway {
     if (located.projectRoot !== source.projectRoot) {
       throw new AppException({ code: ErrorCodes.forbidden, msg: '输入工程归属不匹配' })
     }
+    try {
+      await this.migration.ensureCurrent({
+        projectId: located.projectId,
+        directory: located.projectRoot,
+        sceneId: located.sceneId,
+        canvasId: selection.canvasId,
+        trigger: 'generation'
+      })
+    } catch {
+      // 迁移失败不回退旧读；未能升级的旧格式随后按 unsupportedFormat 明确拒绝。
+    }
     return withProjectFileRead(source.projectRoot, source.projectId, async (window) => {
-      const arrangement = await readArrangement(window, source.sceneId, selection.canvasId)
-      const sources = await readCardSources(window, source.projectRoot, arrangement.cards)
-      return assembleInputs(arrangement, sources, selection.confirmedControls)
+      const current = await readArrangement(window, source.sceneId, selection.canvasId)
+      const sources = await readCardSources(window, source.projectRoot, current.arrangement.cards)
+      return assembleInputs(
+        current.arrangement,
+        current.arrangementVersion,
+        sources,
+        selection.confirmedControls
+      )
     })
   }
 }
@@ -128,7 +143,7 @@ async function readArrangement(
   window: ProjectFileReadWindow,
   sceneId: string,
   canvasId: string
-): Promise<ProjectCanvasArrangement> {
+): Promise<{ arrangement: SceneCanvasArrangement; arrangementVersion: string }> {
   if (sceneId.trim() === '' || canvasId.trim() === '') {
     throw new AppException({ code: ErrorCodes.invalidRequest, msg: '画布身份不能为空' })
   }
@@ -138,62 +153,69 @@ async function readArrangement(
     throw new AppException({ code: ErrorCodes.invalidRequest, msg: '已保存编排不存在' })
   }
   const value = parseJsonDocumentContent(file.text, {
-    code: ProjectFileErrorCodes.contentDamaged,
-    msg: '工程文件内容损坏'
+    code: SceneCanvasErrorCodes.contentDamaged,
+    msg: '编排内容损坏'
   })
   const probe = sceneCanvasArrangementFormatProbeSchema.safeParse(value)
   if (!probe.success || typeof probe.data.formatVersion !== 'number') {
     throw new AppException({
-      code: ProjectFileErrorCodes.contentDamaged,
-      msg: '工程文件内容损坏'
+      code: SceneCanvasErrorCodes.contentDamaged,
+      msg: '编排内容损坏'
     })
   }
-  const parsed =
-    probe.data.formatVersion === SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION
-      ? currentArrangementDocumentSchema.safeParse(value)
-      : probe.data.formatVersion === PROJECT_ARRANGEMENT_FORMAT_VERSION
-        ? legacyArrangementDocumentSchema.safeParse(value)
-        : null
-  if (parsed === null) {
+  if (probe.data.formatVersion !== SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION) {
     throw new AppException({
-      code: ProjectFileErrorCodes.unsupportedFormat,
-      msg: '工程文件格式不受支持'
+      code: SceneCanvasErrorCodes.unsupportedFormat,
+      msg: '编排格式不受支持'
     })
   }
+  const parsed = currentArrangementDocumentSchema.safeParse(value)
   if (!parsed.success) {
     throw new AppException({
-      code: ProjectFileErrorCodes.contentDamaged,
-      msg: '工程文件内容损坏',
+      code: SceneCanvasErrorCodes.contentDamaged,
+      msg: '编排内容损坏',
       cause: parsed.error
     })
   }
+  assertArrangementOwnership(parsed.data, window, sceneId, canvasId)
+  const arrangement = currentDocumentToModel(parsed.data)
+  try {
+    validateSceneCanvasArrangement(arrangement, { promptReferences: false })
+  } catch (error) {
+    throw new AppException({
+      code: SceneCanvasErrorCodes.contentDamaged,
+      msg: '编排内容损坏',
+      cause: error
+    })
+  }
+  return {
+    arrangement,
+    arrangementVersion: toArrangementVersion(window.projectId, sceneId, canvasId, file.digest)
+  }
+}
+
+function assertArrangementOwnership(
+  document: { projectId: string; sceneId: string; canvasId: string },
+  window: ProjectFileReadWindow,
+  sceneId: string,
+  canvasId: string
+): void {
   if (
-    parsed.data.projectId !== window.projectId ||
-    parsed.data.sceneId !== sceneId ||
-    parsed.data.canvasId !== canvasId
+    document.projectId !== window.projectId ||
+    document.sceneId !== sceneId ||
+    document.canvasId !== canvasId
   ) {
     throw new AppException({
-      code: ProjectFileErrorCodes.ownershipMismatch,
+      code: SceneCanvasErrorCodes.ownershipMismatch,
       msg: '工程文件归属不匹配'
     })
   }
-  const arrangement = toCanvasArrangement(
-    adaptArrangementDocument(parsed.data),
-    toArrangementVersion(
-      parsed.data.projectId,
-      parsed.data.sceneId,
-      parsed.data.canvasId,
-      file.digest
-    )
-  )
-  validateCanvasArrangement(arrangement)
-  return arrangement
 }
 
 async function readCardSources(
   window: ProjectFileReadWindow,
   projectRoot: string,
-  cards: readonly ProjectCanvasCard[]
+  cards: readonly SceneCanvasCard[]
 ): Promise<ReadonlyMap<string, LoadedSource>> {
   const loaded = new Map<string, LoadedSource>()
   for (const card of cards) {
@@ -217,7 +239,7 @@ async function readCardSources(
   return loaded
 }
 
-function assertSourceMatchesCard(source: LoadedSource, kind: ProjectCanvasCard['kind']): void {
+function assertSourceMatchesCard(source: LoadedSource, kind: SceneCanvasCard['kind']): void {
   const expected =
     kind === 'document'
       ? 'document'
@@ -314,7 +336,8 @@ async function readSource(
 }
 
 function assembleInputs(
-  arrangement: ProjectCanvasArrangement,
+  arrangement: SceneCanvasArrangement,
+  arrangementVersion: string,
   sources: ReadonlyMap<string, LoadedSource>,
   confirmedControls: readonly SceneConfirmedControlDTO[]
 ): SceneGenerationInputsDTO {
@@ -396,7 +419,7 @@ function assembleInputs(
   }
   return {
     canvasId: arrangement.canvasId,
-    arrangementVersion: arrangement.version,
+    arrangementVersion,
     assets,
     documents,
     prompts,
@@ -414,15 +437,16 @@ function assembleInputs(
 }
 
 function promptReferences(
-  prompt: ProjectCanvasCard & { kind: 'prompt' },
-  cards: readonly ProjectCanvasCard[]
+  prompt: SceneCanvasCard & { kind: 'prompt' },
+  cards: readonly SceneCanvasCard[]
 ): SceneGenerationInputsDTO['prompts'][number]['references'] {
   const seen = new Set<string>()
   return prompt.references.map((reference) => {
     if (seen.has(reference.cardId)) {
       throw new AppException({
         code: ErrorCodes.invalidRequest,
-        msg: '同一提示词不能重复引用同一卡片'
+        msg: '同一提示词不能重复引用同一卡片',
+        reason: FailureReasons.promptReferenceDuplicate
       })
     }
     seen.add(reference.cardId)
@@ -430,7 +454,8 @@ function promptReferences(
     if (!target || target.cardId === prompt.cardId || target.kind === 'prompt') {
       throw new AppException({
         code: ErrorCodes.invalidRequest,
-        msg: '提示词引用的卡片不在当前画布或无法读取'
+        msg: '提示词引用的卡片不在当前画布或无法读取',
+        reason: FailureReasons.promptReferenceTargetMissing
       })
     }
     return {
@@ -442,8 +467,8 @@ function promptReferences(
 }
 
 function relationRecord(
-  relation: ProjectCanvasRelation,
-  cards: readonly ProjectCanvasCard[]
+  relation: SceneCanvasRelation,
+  cards: readonly SceneCanvasCard[]
 ): SceneGenerationInputsDTO['relations'][number]['record'] {
   if (relation.recordCardId === null) return null
   const card = cards.find((item) => item.cardId === relation.recordCardId)
@@ -456,7 +481,7 @@ function relationRecord(
 
 function promptScopes(
   cardId: string,
-  relations: readonly ProjectCanvasRelation[]
+  relations: readonly SceneCanvasRelation[]
 ): SceneGenerationPromptScopeDTO[] {
   const ordinary = relations.filter(
     (relation) => relation.fromCardId === cardId || relation.toCardId === cardId
@@ -478,62 +503,4 @@ function promptScopes(
   for (const relation of records) scopes.push({ kind: 'relation', relationId: relation.relationId })
   if (scopes.length === 0) scopes.push({ kind: 'scene' })
   return scopes
-}
-
-function copyUsage(usage: ProjectCanvasCard['usage']): SceneGenerationUsageDTO {
-  return {
-    ...(usage.characterId === undefined ? {} : { characterId: usage.characterId }),
-    ...(usage.locationId === undefined ? {} : { locationId: usage.locationId }),
-    ...(usage.spokenLine === undefined ? {} : { spokenLine: usage.spokenLine }),
-    targetIds: [...usage.targetIds]
-  }
-}
-
-function adaptArrangementDocument(
-  document:
-    | z.infer<typeof currentArrangementDocumentSchema>
-    | z.infer<typeof legacyArrangementDocumentSchema>
-): z.infer<typeof legacyArrangementDocumentSchema> {
-  if (document.formatVersion === PROJECT_ARRANGEMENT_FORMAT_VERSION) return document
-  return {
-    formatVersion: PROJECT_ARRANGEMENT_FORMAT_VERSION,
-    projectId: document.projectId,
-    sceneId: document.sceneId,
-    canvasId: document.canvasId,
-    viewport: document.viewport,
-    cards: document.cards.map((card) => {
-      const usage = { targetIds: [] }
-      if (card.kind === 'prompt') {
-        return {
-          kind: card.kind,
-          cardId: card.cardId,
-          title: card.cardId,
-          summary: '',
-          body: card.body,
-          references: (card.references ?? []).map((reference) => ({ cardId: reference.cardId })),
-          usage,
-          layout: card.layout
-        }
-      }
-      if (card.kind === 'animation' || card.kind === 'effect') {
-        return {
-          kind: card.kind,
-          cardId: card.cardId,
-          title: card.cardId,
-          summary: '',
-          webgalPreset: card.webgalPreset,
-          usage,
-          layout: card.layout
-        }
-      }
-      if (card.kind === 'document') return { ...card, usage }
-      if (card.kind === 'audio') return { ...card, role: card.role, usage }
-      if (card.kind === 'image') return { ...card, summary: card.summary, role: card.role, usage }
-      return { ...card, summary: card.summary, usage }
-    }),
-    relations: document.relations.map((relation) => ({
-      ...relation,
-      defaultRelation: 'associated' as const
-    }))
-  }
 }

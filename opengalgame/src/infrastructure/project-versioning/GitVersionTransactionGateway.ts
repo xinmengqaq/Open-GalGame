@@ -17,6 +17,7 @@ import type {
   VersionTransactionGateway,
   VersionTransactionView
 } from '@application/project-versioning/ports/VersionTransactionGateway'
+import type { CallerOperationState } from '@application/project-versioning/vo/ProjectVersioningVO'
 import { OPERATION_ID_PATTERN } from '@common/contracts/OperationId'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -38,14 +39,36 @@ import {
   readHead
 } from '@infrastructure/git/repository/repositoryGuard'
 import type { ContentPresence, OperationCommitState } from '@infrastructure/git/GitRepository'
-import { commitLimited } from '@infrastructure/git/transaction/LimitedCommit'
-import { assessOperation } from '@infrastructure/git/transaction/OperationQuery'
-import { readOperationRecord } from '@infrastructure/git/transaction/OperationRecord'
+import {
+  restoreRecordedFiles,
+  verifyCompensationBackup
+} from '@infrastructure/git/transaction/CommitCompensation'
+import {
+  commitLimited,
+  repairPublishedMetadata
+} from '@infrastructure/git/transaction/LimitedCommit'
+import {
+  assessOperation,
+  findPublishedRollback,
+  provePublishedOperation
+} from '@infrastructure/git/transaction/OperationQuery'
+import {
+  listOperationRecordIds,
+  readOperationRecord,
+  type OperationRecord
+} from '@infrastructure/git/transaction/OperationRecord'
 import { rollbackLimited } from '@infrastructure/git/transaction/OperationRollback'
 import { enqueueWorkWrite } from '@infrastructure/git/transaction/workWriteBoundary'
 
 import { readRetainedBlob } from './FileVersionContentGateway'
-import { readVersionOperation } from './FileVersionOperationRecordGateway'
+import {
+  listCallerIntentsAt,
+  listVersionOperationsAt,
+  markCallerNotStartedAt,
+  readCallerIntentAt,
+  readVersionOperation,
+  setCallerStateAt
+} from './FileVersionOperationRecordGateway'
 import { resolveProjectWorkRoot } from './projectWorkRoot'
 import {
   parseVersionValue,
@@ -78,11 +101,13 @@ const settlementSchema = z.strictObject({
       originalRevisionRef: z.string().regex(COMMIT_PATTERN),
       revisionRef: z.string().regex(COMMIT_PATTERN),
       changedAt: z.string().regex(CHANGED_AT_PATTERN)
-    })
+    }),
+    z.strictObject({ state: z.literal('未提交') })
   ])
 })
 
 type VersionSettlement = z.infer<typeof settlementSchema>
+type SettlementWriter = (root: string, settlement: VersionSettlement) => Promise<void>
 
 /**
  * 把共享 Git 事务映射为版本事实。
@@ -91,7 +116,8 @@ type VersionSettlement = z.infer<typeof settlementSchema>
 export class GitVersionTransactionGateway implements VersionTransactionGateway {
   constructor(
     private readonly userDirectory: string,
-    private readonly effects: GitEffects = realGitEffects
+    private readonly effects: GitEffects = realGitEffects,
+    private readonly settlementWriter: SettlementWriter = writeSettlement
   ) {}
 
   async initializeBaseline(input: InitializeBaselineRequest): Promise<VersionBaselineFact> {
@@ -177,20 +203,449 @@ export class GitVersionTransactionGateway implements VersionTransactionGateway {
       throw new AppException({ code: ErrorCodes.invalidRequest, msg: '没有可提交的路径' })
     }
     const root = await resolveProjectWorkRoot(this.userDirectory, input.projectId)
-    return enqueueWorkWrite(root, () => publishInside(root, input, this.effects))
+    return enqueueWorkWrite(root, async () => {
+      if (input.sourceModule === 'project-files') {
+        await recoverProjectInside(root, input.projectId, 'project-files', this.effects)
+        const resolved = await resolveCallerIntentsInside(
+          root,
+          input.projectId,
+          'project-files',
+          [],
+          input.callerOperationId
+        )
+        if (
+          resolved.some(
+            (item) =>
+              item.state === 'pending' &&
+              item.callerOperationId !== input.callerOperationId
+          )
+        ) {
+          throw recoveryFailure('同工程仍有未核实的 caller 操作')
+        }
+        if (input.callerOperationId) {
+          const caller = await readCallerIntentAt(
+            root,
+            input.projectId,
+            'project-files',
+            input.callerOperationId
+          )
+          if (caller?.state === 'notStarted' || caller?.state === 'notCommitted') {
+            throw new AppException({
+              code: ErrorCodes.operationConflict,
+              msg: '操作已终止，不能重试'
+            })
+          }
+          if (caller) {
+            const settlement = await readSettlement(root, caller.operationId)
+            if (settlement?.outcome.state === '未提交') {
+              await setCallerStateAt(
+                root,
+                input.projectId,
+                'project-files',
+                input.callerOperationId,
+                caller.operationId,
+                'notCommitted'
+              )
+              throw new AppException({
+                code: ErrorCodes.operationConflict,
+                msg: '操作未提交，不能重试'
+              })
+            }
+            if (
+              caller.state === 'committed' &&
+              settlement?.outcome.state !== '已提交' &&
+              settlement?.outcome.state !== '无变更'
+            ) {
+              throw new AppException({
+                code: ProjectVersioningErrorCodes.gitQueryFailed,
+                msg: '已提交 caller 缺少可靠结算'
+              })
+            }
+          }
+        }
+      }
+      return publishInside(root, input, this.effects, this.settlementWriter)
+    })
   }
 
   async rollback(input: VersionRollbackRequest): Promise<VersionRollbackExecution> {
     requireOperationId(input.operationId)
     const root = await resolveProjectWorkRoot(this.userDirectory, input.projectId)
-    return enqueueWorkWrite(root, () => rollbackInside(root, input, this.effects))
+    return enqueueWorkWrite(root, async () => {
+      const read = await readOperationRecord(root, input.operationId)
+      if (read.kind === 'ok' && read.record.sourceModule === 'project-files') {
+        await recoverProjectInside(root, input.projectId, 'project-files', this.effects)
+        const resolved = await resolveCallerIntentsInside(
+          root,
+          input.projectId,
+          'project-files'
+        )
+        if (resolved.some((item) => item.state === 'pending')) {
+          throw recoveryFailure('同工程仍有未核实的 caller 操作')
+        }
+      }
+      return rollbackInside(root, input, this.effects)
+    })
   }
+
+  async recoverProject(projectId: string, sourceModule: string): Promise<void> {
+    if (sourceModule.trim().length === 0) {
+      throw new AppException({ code: ErrorCodes.invalidRequest, msg: '来源模块不正确' })
+    }
+    const root = await resolveProjectWorkRoot(this.userDirectory, projectId)
+    return enqueueWorkWrite(root, async () => {
+      await recoverProjectInside(root, projectId, sourceModule, this.effects)
+      const resolved = await resolveCallerIntentsInside(root, projectId, sourceModule)
+      if (resolved.some((item) => item.state === 'pending')) {
+        throw recoveryFailure('工程仍有未核实的 caller 操作')
+      }
+    })
+  }
+
+  async resolveCallerOperations(
+    projectId: string,
+    sourceModule: string,
+    callerOperationIds: readonly string[]
+  ): Promise<readonly { callerOperationId: string; state: CallerOperationState }[]> {
+    const root = await resolveProjectWorkRoot(this.userDirectory, projectId)
+    return enqueueWorkWrite(root, async () => {
+      await recoverProjectInside(root, projectId, sourceModule, this.effects)
+      return resolveCallerIntentsInside(
+        root,
+        projectId,
+        sourceModule,
+        callerOperationIds
+      )
+    })
+  }
+}
+
+async function recoverProjectInside(
+  root: string,
+  projectId: string,
+  sourceModule: string,
+  effects: GitEffects
+): Promise<void> {
+  void projectId
+  for (const operationId of await listOperationRecordIds(root)) {
+    const read = await readOperationRecord(root, operationId)
+    if (read.kind !== 'ok') {
+      throw recoveryFailure('技术操作记录缺失或损坏，无法恢复')
+    }
+    let record = read.record
+    if (record.sourceModule === undefined) {
+      const stored = await readVersionOperation(root, operationId)
+      if (!stored) {
+        throw recoveryFailure('技术操作记录来源未知，不能跳过')
+      }
+      if (stored.sourceModule !== sourceModule) continue
+      record = { ...record, sourceModule: stored.sourceModule }
+      try {
+        await effects.writeRecord(root, record)
+      } catch (error) {
+        throw recoveryFailure('来源模块记录写入失败', error)
+      }
+    }
+    if (record.sourceModule !== sourceModule) continue
+    if (record.forwardCommitId && record.phase !== 'compensated') {
+      const publishedRollback = await findPublishedRollback(root, record)
+      if (publishedRollback) {
+        if (record.rollbackCommitId && record.rollbackCommitId !== publishedRollback) {
+          throw recoveryFailure('回退提交记录与历史不一致')
+        }
+        let repaired = record
+        if (
+          record.phase !== 'rolled-back' ||
+          record.rollbackCommitId !== publishedRollback
+        ) {
+          repaired = {
+            ...record,
+            phase: 'rolled-back' as const,
+            rollbackCommitId: publishedRollback
+          }
+          try {
+            await effects.writeRecord(root, repaired)
+          } catch (error) {
+            throw recoveryFailure('已发布回退记录补写失败', error)
+          }
+        }
+        await ensureRolledBackSettlement(root, repaired, publishedRollback)
+        continue
+      }
+    }
+    if (record.phase === 'rolled-back') {
+      const state = await assessOperation(root, operationId).catch((error: unknown) => {
+        throw recoveryFailure('记录标记已回退但回退提交证据冲突', error)
+      })
+      if (state.state !== 'rolledBack') {
+        throw recoveryFailure('记录标记已回退但没有可证明的回退提交')
+      }
+      await ensureRolledBackSettlement(root, record, state.rollbackCommitId)
+      continue
+    }
+    if (record.phase === 'compensated') {
+      const state = await assessOperation(root, operationId)
+      if (state.state !== 'notCommitted') {
+        throw recoveryFailure('补偿记录仍包含已发布或不一致的提交证据')
+      }
+      await ensureUncommittedSettlement(root, record)
+      continue
+    }
+    if (record.phase === 'rollback-required') {
+      if (record.sourceModule !== 'project-files') {
+        throw recoveryFailure('检测到非 project-files 回退中的操作，保持原失败语义')
+      }
+      const published = await rollbackLimited(root, operationId, effects, {
+        backupBeforeRestore: true
+      })
+      const repaired = await readOperationRecord(root, operationId)
+      if (repaired.kind !== 'ok') {
+        throw recoveryFailure('回退恢复后的技术记录无法读取')
+      }
+      await ensureRolledBackSettlement(root, repaired.record, published.rollbackCommitId)
+      continue
+    }
+    const proof = await provePublishedOperation(root, operationId)
+    if (proof.state === 'conflict') throw recoveryFailure(proof.detail)
+    if (proof.state === 'committed') {
+      const repaired = await repairPublishedMetadata(root, operationId, effects)
+      if (repaired === 'conflict') throw recoveryFailure('已发布操作元数据冲突')
+      if (repaired === 'write-failed') throw recoveryFailure('已发布操作元数据补写失败')
+      await ensureCommittedSettlement(root, record, proof.commitId)
+      continue
+    }
+    if (record.phase === 'published') {
+      throw recoveryFailure('记录标记已发布但无法证明提交')
+    }
+    if (record.phase === 'restoring' && !record.compensationBackupId) {
+      throw recoveryFailure('恢复中记录缺少备份关联')
+    }
+    if (record.compensationBackupId) {
+      await verifyCompensationBackup(root, record, record.compensationBackupId)
+    }
+    await restoreRecordedFiles(root, record, effects, new Map(), {
+      backupBeforeRestore: true
+    })
+    await ensureUncommittedSettlement(root, record)
+  }
+}
+
+async function resolveCallerIntentsInside(
+  root: string,
+  projectId: string,
+  sourceModule: string,
+  requestedCallerIds: readonly string[] = [],
+  excludedCallerId?: string
+): Promise<readonly { callerOperationId: string; state: CallerOperationState }[]> {
+  const links = await listCallerIntentsAt(root, projectId, sourceModule)
+  const records = (await listVersionOperationsAt(root)).filter(
+    (record) => record.projectId === projectId && record.sourceModule === sourceModule
+  )
+  const recordsByCaller = new Map<string, (typeof records)[number]>()
+  for (const record of records) {
+    if (!record.callerOperationId) continue
+    if (recordsByCaller.has(record.callerOperationId)) {
+      throw recoveryFailure('同一 caller 身份对应多个版本意图')
+    }
+    recordsByCaller.set(record.callerOperationId, record)
+  }
+  const callerIds = new Set<string>([
+    ...links.map((link) => link.callerOperationId),
+    ...recordsByCaller.keys(),
+    ...requestedCallerIds
+  ])
+  const result: Array<{ callerOperationId: string; state: CallerOperationState }> = []
+  for (const callerOperationId of callerIds) {
+    const link = links.find((item) => item.callerOperationId === callerOperationId)
+    if (link?.state === 'notStarted' || link?.state === 'committed' || link?.state === 'notCommitted') {
+      result.push({ callerOperationId, state: link.state })
+      continue
+    }
+    const record = recordsByCaller.get(callerOperationId)
+    const operationId = link?.operationId ?? record?.operationId
+    if (!operationId) {
+      if (callerOperationId === excludedCallerId) {
+        result.push({ callerOperationId, state: 'pending' })
+        continue
+      }
+      await markCallerNotStartedAt(root, projectId, sourceModule, callerOperationId)
+      result.push({ callerOperationId, state: 'notStarted' })
+      continue
+    }
+    const technical = await readOperationRecord(root, operationId)
+    if (technical.kind === 'damaged') {
+      throw recoveryFailure('caller 关联的技术记录损坏')
+    }
+    if (technical.kind === 'missing') {
+      if (!record) {
+        throw recoveryFailure('caller 关联的版本意图缺失')
+      }
+      if (callerOperationId === excludedCallerId) {
+        result.push({ callerOperationId, state: 'pending' })
+        continue
+      }
+      await setCallerStateAt(
+        root,
+        projectId,
+        sourceModule,
+        callerOperationId,
+        operationId,
+        'notStarted'
+      )
+      result.push({ callerOperationId, state: 'notStarted' })
+      continue
+    }
+    const settlement = await readSettlement(root, operationId)
+    const state =
+      settlement?.outcome.state === '已提交' || settlement?.outcome.state === '无变更'
+        ? 'committed'
+        : settlement?.outcome.state === '未提交'
+          ? 'notCommitted'
+          : 'pending'
+    if (state !== 'pending') {
+      await setCallerStateAt(
+        root,
+        projectId,
+        sourceModule,
+        callerOperationId,
+        operationId,
+        state
+      )
+    }
+    result.push({ callerOperationId, state })
+  }
+  return result
+}
+
+async function ensureUncommittedSettlement(
+  root: string,
+  record: OperationRecord
+): Promise<void> {
+  const fingerprint = await settlementFingerprint(root, record)
+  const existing = await readSettlement(root, record.operationId)
+  if (existing) {
+    if (
+      existing.outcome.state === '未提交' &&
+      existing.contentFingerprint === fingerprint
+    ) {
+      return
+    }
+    throw recoveryFailure('补偿记录结算与操作状态冲突')
+  }
+  try {
+    await writeSettlement(root, {
+      formatVersion: 1,
+      operationId: record.operationId,
+      contentFingerprint: fingerprint,
+      outcome: { state: '未提交' }
+    })
+  } catch (error) {
+    throw recoveryFailure('未提交结算补写失败', error)
+  }
+}
+
+async function ensureCommittedSettlement(
+  root: string,
+  record: OperationRecord,
+  commitId: string
+): Promise<void> {
+  const fingerprint = await settlementFingerprint(root, record)
+  const existing = await readSettlement(root, record.operationId)
+  if (existing) {
+    if (
+      existing.outcome.state === '已提交' &&
+      existing.outcome.revisionRef === commitId &&
+      existing.contentFingerprint === fingerprint
+    ) {
+      return
+    }
+    throw recoveryFailure('已发布结算与操作记录冲突')
+  }
+  try {
+    const changedAt = await changedAtOf(root, commitId)
+    await writeSettlement(root, {
+      formatVersion: 1,
+      operationId: record.operationId,
+      contentFingerprint: fingerprint,
+      outcome: { state: '已提交', revisionRef: commitId, changedAt }
+    })
+  } catch (error) {
+    throw recoveryFailure('已发布结算补写失败', error)
+  }
+}
+
+async function ensureRolledBackSettlement(
+  root: string,
+  record: OperationRecord,
+  rollbackCommitId: string
+): Promise<void> {
+  const forwardCommitId = record.forwardCommitId
+  if (!forwardCommitId) throw recoveryFailure('回退记录缺少前向提交标识')
+  const fingerprint = await settlementFingerprint(root, record)
+  const existing = await readSettlement(root, record.operationId)
+  if (existing) {
+    if (existing.contentFingerprint !== fingerprint) {
+      throw recoveryFailure('回退结算与操作指纹冲突')
+    }
+    if (
+      existing.outcome.state === '已回退' &&
+      existing.outcome.originalRevisionRef === forwardCommitId &&
+      existing.outcome.revisionRef === rollbackCommitId
+    ) {
+      return
+    }
+    if (
+      existing.outcome.state !== '已提交' &&
+      existing.outcome.state !== '已回退'
+    ) {
+      throw recoveryFailure('回退结算与操作状态冲突')
+    }
+    if (
+      existing.outcome.state === '已提交' &&
+      existing.outcome.revisionRef !== forwardCommitId
+    ) {
+      throw recoveryFailure('回退结算的前向提交与记录不一致')
+    }
+  }
+  try {
+    const changedAt = await changedAtOf(root, rollbackCommitId)
+    await writeSettlement(root, {
+      formatVersion: 1,
+      operationId: record.operationId,
+      contentFingerprint: fingerprint,
+      outcome: {
+        state: '已回退',
+        originalRevisionRef: forwardCommitId,
+        revisionRef: rollbackCommitId,
+        changedAt
+      }
+    })
+  } catch (error) {
+    throw recoveryFailure('回退结算补写失败', error)
+  }
+}
+
+async function settlementFingerprint(
+  root: string,
+  record: OperationRecord
+): Promise<string> {
+  const stored = await readVersionOperation(root, record.operationId)
+  return stored?.commitIntent?.contentFingerprint ?? record.fingerprint
+}
+
+function recoveryFailure(message: string, cause?: unknown): AppException {
+  return new AppException({
+    code: ProjectVersioningErrorCodes.gitQueryFailed,
+    msg: message,
+    cause
+  })
 }
 
 async function publishInside(
   root: string,
   input: VersionCommitRequest,
-  effects: GitEffects
+  effects: GitEffects,
+  settlementWriter: SettlementWriter
 ): Promise<VersionCommitExecution> {
   const paths = uniquePaths(input.changes.map((change) => assertRelativePath(change.relativePath)))
   const record = await readVersionOperation(root, input.operationId)
@@ -205,9 +660,9 @@ async function publishInside(
   const loaded = await loadChanges(root, fresh.baseline.revisionRef, input.changes)
   if (loaded.length === 0) return persistNoChange(root, input)
   try {
-    return await publishChanges(root, input, loaded, effects)
+    return await publishChanges(root, input, loaded, effects, settlementWriter)
   } catch (error) {
-    return classifyCommitFailure(root, input, error)
+    return classifyCommitFailure(root, input, error, effects, settlementWriter)
   }
 }
 
@@ -221,14 +676,16 @@ async function rollbackInside(
   const decision = await input.verify(observation)
   if (decision.action === 'reuse') return reuseRollback(root, input.operationId)
   const fresh = await observeRollback(root, input.operationId, owned)
-  if (fresh.subsequentPaths.length > 0) {
+  if (input.backupBeforeRestore !== true && fresh.subsequentPaths.length > 0) {
     throw new AppException({
       code: ErrorCodes.operationConflict,
       msg: '目标路径已有后续修改，已拒绝回退'
     })
   }
   try {
-    const published = await rollbackLimited(root, input.operationId, effects)
+    const published = await rollbackLimited(root, input.operationId, effects, {
+      backupBeforeRestore: input.backupBeforeRestore === true
+    })
     return await rememberRollback(root, input.operationId, published.rollbackCommitId)
   } catch (error) {
     const state = await assessQuietly(root, input.operationId)
@@ -247,7 +704,8 @@ async function publishChanges(
   root: string,
   input: VersionCommitRequest,
   changes: readonly LoadedChange[],
-  effects: GitEffects
+  effects: GitEffects,
+  settlementWriter: SettlementWriter
 ): Promise<VersionCommitExecution> {
   const parent = await mkdtemp(join(tmpdir(), 'opengalgame-version-'))
   const gitDir = join(parent, 'candidate')
@@ -269,9 +727,11 @@ async function publishChanges(
       {
         projectRoot: root,
         operationId: input.operationId,
+        sourceModule: input.sourceModule,
         expectedBaseline: baseline,
         changes: changes.map(({ relativePath, action }) => ({ relativePath, action })),
         candidate: { gitDir, revisionId: revision.revisionId },
+        backupBeforeRestore: input.backupBeforeRestore === true,
         recheck: async (fresh) => {
           if (fresh.headCommitId !== baseline.headCommitId || fresh.branch !== baseline.branch) {
             throw baselineConflict()
@@ -280,7 +740,7 @@ async function publishChanges(
       },
       effects
     )
-    return rememberCommit(root, input, published.commitId)
+    return rememberCommit(root, input, published.commitId, settlementWriter)
   } finally {
     await rm(parent, { recursive: true, force: true })
   }
@@ -289,12 +749,34 @@ async function publishChanges(
 async function classifyCommitFailure(
   root: string,
   input: VersionCommitRequest,
-  error: unknown
+  error: unknown,
+  effects: GitEffects,
+  settlementWriter: SettlementWriter
 ): Promise<VersionCommitExecution> {
-  const state = await assessQuietly(root, input.operationId)
-  if (state?.state === 'committed') return rememberCommit(root, input, state.commitId)
-  if (!state || state.state === 'unknown' || state.state === 'rollbackRequired') {
-    return { state: '待核对' }
+  const proof = await provePublishedOperation(root, input.operationId).catch(
+    (proofError: unknown) => {
+      throw asGitException(
+        proofError,
+        ProjectVersioningErrorCodes.gitQueryFailed,
+        '提交结果无法核对'
+      )
+    }
+  )
+  if (proof.state === 'committed') {
+    const repaired = await repairPublishedMetadata(root, input.operationId, effects)
+    if (repaired === 'conflict') {
+      throw new AppException({
+        code: ProjectVersioningErrorCodes.gitQueryFailed,
+        msg: '提交结果与记录证据冲突'
+      })
+    }
+    return rememberCommit(root, input, proof.commitId, settlementWriter)
+  }
+  if (proof.state === 'conflict') {
+    throw new AppException({
+      code: ProjectVersioningErrorCodes.gitQueryFailed,
+      msg: proof.detail
+    })
   }
   throw error instanceof AppException
     ? error
@@ -304,15 +786,20 @@ async function classifyCommitFailure(
 async function rememberCommit(
   root: string,
   input: VersionCommitRequest,
-  revisionRef: string
+  revisionRef: string,
+  settlementWriter: SettlementWriter
 ): Promise<VersionCommitExecution> {
   const changedAt = await changedAtOf(root, revisionRef)
-  await writeSettlement(root, {
-    formatVersion: 1,
-    operationId: input.operationId,
-    contentFingerprint: input.contentFingerprint,
-    outcome: { state: '已提交', revisionRef, changedAt }
-  })
+  try {
+    await settlementWriter(root, {
+      formatVersion: 1,
+      operationId: input.operationId,
+      contentFingerprint: input.contentFingerprint,
+      outcome: { state: '已提交', revisionRef, changedAt }
+    })
+  } catch {
+    // 提交已由记录、引用和历史证明；结算缺失由后续读取或工程恢复补齐。
+  }
   return { state: '已提交', revisionRef, changedAt }
 }
 
@@ -430,6 +917,13 @@ async function readTransactionAt(
   if (state.state === 'unknown' || state.state === 'rollbackRequired') {
     return pendingView(root, operationId, settlement)
   }
+  if (state.state === 'notCommitted' && settlement?.outcome.state === '未提交') {
+    return {
+      operationId,
+      contentFingerprint: settlement.contentFingerprint,
+      outcome: { state: '未提交' }
+    }
+  }
   if (settlement?.outcome.state === '无变更') {
     return {
       operationId,
@@ -459,12 +953,6 @@ async function committedView(
   }
   const changedAt = await changedAtOf(root, revisionRef)
   const outcome = { state: '已提交' as const, revisionRef, changedAt }
-  await writeSettlement(root, {
-    formatVersion: 1,
-    operationId,
-    contentFingerprint: fingerprint,
-    outcome
-  })
   return { operationId, contentFingerprint: fingerprint, outcome }
 }
 
@@ -492,12 +980,6 @@ async function rolledBackView(
   }
   const changedAt = await changedAtOf(root, revisionRef)
   const outcome = { state: '已回退' as const, originalRevisionRef, revisionRef, changedAt }
-  await writeSettlement(root, {
-    formatVersion: 1,
-    operationId,
-    contentFingerprint: fingerprint,
-    outcome
-  })
   return { operationId, contentFingerprint: fingerprint, outcome }
 }
 

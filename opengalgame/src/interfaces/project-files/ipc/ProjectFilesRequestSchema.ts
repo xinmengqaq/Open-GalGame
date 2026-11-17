@@ -28,7 +28,8 @@ const catalogWriteScope = {
 export const importProjectFilesSchema = z.strictObject({
   ...catalogWriteScope,
   parentFolderId: z.string().nullable(),
-  localFilePaths: z.array(z.string()).min(1)
+  localFilePaths: z.array(z.string()).min(1),
+  operationIds: z.array(z.string().min(1)).min(1)
 })
 
 export const projectFileScopeSchema = z.strictObject({
@@ -38,12 +39,14 @@ export const projectFileScopeSchema = z.strictObject({
 
 export const renameProjectFileSchema = z.strictObject({
   ...catalogWriteScope,
+  operationId: z.string().min(1),
   sourceId: z.string(),
   newFileName: z.string()
 })
 
 export const deleteProjectFileSchema = z.strictObject({
   ...catalogWriteScope,
+  operationId: z.string().min(1),
   sourceId: z.string()
 })
 
@@ -55,6 +58,7 @@ const textContentSchema = z.strictObject({
 
 export const createProjectTextFileSchema = z.strictObject({
   ...catalogWriteScope,
+  operationId: z.string().min(1),
   parentFolderId: z.string().nullable(),
   fileName: z.string(),
   content: textContentSchema
@@ -62,6 +66,7 @@ export const createProjectTextFileSchema = z.strictObject({
 
 export const updateProjectTextFileBodySchema = z.strictObject({
   projectId: z.string(),
+  operationId: z.string().min(1),
   sourceId: z.string(),
   expectedSourceVersion: z.string(),
   content: z.strictObject({
@@ -72,6 +77,7 @@ export const updateProjectTextFileBodySchema = z.strictObject({
 
 export const createProjectFolderSchema = z.strictObject({
   ...catalogWriteScope,
+  operationId: z.string().min(1),
   parentFolderId: z.string().nullable(),
   name: z.string()
 })
@@ -100,6 +106,7 @@ export const copyProjectFolderSchema = z.strictObject({
 
 export const renameProjectFolderSchema = z.strictObject({
   ...catalogWriteScope,
+  operationId: z.string().min(1),
   folderId: z.string(),
   newName: z.string()
 })
@@ -114,8 +121,14 @@ export const readProjectFileOperationSchema = z.strictObject({
   operationId: z.string().min(1)
 })
 
+export const recoverProjectFileOperationsSchema = z.strictObject({
+  projectId: z.string(),
+  operationIds: z.array(z.string().min(1)).max(256)
+})
+
 export const deleteProjectFolderSchema = z.strictObject({
   ...catalogWriteScope,
+  operationId: z.string().min(1),
   folderId: z.string(),
   expectedDeletionVersion: z.string()
 })

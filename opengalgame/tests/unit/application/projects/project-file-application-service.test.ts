@@ -19,6 +19,19 @@ describe('项目打开、重命名与移出', () => {
     expect(f.storage.saveProjectInfo).not.toHaveBeenCalled()
     expect(f.registration.removeRegistration).not.toHaveBeenCalled()
     expect(f.storage.discard).not.toHaveBeenCalled()
+    expect(f.recoverProjectFiles).toHaveBeenCalledWith('story-1')
+  })
+
+  it('打开时恢复未完成操作失败则不返回摘要', async () => {
+    const f = createProjectApplicationFixture([{ id: 'story-1', directory: '/story-1' }])
+    f.storage.inspect.mockResolvedValue({
+      kind: 'existing',
+      project: { id: 'story-1', name: '未寄出的信', synopsis: '第一句' }
+    })
+    f.recoverProjectFiles.mockRejectedValue(
+      new AppException({ code: 5204, msg: '技术操作记录损坏' })
+    )
+    await expect(f.service.openProject({ id: 'story-1' })).rejects.toMatchObject({ code: 5204 })
   })
 
   it('未登记不能打开，不可用工程不能打开', async () => {

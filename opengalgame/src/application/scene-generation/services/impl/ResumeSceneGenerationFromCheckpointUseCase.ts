@@ -8,7 +8,7 @@ import { toRenderStatusVO } from '../../mapping/SceneGenerationRenderProjection'
 import type { SceneGenerationServiceContext } from './SceneGenerationServiceContext'
 
 /** 控制端口可调用的恢复能力；由应用服务实现。 */
-interface SceneGenerationResumeGateway {
+export interface SceneGenerationResumeGateway {
   resumeSceneGeneration(request: SceneGenerationScopeDTO): Promise<SceneGenerationStatusVO>
   resumeAuthorizedPause(request: SceneGenerationScopeDTO): Promise<SceneGenerationStatusVO>
 }

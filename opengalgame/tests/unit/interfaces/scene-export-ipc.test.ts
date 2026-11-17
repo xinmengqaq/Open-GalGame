@@ -12,11 +12,13 @@ import type { LoggerGateway } from '@common/logging/LoggerGateway'
 import { createBrowserDesktopBridge } from '@bootstrap/browser/BrowserDesktopBridge'
 import { SceneExportErrorCodes } from '@domain/scene-export/errors/SceneExportErrorCodes'
 import { SystemPathErrorCodes } from '@domain/system-path/errors/SystemPathErrorCodes'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { createDesktopBridge } from '@interfaces/preload/DesktopBridge'
 import { SceneExportClientImpl } from '@interfaces/scene-export/client/SceneExportClientImpl'
 import { SceneExportController } from '@interfaces/scene-export/ipc/SceneExportController'
 import { registerSceneExportIpc } from '@interfaces/scene-export/ipc/registerSceneExportIpc'
+import { SystemPathClientImpl } from '@interfaces/system-path/client/SystemPathClientImpl'
 import { SystemPathController } from '@interfaces/system-path/ipc/SystemPathController'
 import { registerSystemPathIpc } from '@interfaces/system-path/ipc/registerSystemPathIpc'
 
@@ -93,7 +95,7 @@ function controller(
     logs,
     exportSavedScene,
     latestPreviewSave,
-    controller: new SceneExportController(service, latestPreviewSave, new IpcExceptionHandler(logger))
+    controller: new SceneExportController(service, latestPreviewSave, new IpcExceptionHandler(logger, new IpcErrorMapper()))
   }
 }
 
@@ -103,7 +105,7 @@ function systemPathController(
   const { logger, logs } = loggerOf()
   return {
     logs,
-    controller: new SystemPathController({ openDirectory }, new IpcExceptionHandler(logger))
+    controller: new SystemPathController({ openDirectory }, new IpcExceptionHandler(logger, new IpcErrorMapper()))
   }
 }
 
@@ -436,7 +438,7 @@ describe('打开本机目录用户接口', () => {
       },
       subscribe: () => () => undefined
     })
-    const client = new SceneExportClientImpl(bridge)
+    const client = new SystemPathClientImpl(bridge)
     await expect(
       client.openDirectory({ path: 'D:/project/exports/scene-1' })
     ).resolves.toEqual({ code: ErrorCodes.success, msg: '目录已交给系统打开', data: null })
@@ -449,7 +451,7 @@ describe('打开本机目录用户接口', () => {
       }),
       subscribe: () => () => undefined
     })
-    const rejected = await new SceneExportClientImpl(malformed).openDirectory({
+    const rejected = await new SystemPathClientImpl(malformed).openDirectory({
       path: 'D:/project/exports/scene-1'
     })
     expect(rejected.code).toBe(ErrorCodes.communicationFailed)

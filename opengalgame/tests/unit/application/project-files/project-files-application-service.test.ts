@@ -7,7 +7,7 @@ import type {
 import type { SceneCanvasArrangementInspectionFact } from '@application/project-files/models/SceneCanvasArrangementReadFacts'
 import type { ProjectInputSourceReaderGateway } from '@application/project-files/ports/ProjectInputSourceReaderGateway'
 import type { SceneCanvasArrangementReaderGateway } from '@application/project-files/ports/SceneCanvasArrangementReaderGateway'
-import { ProjectFilesApplicationServiceImpl } from '@application/project-files/services/impl/ProjectFilesApplicationServiceImpl'
+import { ManageProjectFiles } from '@application/project-files/services/impl/ManageProjectFiles'
 import type { ProjectListQueryGateway } from '@application/projects/ports/ProjectListQueryGateway'
 import type { ProjectStorageGateway } from '@application/projects/ports/ProjectStorageGateway'
 import { AppException } from '@common/errors/AppException'
@@ -60,6 +60,7 @@ function canvasCards(): SceneCanvasArrangement['cards'] {
       sourceId: 'doc-1',
       title: '设定',
       summary: '',
+      usage: { targetIds: [] },
       layout: { x: 1, y: 2, width: 30, height: 40 }
     },
     {
@@ -68,6 +69,7 @@ function canvasCards(): SceneCanvasArrangement['cards'] {
       sourceId: 'doc-1',
       title: '设定',
       summary: '',
+      usage: { targetIds: [] },
       layout: { x: 8, y: 9, width: 10, height: 12 }
     }
   ]
@@ -78,7 +80,7 @@ function createService(options?: {
   workspaceId?: string
   workspaceKind?: 'existing' | 'uninitialized'
 }): {
-  service: ProjectFilesApplicationServiceImpl
+  service: ManageProjectFiles
   useSources: (next: ProjectInputSourceReaderGateway) => void
   useArrangements: (next: SceneCanvasArrangementReaderGateway) => void
 } {
@@ -120,7 +122,7 @@ function createService(options?: {
       arrangements: []
     })
   }
-  const service = new ProjectFilesApplicationServiceImpl({
+  const service = new ManageProjectFiles({
     listQuery,
     domain: new ProjectDomainServiceImpl(),
     storage,
@@ -142,7 +144,7 @@ function createService(options?: {
   }
 }
 
-describe('ProjectFilesApplicationServiceImpl', () => {
+describe('ManageProjectFiles', () => {
   it('未登记、未初始化或真实身份不一致时拒绝读取', async () => {
     await expect(
       createService({ registrationId: null }).service.listProjectInputSources({
@@ -406,6 +408,7 @@ describe('ProjectFilesApplicationServiceImpl', () => {
                 sourceId: 'gone',
                 title: '缺失',
                 summary: '',
+                usage: { targetIds: [] },
                 layout: { x: 0, y: 0, width: 4, height: 4 }
               }
             ],

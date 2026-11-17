@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import type { ProjectFolderVO } from '@application/project-files/vo/ProjectInputCatalogVO'
 import type { ProjectInputSourceSummaryVO } from '@application/project-files/vo/ProjectInputSourceVO'
 import type { ProjectFilesClient } from '@interfaces/project-files/client/ProjectFilesClient'
 import type { QueryClient } from '@tanstack/react-query'
-import { COMMIT_UNCLEAR_CODE } from '../../feedback/projectFilesFeedback'
 import { failureOf, requireSuccess } from '../../feedback/failure'
 import { workbenchFeedback } from '../../feedback/workbenchFeedback'
 import {
   beginCatalogWrite,
-  catalogWriteBlockedFor,
   endCatalogWrite,
-  holdUnresolvedCatalogWrite
+  isUncertainCatalogWrite,
+  resolveCatalogWrite
 } from './catalogWrites'
 import { catalogVersion, reloadCatalog, stillCurrentProject } from './catalogSession'
 import type { CatalogFolderId } from './inputCatalog.types'
@@ -46,7 +45,6 @@ export function useCatalogClipboard(
   sources: readonly ProjectInputSourceSummaryVO[]
 ): {
   clipboard: CatalogClipboard | null
-  pasteBlocked: boolean
   copyFile: (sourceId: string) => void
   cutFile: (sourceId: string) => void
   copyFolder: (folderId: string) => void
@@ -61,30 +59,39 @@ export function useCatalogClipboard(
   ) => Promise<void>
 } {
   const [clipboard, setClipboard] = useState<CatalogClipboard | null>(null)
-  const [pasteBlocked, setPasteBlocked] = useState(false)
+  const [clearedClipboardCount, setClearedClipboardCount] = useState(0)
+  const announcedClearCount = useRef(0)
 
+  // 每次自动清空只提示一次；toast 是外部副作用，仍放在提交后的 effect。
   useEffect(() => {
-    setClipboard(null)
-    setPasteBlocked(false)
-  }, [projectId])
-
-  useEffect(() => {
-    if (!clipboard || clipboard.projectId !== projectId) return
-    const exists =
-      clipboard.kind === 'file'
-        ? sources.some((source) => source.sourceId === clipboard.sourceId)
-        : folders.some((folder) => folder.folderId === clipboard.folderId)
-    if (exists || catalogWriteBlockedFor(projectId)) return
-    setClipboard(null)
-    setPasteBlocked(false)
+    if (clearedClipboardCount === announcedClearCount.current) return
+    announcedClearCount.current = clearedClipboardCount
     toast(workbenchFeedback.clipboardCleared)
-  }, [clipboard, folders, projectId, sources])
+  }, [clearedClipboardCount])
+
+  // 切换工程时在渲染期丢弃上一工程的剪贴板，不等提交后再清。
+  const [renderedProjectId, setRenderedProjectId] = useState(projectId)
+  if (renderedProjectId !== projectId) {
+    setRenderedProjectId(projectId)
+    setClipboard(null)
+  }
+
+  // 目标已不在当前目录快照里时立即清空并提示一次。
+  const clipboardIsStale =
+    clipboard !== null &&
+    clipboard.projectId === projectId &&
+    !(clipboard.kind === 'file'
+      ? sources.some((source) => source.sourceId === clipboard.sourceId)
+      : folders.some((folder) => folder.folderId === clipboard.folderId))
+  if (clipboardIsStale) {
+    setClipboard(null)
+    setClearedClipboardCount(clearedClipboardCount + 1)
+  }
 
   const copyFile = useCallback(
     (sourceId: string) => {
-      if (catalogWriteBlockedFor(projectId) || projectId.length === 0) return
+      if (projectId.length === 0) return
       setClipboard({ projectId, mode: 'copy', kind: 'file', sourceId })
-      setPasteBlocked(false)
       toast(workbenchFeedback.copiedFile)
     },
     [projectId]
@@ -92,7 +99,7 @@ export function useCatalogClipboard(
 
   const cutFile = useCallback(
     (sourceId: string) => {
-      if (catalogWriteBlockedFor(projectId) || projectId.length === 0) return
+      if (projectId.length === 0) return
       const source = sources.find((item) => item.sourceId === sourceId)
       if (!source) return
       setClipboard({
@@ -102,7 +109,6 @@ export function useCatalogClipboard(
         sourceId,
         expectedParentFolderId: source.parentFolderId
       })
-      setPasteBlocked(false)
       toast(workbenchFeedback.cutFile)
     },
     [projectId, sources]
@@ -110,43 +116,47 @@ export function useCatalogClipboard(
 
   const copyFolder = useCallback(
     (folderId: string) => {
-      if (catalogWriteBlockedFor(projectId) || projectId.length === 0) return
+      if (projectId.length === 0) return
       setClipboard({ projectId, mode: 'copy', kind: 'folder', folderId })
-      setPasteBlocked(false)
       toast(workbenchFeedback.copiedFolder)
     },
     [projectId]
   )
 
   const clearClipboard = useCallback(() => {
-    if (catalogWriteBlockedFor(projectId)) return
     setClipboard(null)
-    setPasteBlocked(false)
   }, [])
 
   const canPasteInto = useCallback(
     (targetFolderId: CatalogFolderId): boolean => {
-      if (!clipboard || pasteBlocked || clipboard.projectId !== projectId) return false
+      if (!clipboard || clipboard.projectId !== projectId) return false
       if (clipboard.kind !== 'folder') return true
       return !isForbiddenFolderCopyTarget(folders, clipboard.folderId, targetFolderId)
     },
-    [clipboard, folders, pasteBlocked, projectId]
+    [clipboard, folders, projectId]
   )
 
   return {
     clipboard,
-    pasteBlocked,
     copyFile,
     cutFile,
     copyFolder,
     clearClipboard,
     canPasteInto,
     pasteInto: async (client, queryClient, targetFolderId, busy, setBusy) => {
-      if (catalogWriteBlockedFor(projectId)) return
-      if (!clipboard || pasteBlocked || clipboard.projectId !== projectId) return
+      if (!clipboard || clipboard.projectId !== projectId) return
       if (!canPasteInto(targetFolderId)) return
       if (!beginCatalogWrite(projectId, busy, setBusy)) return
       const operationId = crypto.randomUUID()
+      const applySuccess = (): void => {
+        if (!stillCurrentProject(projectId)) return
+        if (clipboard.kind === 'file' && clipboard.mode === 'cut') {
+          setClipboard(null)
+          toast(workbenchFeedback.pastedMove)
+        } else {
+          toast(workbenchFeedback.pastedCopy)
+        }
+      }
       try {
         const expectedCatalogVersion = catalogVersion(queryClient, projectId)
         if (clipboard.kind === 'file' && clipboard.mode === 'copy') {
@@ -159,7 +169,6 @@ export function useCatalogClipboard(
               expectedCatalogVersion
             })
           )
-          if (stillCurrentProject(projectId)) toast(workbenchFeedback.pastedCopy)
         } else if (clipboard.kind === 'folder') {
           requireSuccess(
             await client.copyProjectFolder({
@@ -170,7 +179,6 @@ export function useCatalogClipboard(
               expectedCatalogVersion
             })
           )
-          if (stillCurrentProject(projectId)) toast(workbenchFeedback.pastedCopy)
         } else {
           requireSuccess(
             await client.moveProjectFile({
@@ -182,21 +190,25 @@ export function useCatalogClipboard(
               expectedCatalogVersion
             })
           )
-          if (stillCurrentProject(projectId)) {
-            setClipboard(null)
-            toast(workbenchFeedback.pastedMove)
-          }
         }
+        applySuccess()
       } catch (error) {
-        if (!stillCurrentProject(projectId)) return
         const failure = failureOf(error)
-        toast(failure.msg)
-        if (failure.code === COMMIT_UNCLEAR_CODE) {
-          setPasteBlocked(true)
-          holdUnresolvedCatalogWrite(projectId, operationId)
+        if (isUncertainCatalogWrite(failure)) {
+          try {
+            await resolveCatalogWrite(client, projectId, operationId)
+          } catch (verifyError) {
+            if (stillCurrentProject(projectId)) toast(failureOf(verifyError).msg)
+            throw verifyError
+          }
+          applySuccess()
+        } else if (stillCurrentProject(projectId)) {
+          toast(failure.msg)
         }
       } finally {
-        if (stillCurrentProject(projectId)) await reloadCatalog(client, queryClient, projectId)
+        if (stillCurrentProject(projectId)) {
+          await reloadCatalog(client, queryClient, projectId)
+        }
         endCatalogWrite(projectId, setBusy)
       }
     }

@@ -1,8 +1,8 @@
 const { chromium, expect } = require('@playwright/test')
-const { build } = require('esbuild')
 const { strict: assert } = require('node:assert')
-const path = require('node:path')
 const { before, after, beforeEach, afterEach, test } = require('node:test')
+
+const { buildHomeTestBundle } = require('./support/build-home-test-bundle.cjs')
 
 let browser
 let page
@@ -11,27 +11,9 @@ let stylesheet
 let errors
 
 before(async () => {
-  const result = await build({
-    absWorkingDir: path.resolve(__dirname, '../..'),
-    stdin: {
-      contents: `
-        import './src/bootstrap/renderer';
-        import gsap from 'gsap';
-        import { useNavigationStore } from './src/presentation/stores/navigation.store';
-        window.homeTest = { gsap, navigation: useNavigationStore };
-      `,
-      resolveDir: path.resolve(__dirname, '../..'),
-      loader: 'tsx'
-    },
-    bundle: true,
-    write: false,
-    outfile: 'home-test.js',
-    jsx: 'automatic',
-    loader: { '.webp': 'dataurl' },
-    define: { 'process.env.NODE_ENV': '"development"' }
-  })
-  script = result.outputFiles.find((file) => file.path.endsWith('.js')).text
-  stylesheet = result.outputFiles.find((file) => file.path.endsWith('.css')).text
+  const bundle = await buildHomeTestBundle()
+  script = bundle.script
+  stylesheet = bundle.stylesheet
   browser = await chromium.launch()
 })
 
@@ -52,6 +34,8 @@ beforeEach(async () => {
   await page.goto('http://127.0.0.1/')
   await page.addStyleTag({ content: stylesheet })
   await page.evaluate(() => {
+    // 应用更新桥按 DesktopBridge 契约返回“当前形态不支持更新”的空闲状态。
+    const appUpdateUnavailable = () => ({ code: 5101, msg: '当前运行形态不支持应用内更新' })
     window.opengalgame = {
       getSettingsSummary: async () => ({ code: 2000, msg: 'ok', data: null }),
       testConnection: async () => ({ code: 2000, msg: 'ok', data: { available: true } }),
@@ -63,6 +47,15 @@ beforeEach(async () => {
         data: { directory: 'D:\\games\\Moonlight' }
       }),
       clearSaveLocation: async () => ({ code: 2000, msg: 'ok', data: null }),
+      readUpdateStatus: async () => ({
+        code: 2000,
+        msg: '更新状态已读取',
+        data: { phase: 'idle', currentVersion: '0.1.0', supported: false }
+      }),
+      onAppUpdateStatus: () => () => {},
+      checkForUpdate: async () => appUpdateUnavailable(),
+      downloadUpdate: async () => appUpdateUnavailable(),
+      installUpdate: async () => appUpdateUnavailable(),
       onProjectProgress: () => () => {}
     }
   })
@@ -152,7 +145,8 @@ test('慢加载期间不可编辑，关闭重开后旧响应不能覆盖新草�
   })
   await mount()
   await page.getByRole('button', { name: '连接设置' }).click()
-  await expect(page.getByText('正在读取连接设置…')).toBeVisible()
+  const settings = page.getByRole('dialog', { name: '连接设置' })
+  await expect(settings.getByRole('status')).toBeVisible()
   await expect(page.locator('#base-url')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled()
   await page.keyboard.press('Escape')
@@ -185,8 +179,9 @@ test('配置加载失败明确提示并可重试，无已存配置不继承放�
   })
   await mount()
   await page.getByRole('button', { name: '连接设置' }).click()
-  await expect(page.getByText('无法读取连接设置')).toBeVisible()
-  await expect(page.getByText('读取失败', { exact: true })).toBeVisible()
+  const settings = page.getByRole('dialog', { name: '连接设置' })
+  await expect(settings.locator('[data-status="error"]')).toBeVisible()
+  await expect(settings.getByText('读取失败', { exact: true })).toBeVisible()
   await expect(page.locator('#base-url')).toHaveCount(0)
   await page.getByRole('button', { name: '重新加载' }).click()
   await page.locator('#base-url').fill('discarded')
@@ -195,29 +190,71 @@ test('配置加载失败明确提示并可重试，无已存配置不继承放�
   await expect(page.locator('#base-url')).toHaveValue('')
 })
 
-test('测试通过后保存新密钥，成功提示不被测试指纹隐藏', async () => {
+test('测试通过后保存新密钥，请求与成功提示不被测试指纹隐藏', async () => {
+  await page.evaluate(() => {
+    window.connectionRequests = { test: [], save: [] }
+    window.opengalgame.testConnection = async (request) => {
+      window.connectionRequests.test.push(request)
+      return { code: 2000, msg: 'ok', data: { available: true } }
+    }
+    window.opengalgame.saveSettings = async (request) => {
+      window.connectionRequests.save.push(request)
+      return {
+        code: 2000,
+        msg: 'ok',
+        data: {
+          providerId: request.providerId,
+          baseUrl: request.baseUrl,
+          model: request.model,
+          contextWindow: request.contextWindow,
+          maxOutputTokens: request.maxOutputTokens,
+          hasApiKey: true
+        }
+      }
+    }
+  })
   await mount()
   await page.getByRole('button', { name: '连接设置' }).click()
+  const settings = page.getByRole('dialog', { name: '连接设置' })
   await page.locator('#model-id').fill('demo-chat')
   await page.locator('#api-key').fill('test-key')
   await page.getByRole('button', { name: '测试连接' }).click()
-  await expect(page.getByText('测试通过', { exact: true })).toBeVisible()
+  await expect(settings.locator('[data-tone="success"]')).toBeVisible()
+  await page.locator('#api-key').fill('new-key')
+  await expect(settings.locator('[data-tone="success"]')).toHaveCount(0)
+  const notifications = page.getByRole('region', { name: /Notifications/ })
+  await expect(notifications.locator('[data-sonner-toast]')).toHaveCount(0)
   await page.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(settings).toBeHidden()
+  await expect(
+    notifications.locator('[data-sonner-toast][data-type="success"]')
+  ).toHaveCount(1)
+  const requests = await page.evaluate(() => window.connectionRequests)
+  assert.equal(requests.test.length, 1)
+  assert.equal(requests.save.length, 1)
+  assert.deepEqual(requests.test[0].apiKey, { kind: 'replace', value: 'test-key' })
+  assert.deepEqual(requests.save[0].apiKey, { kind: 'replace', value: 'new-key' })
+  assert.equal(requests.save[0].model, 'demo-chat')
+  await page.getByRole('button', { name: '连接设置' }).click()
+  await expect(settings).toBeVisible()
+  await expect(page.locator('#api-key')).toBeVisible()
   await expect(page.locator('#api-key')).toHaveValue('')
-  await expect(page.getByText('设置已保存')).toBeVisible()
 })
 
 test('修改草稿使测试结果失效，但不隐藏之后的模型列表结果', async () => {
   await mount()
   await page.getByRole('button', { name: '连接设置' }).click()
+  const settings = page.getByRole('dialog', { name: '连接设置' })
   await page.locator('#model-id').fill('demo-chat')
   await page.getByRole('button', { name: '测试连接' }).click()
-  await expect(page.getByText('测试通过', { exact: true })).toBeVisible()
+  await expect(settings.locator('[data-tone="success"]')).toBeVisible()
   await page.locator('#base-url').fill('https://new.example/v1')
-  await expect(page.getByText('测试通过', { exact: true })).toHaveCount(0)
+  await expect(settings.locator('[data-tone="success"]')).toHaveCount(0)
   await page.getByRole('button', { name: '拉取列表' }).click()
-  await expect(page.getByText('已拉取 1 个模型')).toBeVisible()
   await expect(page.locator('#model-id')).toHaveAttribute('role', 'combobox')
+  await page.locator('#model-id').click()
+  const listbox = page.getByRole('listbox')
+  await expect(listbox.getByRole('option')).toHaveCount(1)
 })
 
 test('入场完成不重复安装交互，离开首页清理视差监听和循环动画', async () => {
@@ -244,11 +281,21 @@ test('入场完成不重复安装交互，离开首页清理视差监听和循�
   assert.equal(await pointerListeners(), 1)
   assert.equal(await loopingAnimations(), 2)
   await page.getByRole('button', { name: '项目选择', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '项目选择' })).toBeVisible()
+  await page.waitForFunction(() => !window.previousHome.isConnected)
+  await page.waitForFunction(
+    () =>
+      window.homeTest.gsap.globalTimeline.getChildren().filter((tween) => tween.repeat() === -1)
+        .length === 0
+  )
   assert.equal(await pointerListeners(), 0)
   assert.equal(await loopingAnimations(), 0)
-  await page.getByRole('button', { name: '返回首页' }).click()
-  await expect(page.getByRole('button', { name: '连接设置' })).toBeVisible()
+  await page.evaluate(() => window.homeTest.navigation.getState().visit('home'))
+  await page.waitForFunction(() => window.homeTest.navigation.getState().page === 'home')
+  await page.waitForFunction(
+    () =>
+      window.homeTest.gsap.globalTimeline.getChildren().filter((tween) => tween.repeat() === -1)
+        .length === 2
+  )
   assert.equal(await loopingAnimations(), 2)
   await session.detach()
 })

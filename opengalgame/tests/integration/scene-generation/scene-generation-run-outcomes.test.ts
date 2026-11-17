@@ -11,33 +11,48 @@ import type {
   SceneGenerationRuntime,
   SceneGenerationWorkflowProgress
 } from '@application/scene-generation/models/SceneGenerationExecution'
+import { SceneGenerationRunFailed } from '@application/scene-generation/models/SceneGenerationRunOutcome'
+import type { SceneGenerationFailureFact } from '@application/scene-generation/models/SceneGenerationFailureFacts'
+import { safeFailureWithDiagnosticRef } from '@application/scene-generation/services/impl/SceneGenerationFailureFacts'
 import type { SceneGenerationArtifact } from '@domain/scene-generation/models/SceneGenerationArtifact'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import type { Agent } from '@infrastructure/ai/agents/Agent'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import {
   beginWrittenFileLedger,
   recordWrittenFile
 } from '@infrastructure/ai/execution/writtenFileLedger'
 import {
+  ActiveLimitExceeded,
   AttemptTimedOut,
   FinalizeRequested,
   OutputTruncated
 } from '@infrastructure/ai/execution/executionErrors'
-import { webGalGenerationCompatibility } from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
+import {
+  WebGalGenerationCheckpointSaver,
+  webGalGenerationCompatibility
+} from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
 import {
   createWebGalGenerationGraph,
   generationInteraction,
-  type WebGalGenerationGraph
+  type WebGalGenerationGraph,
+  type WebGalGenerationGraphDependencies
 } from '@infrastructure/scene-generation/workflow/createWebGalGenerationGraph'
 import { createFinalizeNode } from '@infrastructure/scene-generation/workflow/graph/finalizeNode'
 import { RunFailure } from '@infrastructure/scene-generation/workflow/runFailureRouting'
 import type { WebGalGenerationStateValue } from '@infrastructure/scene-generation/workflow/WebGalGenerationState'
-import { readDurableEffects } from '@infrastructure/workflow/execution/durableEffect'
+import { WebGalSceneGenerationWorkflowImpl } from '@infrastructure/scene-generation/workflow/WebGalSceneGenerationWorkflowImpl'
+import {
+  readDurableEffects,
+  writeDurableEffect
+} from '@infrastructure/workflow/execution/durableEffect'
 import type {
   WebGalSceneAgentInput,
   WebGalSceneAgentOutput
 } from '@infrastructure/scene-generation/agents/WebGalSceneAgentTypes'
+import type { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { FileCheckpointSaver } from '@infrastructure/workflow/checkpoints/FileCheckpointSaver'
 import { langGraphThreadKey } from '@infrastructure/workflow/WorkflowIdentity'
 
@@ -776,6 +791,7 @@ it('收尾节点只在候选身份一致时信任已读对象，否则回读', a
       saveCandidateRevision: () => Promise.resolve(current),
       writeCandidateFiles: () => Promise.resolve({ candidateSnapshotId: 'edited' })
     },
+    domain: new SceneGenerationDomainServiceImpl(),
     agent: { invoke: () => Promise.resolve(output({ writtenFiles: [] })) },
     budget: new ExecutionBudget({ modelAttempts: 8, toolCalls: 8, activeMs: 900000 }),
     runtime: {
@@ -881,6 +897,224 @@ it('校验 rejected 时等待修正，不抛错且不再调用模型', async () 
   expect(generationInteraction(waiting.values, 'checkpoint-locked').kind).toBe('correction')
 })
 
+it('executeGeneration 经工作流入口写出候选并持久化消费预算与检查点身份', async () => {
+  const harness = await workflowHarness({
+    execution: {
+      budget: {
+        correctionsUsed: 1,
+        modelCallsUsed: 2,
+        toolCallsUsed: 1,
+        activeElapsedMs: 50,
+        inputTokens: 1,
+        outputTokens: 2,
+        totalTokens: 3,
+        tokenLimit: 77
+      }
+    },
+    agent: ({ budget }) => {
+      budget.consumeModelAttempt()
+      budget.consumeToolCall()
+      budget.consumeTokenUsage({ inputTokens: 3, outputTokens: 5, totalTokens: 8 })
+      recordWrittenFile(budget, { path: ENTRY, version: 'write-entry' })
+      return output()
+    }
+  })
+  const outcome = await harness.workflow.executeGeneration(harness.runtime)
+  expect(outcome.state).toBe('ready')
+  if (outcome.state !== 'ready') throw new Error('工作流未返回候选')
+  expect(outcome.checkpointId).toBeTruthy()
+  expect(outcome.budget).toMatchObject({
+    correctionsUsed: 1,
+    modelCallsUsed: 3,
+    toolCallsUsed: 2,
+    inputTokens: 4,
+    outputTokens: 7,
+    totalTokens: 11,
+    tokenLimit: 77
+  })
+  expect(outcome.budget.activeElapsedMs).toBeGreaterThanOrEqual(50)
+  expect(outcome.candidateSnapshotId).toMatch(/^[0-9a-f]{64}$/u)
+  const snapshot = await harness.state()
+  expect(snapshot.checkpointId).toBe(outcome.checkpointId)
+  expect(snapshot.values.status).toBe('ready')
+  expect(snapshot.values.execution.candidateSnapshotId).toBe(outcome.candidateSnapshotId)
+  expect(snapshot.values.execution.budget).toMatchObject({
+    correctionsUsed: 1,
+    modelCallsUsed: 3,
+    toolCallsUsed: 2,
+    inputTokens: 4,
+    outputTokens: 7,
+    totalTokens: 11,
+    tokenLimit: 77
+  })
+  // 工作流结算时间在最后一次节点写检查点之后，终态进度只能比检查点预算更新。
+  expect(snapshot.values.execution.budget.activeElapsedMs).toBeLessThanOrEqual(
+    outcome.budget.activeElapsedMs
+  )
+  expect(harness.calls).toBe(1)
+  const effects = await readDurableEffects(harness.root, snapshot.values.execution)
+  expect(effects).toEqual([
+    expect.objectContaining({
+      stepId: 'generate-1-initial',
+      status: 'completed',
+      kind: 'fileWrite',
+      candidateRevision: outcome.candidateSnapshotId,
+      resultDigest: outcome.candidateSnapshotId
+    })
+  ])
+})
+
+it('暂停意图只在执行事实已持久标记时生效，并在安全检查点返回中断', async () => {
+  const ignored = await workflowHarness({
+    agent: ({ budget }) => {
+      recordWrittenFile(budget, { path: ENTRY, version: 'write-no-pause' })
+      return output()
+    }
+  })
+  await ignored.workflow.requestPauseAtSafeCheckpoint(ignored.execution)
+  const ready = await ignored.workflow.executeGeneration(ignored.runtime)
+  expect(ready.state).toBe('ready')
+
+  const paused = await workflowHarness({
+    agent: ({ budget }) => {
+      recordWrittenFile(budget, { path: ENTRY, version: 'write-paused' })
+      return output()
+    }
+  })
+  await paused.workflow.requestPauseAtSafeCheckpoint({
+    ...paused.execution,
+    pauseRequested: true
+  })
+  const outcome = await paused.workflow.executeGeneration(paused.runtime)
+  expect(outcome.state).toBe('interrupted')
+  if (outcome.state !== 'interrupted') throw new Error('工作流未返回暂停中断')
+  expect(outcome.interruptReason).toBe('paused')
+  expect(outcome.candidateSnapshotId).toBeTruthy()
+  const snapshot = await paused.state()
+  expect(snapshot.values.status).toBe('paused')
+  expect(snapshot.values.execution.pauseRequested).toBe(true)
+  expect(paused.calls).toBe(1)
+})
+
+it('resumeGeneration 逐项核对检查点身份，操作、分支、候选或输入不符时都不进入模型', async () => {
+  const harness = await workflowHarness({
+    agent: () => clarifyingOutput('检查点身份核对')
+  })
+  const waiting = await harness.workflow.executeGeneration(harness.runtime)
+  expect(waiting.state).toBe('waiting')
+  if (waiting.state !== 'waiting') throw new Error('工作流未进入决定等待')
+  const stored: SceneGenerationExecution = {
+    ...harness.live.execution,
+    checkpointId: waiting.checkpointId
+  }
+  const cases: ReadonlyArray<{
+    name: string
+    execution: SceneGenerationExecution
+    code: number
+    message?: string
+  }> = [
+    {
+      name: '操作',
+      execution: { ...stored, operationId: 'other-operation' },
+      code: ErrorCodes.operationConflict,
+      message: '恢复输入或候选版本已变化'
+    },
+    {
+      name: '分支',
+      execution: { ...stored, branchId: 'other-branch' },
+      code: ErrorCodes.invalidRequest,
+      message: '历史检查点不存在'
+    },
+    {
+      name: '候选',
+      execution: { ...stored, candidateSnapshotId: 'c'.repeat(40) },
+      code: ErrorCodes.operationConflict,
+      message: '恢复输入或候选版本已变化'
+    },
+    {
+      name: '输入',
+      execution: {
+        ...stored,
+        inputSnapshot: {
+          ...stored.inputSnapshot,
+          prompts: stored.inputSnapshot.prompts.map((prompt, index) =>
+            index === 0 ? { ...prompt, body: '换一个生成要求。' } : prompt
+          )
+        }
+      },
+      code: ErrorCodes.operationConflict,
+      message: '恢复输入或候选版本已变化'
+    }
+  ]
+  for (const item of cases) {
+    await expect(
+      harness.workflow.resumeGeneration(harness.runtimeFor(item.execution)),
+      item.name
+    ).rejects.toMatchObject({
+      code: item.code,
+      ...(item.message ? { message: item.message } : {})
+    })
+  }
+  expect(harness.agentCreations).toBe(1)
+  expect(harness.calls).toBe(1)
+})
+
+it('resumeGeneration 在副作用结果未确认时拒绝继续，不创建智能体', async () => {
+  const harness = await workflowHarness({ agent: () => output() })
+  await writeDurableEffect(harness.root, harness.execution, {
+    operationId: harness.execution.operationId,
+    stepId: 'manual-write',
+    inputDigest: 'manual-digest',
+    status: 'started',
+    kind: 'fileWrite'
+  })
+  await expect(harness.workflow.resumeGeneration(harness.runtime)).rejects.toMatchObject({
+    code: ErrorCodes.operationConflict,
+    message: '已发生写入但缺少候选修订，不能继续'
+  })
+  expect(harness.agentCreations).toBe(0)
+})
+
+it('用户取消与仅活跃时限超时经入口区分终态，取消不写失败事实', async () => {
+  const cancelled = new AbortController()
+  cancelled.abort(new Error('用户取消'))
+  const userHarness = await workflowHarness({
+    signals: { signal: cancelled.signal, userAbortSignal: cancelled.signal },
+    agent: () => output()
+  })
+  const cancelError = await userHarness.workflow
+    .executeGeneration(userHarness.runtime)
+    .catch((reason) => reason)
+  expect(cancelError).not.toBeInstanceOf(SceneGenerationRunFailed)
+  expect(cancelError).toMatchObject({ name: 'WorkflowError', category: 'cancelled' })
+  expect(userHarness.failures).toEqual([])
+  const cancelledState = await userHarness.state()
+  expect(cancelledState.values.execution.state).toBe('cancelled')
+  expect(cancelledState.values.execution.failure).toBeUndefined()
+  expect(userHarness.calls).toBe(0)
+  expect(userHarness.published.filter((progress) => progress.step === undefined)).toHaveLength(1)
+
+  const timedOut = new AbortController()
+  timedOut.abort(new ActiveLimitExceeded())
+  const timeoutHarness = await workflowHarness({
+    signals: { signal: timedOut.signal, activeTimeoutSignal: timedOut.signal },
+    agent: () => output()
+  })
+  const timeoutError = await timeoutHarness.workflow
+    .executeGeneration(timeoutHarness.runtime)
+    .catch((reason) => reason)
+  expect(timeoutError).toBeInstanceOf(SceneGenerationRunFailed)
+  expect(timeoutError).toMatchObject({
+    failureClass: 'modelTransient',
+    code: ErrorCodes.operationConflict
+  })
+  expect(timeoutHarness.failures).toHaveLength(1)
+  const timeoutState = await timeoutHarness.state()
+  expect(timeoutState.values.execution.state).toBe('failed')
+  expect(timeoutState.values.execution.failure).toEqual(timeoutHarness.failures[0])
+  expect(timeoutHarness.calls).toBe(0)
+})
+
 function output(overrides: Partial<WebGalSceneAgentOutput> = {}): WebGalSceneAgentOutput {
   return {
     action: 'submit_scene_result',
@@ -975,6 +1209,7 @@ async function runHarness(options: {
   const graph = createWebGalGenerationGraph({
     stateRoot: root,
     saver: new FileCheckpointSaver(root),
+    domain: new SceneGenerationDomainServiceImpl(),
     budget,
     runtime: {
       get execution() {
@@ -1230,5 +1465,175 @@ function spoken(): SceneGenerationArtifact {
         waitsForPlayer: true
       }
     ]
+  }
+}
+
+function clarifyingOutput(prompt: string): WebGalSceneAgentOutput {
+  return output({
+    action: 'request_clarification',
+    writtenFiles: [],
+    questions: [
+      {
+        prompt,
+        options: [1, 2, 3].map((index) => ({
+          label: `选项${index}`,
+          description: `说明${index}`
+        }))
+      }
+    ]
+  })
+}
+
+type WorkflowHarnessOptions = {
+  execution?: Partial<SceneGenerationExecution>
+  signals?: {
+    signal?: AbortSignal
+    userAbortSignal?: AbortSignal
+    activeTimeoutSignal?: AbortSignal
+  }
+  agent: (context: {
+    input: WebGalSceneAgentInput
+    call: number
+    budget: ExecutionBudget
+  }) => WebGalSceneAgentOutput | Promise<WebGalSceneAgentOutput>
+  saveCandidateRevision?: () => Promise<{ candidateSnapshotId: string }>
+}
+
+type WorkflowHarness = {
+  workflow: WebGalSceneGenerationWorkflowImpl
+  root: string
+  execution: SceneGenerationExecution
+  runtime: SceneGenerationRuntime
+  runtimeFor: (current: SceneGenerationExecution) => SceneGenerationRuntime
+  live: { execution: SceneGenerationExecution }
+  published: SceneGenerationWorkflowProgress[]
+  failures: SceneGenerationFailureFact[]
+  readonly calls: number
+  readonly agentCreations: number
+  state: (
+    identity?: Pick<
+      SceneGenerationExecution,
+      'projectId' | 'threadId' | 'branchId' | 'operationId'
+    >
+  ) => Promise<{ values: WebGalGenerationStateValue; checkpointId: string }>
+}
+
+/** 从真实构造参数和五个工作流端口驱动，不复用图私有节点。 */
+async function workflowHarness(options: WorkflowHarnessOptions): Promise<WorkflowHarness> {
+  const root = await mkdtemp(join(tmpdir(), 'scene-workflow-entry-'))
+  roots.push(root)
+  const base = baseExecution(root, {
+    mode: options.execution?.mode,
+    reviewCandidate: options.execution?.reviewCandidate,
+    candidateSnapshotId: options.execution?.candidateSnapshotId,
+    correctionsUsed: options.execution?.budget?.correctionsUsed
+  })
+  const execution: SceneGenerationExecution = {
+    ...base,
+    ...options.execution,
+    budget: { ...base.budget, ...options.execution?.budget }
+  }
+  const published: SceneGenerationWorkflowProgress[] = []
+  const failures: SceneGenerationFailureFact[] = []
+  const calls = { count: 0 }
+  const creations = { count: 0 }
+  const live = { execution }
+  const artifacts = {
+    readCandidate: async (
+      _execution: SceneGenerationExecution,
+      candidateSnapshotId: string
+    ): Promise<SceneGenerationCandidate> => ({
+      ...candidateOf(spoken(), candidateSnapshotId)
+    }),
+    saveCandidateRevision:
+      options.saveCandidateRevision ??
+      (async () => ({
+        candidateSnapshotId: createHash('sha256')
+          .update(`workflow-revision-${root}-${calls.count}`)
+          .digest('hex')
+      })),
+    writeCandidateFiles: async () => ({ candidateSnapshotId: 'edited' })
+  }
+  const deps: WebGalGenerationGraphDependencies = {
+    stateRoot: root,
+    saver: new WebGalGenerationCheckpointSaver(root),
+    artifacts,
+    domain: new SceneGenerationDomainServiceImpl()
+  }
+  const agent: Agent<WebGalSceneAgentInput, WebGalSceneAgentOutput> = {
+    async invoke(input, run) {
+      calls.count += 1
+      beginWrittenFileLedger(run.context.budget)
+      return options.agent({ input, call: calls.count, budget: run.context.budget })
+    }
+  }
+  const workflow = new WebGalSceneGenerationWorkflowImpl(
+    deps,
+    {} as AiProjectFileSystemImpl,
+    async () => {
+      creations.count += 1
+      return agent
+    },
+    safeFailureWithDiagnosticRef
+  )
+  const runtimeFor = (current: SceneGenerationExecution): SceneGenerationRuntime => ({
+    execution: current,
+    signal: options.signals?.signal ?? new AbortController().signal,
+    userAbortSignal: options.signals?.userAbortSignal ?? new AbortController().signal,
+    activeTimeoutSignal: options.signals?.activeTimeoutSignal ?? new AbortController().signal,
+    publishProgress: async (progress) => {
+      published.push(progress)
+      live.execution = {
+        ...live.execution,
+        step: progress.step,
+        budget: progress.budget,
+        ...(progress.checkpointId ? { checkpointId: progress.checkpointId } : {}),
+        ...(progress.candidateSnapshotId
+          ? { candidateSnapshotId: progress.candidateSnapshotId }
+          : {})
+      }
+      return live.execution
+    },
+    recordCandidateRevision: async (revision) => {
+      live.execution = { ...live.execution, candidateSnapshotId: revision.candidateSnapshotId }
+      return live.execution
+    },
+    recordFailure: async (failure) => {
+      failures.push(failure)
+      live.execution = { ...live.execution, failure }
+      return live.execution
+    }
+  })
+  const state = async (
+    identity: Pick<
+      SceneGenerationExecution,
+      'projectId' | 'threadId' | 'branchId' | 'operationId'
+    > = execution
+  ): Promise<{ values: WebGalGenerationStateValue; checkpointId: string }> => {
+    const graph = createWebGalGenerationGraph(deps)
+    const snapshot = await graph.getState({
+      configurable: { thread_id: langGraphThreadKey(identity), checkpoint_ns: '' }
+    })
+    return {
+      values: snapshot.values as WebGalGenerationStateValue,
+      checkpointId: String(snapshot.config.configurable!.checkpoint_id)
+    }
+  }
+  return {
+    workflow,
+    root,
+    execution,
+    runtime: runtimeFor(execution),
+    runtimeFor,
+    live,
+    published,
+    failures,
+    get calls() {
+      return calls.count
+    },
+    get agentCreations() {
+      return creations.count
+    },
+    state
   }
 }

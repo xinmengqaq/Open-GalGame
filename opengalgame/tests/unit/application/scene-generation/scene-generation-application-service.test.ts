@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   createSceneGenerationFixture,
@@ -9,6 +9,13 @@ import {
   questionInteraction
 } from './sceneGenerationFixture'
 import type { ReplySceneGenerationInteractionDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
+import type { WebGalGenerationStateValue } from '@infrastructure/scene-generation/workflow/WebGalGenerationState'
+import { SceneGenerationVersionConflict } from '@application/scene-generation/errors/SceneGenerationVersionConflict'
+import type {
+  SceneGenerationRenderProgressEventVO,
+  SceneGenerationTimelineEntryVO
+} from '@application/scene-generation/vo/SceneGenerationRenderVO'
+import { AppException } from '@common/errors/AppException'
 
 const replyRequest: ReplySceneGenerationInteractionDTO = {
   ...generationRequest,
@@ -101,6 +108,9 @@ describe('场景生成应用编排', () => {
     await expect(
       f.service.generateScene({ ...generationRequest, reviewCandidate: true })
     ).rejects.toMatchObject({ code: 4103 })
+    // 短操作失败只结束本次排队，同一线程后续请求仍可继续。
+    await expect(f.service.generateScene(generationRequest)).resolves.toEqual(first)
+    expect(f.jobs).toHaveLength(1)
   })
 
   it('同线程的并发新操作只启动一个，生成任务不占据短串行段', async () => {
@@ -112,6 +122,48 @@ describe('场景生成应用编排', () => {
     ])
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
     expect(f.jobs).toHaveLength(1)
+  })
+
+  it('执行中的操作对状态查询可见，重启后同一持久记录只标记可恢复', async () => {
+    const f = createSceneGenerationFixture()
+    await f.service.generateScene(generationRequest)
+    await expect(f.service.getSceneGenerationStatus(generationRequest)).resolves.toMatchObject({
+      state: 'pending',
+      canResume: false
+    })
+    await expect(f.restart().getSceneGenerationStatus(generationRequest)).resolves.toMatchObject({
+      state: 'pending',
+      canResume: true
+    })
+  })
+
+  it('模型执行等待期间同一线程短操作仍可完成，取消不等待模型返回', async () => {
+    const f = createSceneGenerationFixture()
+    const modelGate = Promise.withResolvers<void>()
+    const modelStarted = Promise.withResolvers<void>()
+    f.workflow.executeGeneration.mockImplementation(async () => {
+      modelStarted.resolve()
+      await modelGate.promise
+      return f.ready
+    })
+    await f.service.generateScene(generationRequest)
+    const running = f.runNext()
+    await modelStarted.promise
+    await expect(f.service.getSceneGenerationStatus(generationRequest)).resolves.toMatchObject({
+      state: 'running',
+      canResume: false
+    })
+    await expect(f.service.cancelSceneGeneration(generationRequest)).resolves.toMatchObject({
+      state: 'cancelling'
+    })
+    expect(f.executions.get('operation-1')?.state).toBe('cancelling')
+    expect(f.workflow.executeGeneration.mock.calls[0][0].signal.aborted).toBe(true)
+    modelGate.resolve()
+    await running
+    await expect(f.service.getSceneGenerationStatus(generationRequest)).resolves.toMatchObject({
+      state: 'cancelled'
+    })
+    expect(f.versions.commitCandidate).not.toHaveBeenCalled()
   })
 
   it('领域请求拒绝不完整来源时不创建工作区或操作', async () => {
@@ -332,16 +384,26 @@ describe('场景生成应用编排', () => {
     waitForInteraction(waiting)
     await waiting.service.generateScene(generationRequest)
     await waiting.runNext()
+    const waitingBefore = waiting.executions.get('operation-1')!
     await expect(waiting.service.cancelSceneGeneration(generationRequest)).resolves.toMatchObject({
       state: 'cancelled'
+    })
+    expect(waiting.executions.get('operation-1')).toMatchObject({
+      state: 'cancelled',
+      sequence: waitingBefore.sequence + 1,
+      interaction: undefined,
+      pendingReply: undefined,
+      requiresCleanup: false
     })
     expect(waiting.artifacts.discardWorkspace).toHaveBeenCalledTimes(1)
     const committed = createSceneGenerationFixture()
     await committed.service.generateScene(generationRequest)
     await committed.runNext()
+    const writesBefore = committed.workflow.writeExecution.mock.calls.length
     await expect(committed.service.cancelSceneGeneration(generationRequest)).resolves.toMatchObject(
       { state: 'succeeded' }
     )
+    expect(committed.workflow.writeExecution).toHaveBeenCalledTimes(writesBefore)
     expect(committed.versions.rollbackCandidate).not.toHaveBeenCalled()
   })
 
@@ -368,6 +430,115 @@ describe('场景生成应用编排', () => {
     await expect(f.runNext()).rejects.toMatchObject({ code: 4103 })
     expect(f.commits.size).toBe(0)
     expect(f.progress.some((event) => event.state === 'succeeded')).toBe(false)
+  })
+
+  it.each([
+    { baselineState: 'changed', lockState: 'unlocked', message: '目标场景基线已变化，不能覆盖' },
+    { baselineState: 'unknown', lockState: 'unlocked', message: '目标场景基线不明，不能覆盖' },
+    { baselineState: 'unchanged', lockState: 'locked', message: '目标场景已锁定，不能覆盖' },
+    { baselineState: 'unchanged', lockState: 'unknown', message: '目标场景锁定状态不明，不能覆盖' }
+  ] as const)(
+    '提交前事实 $baselineState/$lockState 分类为版本冲突并保留候选',
+    async (facts) => {
+      const f = createSceneGenerationFixture()
+      f.versions.inspectBaseline.mockResolvedValue(facts)
+      await f.service.generateScene(generationRequest)
+
+      const failed = await f.runNext().then(
+        () => undefined,
+        (error: unknown) => error
+      )
+      expect(failed).toBeInstanceOf(SceneGenerationVersionConflict)
+      expect(failed).toMatchObject({ code: 4103, message: facts.message })
+      expect(f.versions.commitCandidate).not.toHaveBeenCalled()
+      expect(f.versions.rollbackCandidate).not.toHaveBeenCalled()
+      expect(f.artifacts.discardWorkspace).not.toHaveBeenCalled()
+      expect(f.executions.get('operation-1')).toMatchObject({
+        state: 'interrupted',
+        interruptReason: 'candidateConflict',
+        requiresCleanup: false
+      })
+      expect(f.commits.size).toBe(0)
+    }
+  )
+
+  it('非覆盖类候选问题按普通业务冲突拒绝，不误分类为版本冲突', async () => {
+    const f = createSceneGenerationFixture()
+    f.artifacts.readCandidate.mockResolvedValue({
+      ...f.candidate,
+      artifact: {
+        ...f.candidate.artifact,
+        scene: { projectId: 'project-1', sceneId: 'other-scene' }
+      }
+    })
+    await f.service.generateScene(generationRequest)
+
+    const failed = await f.runNext().then(
+      () => undefined,
+      (error: unknown) => error
+    )
+    expect(failed).toBeInstanceOf(AppException)
+    expect(failed).not.toBeInstanceOf(SceneGenerationVersionConflict)
+    expect(failed).toMatchObject({
+      code: 4103,
+      message: '候选场景与生成目标不是同一个场景'
+    })
+    expect(f.versions.commitCandidate).not.toHaveBeenCalled()
+    expect(f.artifacts.discardWorkspace).toHaveBeenCalledTimes(1)
+    expect(f.executions.get('operation-1')).toMatchObject({ state: 'failed' })
+  })
+
+  it('提交按读取候选、校验、提交边界复验、清理和终态写入顺序推进', async () => {
+    const f = createSceneGenerationFixture()
+    const order: string[] = []
+    f.artifacts.readCandidate.mockImplementation(async () => {
+      order.push('readCandidate')
+      expect(f.executions.get('operation-1')).toMatchObject({
+        state: 'running',
+        step: 'reading'
+      })
+      return f.candidate
+    })
+    f.versions.inspectBaseline.mockImplementation(async () => {
+      order.push('inspectBaseline')
+      expect(f.executions.get('operation-1')).toMatchObject({
+        state: 'running',
+        step: 'validating'
+      })
+      return { baselineState: 'unchanged', lockState: 'unlocked' }
+    })
+    f.versions.commitCandidate.mockImplementation(async (execution, candidate, requireVersion) => {
+      order.push('commitCandidate')
+      expect(f.executions.get('operation-1')).toMatchObject({
+        state: 'committing',
+        step: 'committing',
+        preview: expect.objectContaining({ validationReport: { issues: [] } })
+      })
+      requireVersion({ baselineState: 'unchanged', lockState: 'unlocked' })
+      order.push('requireVersion')
+      return { commitId: 'commit-operation-1' }
+    })
+    f.artifacts.discardWorkspace.mockImplementation(async () => {
+      order.push('discardWorkspace')
+      expect(f.executions.get('operation-1')).toMatchObject({ state: 'committing' })
+    })
+    await f.service.generateScene(generationRequest)
+    await f.runNext()
+
+    expect(order).toEqual([
+      'readCandidate',
+      'inspectBaseline',
+      'commitCandidate',
+      'requireVersion',
+      'discardWorkspace'
+    ])
+    expect(f.versions.commitCandidate).toHaveBeenCalledTimes(1)
+    expect(f.executions.get('operation-1')).toMatchObject({
+      state: 'succeeded',
+      step: undefined,
+      result: { commitId: 'commit-operation-1' },
+      workspace: undefined
+    })
   })
 
   it('提交响应丢失时先查询已提交事实，确认成功后不重提或回退', async () => {
@@ -424,6 +595,22 @@ describe('场景生成应用编排', () => {
     await expect(f.runNext()).rejects.toMatchObject({ cause: { errors: [original, cleanup] } })
     expect(f.executions.get('operation-1')?.state).toBe('interrupted')
     expect(f.progress.some((event) => event.state === 'succeeded')).toBe(false)
+  })
+
+  it('核对提交事实失败时保留中断记录和清理要求，不丢弃候选', async () => {
+    const f = createSceneGenerationFixture()
+    f.workflow.executeGeneration.mockRejectedValue(new Error('原始失败'))
+    f.versions.readOperationCommit.mockRejectedValue(new Error('提交事实读取失败'))
+    await f.service.generateScene(generationRequest)
+    await expect(f.runNext()).rejects.toMatchObject({ code: 5103 })
+    expect(f.executions.get('operation-1')).toMatchObject({
+      state: 'interrupted',
+      requiresCleanup: true,
+      failure: { code: 5103 }
+    })
+    expect(f.artifacts.discardWorkspace).not.toHaveBeenCalled()
+    expect(f.versions.commitCandidate).not.toHaveBeenCalled()
+    expect(f.versions.rollbackCandidate).not.toHaveBeenCalled()
   })
 
   it('恢复失败清理只重试清理，保留原始失败而不再调用模型', async () => {
@@ -611,6 +798,172 @@ describe('场景生成应用编排', () => {
     expect(f.versions.commitCandidate).not.toHaveBeenCalled()
   })
 
+  it('写入执行记录先追加去重时间线，再持久化、发布、读取检查点并通知订阅者', async () => {
+    const f = createSceneGenerationFixture()
+    await f.service.generateScene(generationRequest)
+    const base = f.executions.get('operation-1')!
+    const events: SceneGenerationRenderProgressEventVO[] = []
+    const unsubscribe = f.coordinator.subscribeRenderProgress(generationRequest, (event) =>
+      events.push(event)
+    )
+    const progressBefore = f.progress.length
+    let progressAtPersist = -1
+    const originalWrite = f.workflow.writeExecution.getMockImplementation()!
+    f.workflow.writeExecution.mockImplementationOnce(async (execution) => {
+      progressAtPersist = f.progress.length
+      return originalWrite(execution)
+    })
+    let progressAtCheckpoint = -1
+    const originalCheckpoint = f.workflow.readCheckpoint.getMockImplementation()!
+    f.workflow.readCheckpoint.mockImplementationOnce(async (request) => {
+      progressAtCheckpoint = f.progress.length
+      return originalCheckpoint(request)
+    })
+
+    const interrupted = {
+      ...base,
+      state: 'interrupted' as const,
+      step: undefined,
+      checkpointId: 'checkpoint-1',
+      candidateSnapshotId: 'snapshot-1',
+      sequence: base.sequence + 1
+    }
+    const written = await f.coordinator.writeExecution(interrupted)
+
+    expect(progressAtPersist).toBe(progressBefore)
+    expect(progressAtCheckpoint).toBe(progressBefore + 1)
+    expect(f.progress).toHaveLength(progressBefore + 1)
+    expect(f.progress.at(-1)).toMatchObject({
+      operationId: 'operation-1',
+      state: 'interrupted',
+      sequence: interrupted.sequence
+    })
+    expect(written.canContinue).toBe(true)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      operationId: 'operation-1',
+      state: 'interrupted',
+      sequence: interrupted.sequence,
+      checkpointId: 'checkpoint-1',
+      canResume: true,
+      message: '已暂停，可继续'
+    })
+    const timeline = f.executions.get('operation-1')?.timeline ?? []
+    expect(timeline).toHaveLength(1)
+    expect(timeline[0]).toMatchObject({
+      kind: 'stage',
+      stage: 'paused',
+      message: '已暂停，可继续',
+      sequence: interrupted.sequence
+    })
+
+    await f.coordinator.writeExecution({
+      ...f.executions.get('operation-1')!,
+      sequence: interrupted.sequence + 1
+    })
+    expect(f.executions.get('operation-1')?.timeline).toHaveLength(1)
+    expect(events).toHaveLength(2)
+    expect(events.at(-1)?.sequence).toBe(interrupted.sequence + 1)
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    f.workflow.readCheckpoint.mockRejectedValueOnce(new Error('检查点读取失败'))
+    const withoutEligibility = await f.coordinator.writeExecution({
+      ...f.executions.get('operation-1')!,
+      sequence: interrupted.sequence + 2
+    })
+    warn.mockRestore()
+    expect(withoutEligibility.canContinue).toBeUndefined()
+    expect(events).toHaveLength(2)
+    expect(f.progress).toHaveLength(progressBefore + 3)
+    expect(f.executions.get('operation-1')?.sequence).toBe(interrupted.sequence + 2)
+    unsubscribe()
+  })
+
+  it('执行时间线最多保留 64 条，阶段记录只保留最近 16 条', async () => {
+    const f = createSceneGenerationFixture()
+    await f.service.generateScene(generationRequest)
+    const base = f.executions.get('operation-1')!
+    const entry = (
+      index: number,
+      kind: SceneGenerationTimelineEntryVO['kind']
+    ): SceneGenerationTimelineEntryVO => ({
+      entryId: `old-${index}`,
+      sequence: index,
+      createdAt: new Date(0).toISOString(),
+      kind,
+      stage: kind === 'failure' ? ('failed' as const) : ('generating' as const),
+      message: kind === 'failure' ? `旧失败 ${index}` : `旧阶段 ${index}`
+    })
+
+    await f.coordinator.writeExecution({
+      ...base,
+      state: 'interrupted',
+      step: undefined,
+      interruptReason: 'commitUnknown',
+      sequence: base.sequence + 1,
+      timeline: Array.from({ length: 80 }, (_, index) => entry(index + 1, 'failure'))
+    })
+    const capped = f.executions.get('operation-1')!.timeline!
+    expect(capped).toHaveLength(64)
+    expect(capped[0].message).toBe('旧失败 18')
+    expect(capped.at(-1)).toMatchObject({
+      kind: 'failure',
+      stage: 'failed',
+      message: '提交结果待核对'
+    })
+
+    await f.coordinator.writeExecution({
+      ...f.executions.get('operation-1')!,
+      state: 'running',
+      step: 'reading',
+      interruptReason: 'paused',
+      sequence: base.sequence + 2,
+      timeline: Array.from({ length: 20 }, (_, index) => entry(index + 1, 'stage'))
+    })
+    const trimmed = f.executions.get('operation-1')!.timeline!
+    expect(trimmed).toHaveLength(17)
+    expect(trimmed[0].message).toBe('旧阶段 5')
+    expect(trimmed.slice(0, -1).every((item) => item.kind === 'stage')).toBe(true)
+    expect(trimmed.at(-1)).toMatchObject({
+      kind: 'stage',
+      stage: 'validating',
+      sequence: base.sequence + 2
+    })
+  })
+
+  it('旧协调器订阅者按操作接收新协调器写入的进度，订阅表不随实例重置', async () => {
+    const f = createSceneGenerationFixture()
+    const subscribed = f.coordinator
+    const events: SceneGenerationRenderProgressEventVO[] = []
+    const otherEvents: SceneGenerationRenderProgressEventVO[] = []
+    const unsubscribe = subscribed.subscribeRenderProgress(generationRequest, (event) =>
+      events.push(event)
+    )
+    const unsubscribeOther = subscribed.subscribeRenderProgress(
+      { ...generationRequest, operationId: 'operation-2' },
+      (event) => otherEvents.push(event)
+    )
+    await f.service.generateScene(generationRequest)
+    f.jobs.length = 0
+    const restarted = f.restart()
+    await expect(restarted.resumeSceneGeneration(generationRequest)).resolves.toMatchObject({
+      state: 'pending'
+    })
+    await f.runNext()
+
+    expect(events.length).toBeGreaterThan(0)
+    expect(events.at(-1)).toMatchObject({
+      operationId: 'operation-1',
+      state: 'succeeded',
+      sequence: f.executions.get('operation-1')?.sequence
+    })
+    const sequences = events.map((event) => event.sequence)
+    expect(sequences).toEqual([...new Set(sequences)].sort((left, right) => left - right))
+    expect(otherEvents).toEqual([])
+    unsubscribe()
+    unsubscribeOther()
+  })
+
   it('模型或工具调用超过旧额度仍可提交，不按次数中止', async () => {
     const f = createSceneGenerationFixture()
     f.workflow.executeGeneration.mockResolvedValue({
@@ -657,10 +1010,13 @@ describe('场景生成应用编排', () => {
     f.artifacts.discardWorkspace.mockRejectedValue(new Error('清理失败'))
     await f.service.generateScene(generationRequest)
     await expect(f.runNext()).rejects.toMatchObject({ code: 5103 })
-    expect(f.executions.get('operation-1')?.state).toBe('succeeded')
-    expect(f.executions.get('operation-1')?.failure?.message).toBe(
-      '作品已保存，但候选工作区清理未完成'
-    )
+    expect(f.executions.get('operation-1')).toMatchObject({
+      state: 'succeeded',
+      workspaceCleanupPending: true,
+      workspace: expect.objectContaining({ workspaceId: 'operation-1' }),
+      result: { commitId: 'commit-operation-1' },
+      failure: { message: '作品已保存，但候选工作区清理未完成' }
+    })
     expect(f.versions.rollbackCandidate).not.toHaveBeenCalled()
   })
 
@@ -1151,7 +1507,9 @@ describe('场景生成应用编排', () => {
         instruction: '改结尾'
       }
     }
-    const checkpointOf = (unresolvedIssues: readonly string[]) => ({
+    const checkpointOf = (
+      unresolvedIssues: readonly string[]
+    ): Partial<WebGalGenerationStateValue> => ({
       execution: f.executions.get('operation-1')!,
       candidateSnapshotId: 'snapshot-1',
       summary: '来源摘要',

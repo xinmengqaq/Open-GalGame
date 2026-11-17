@@ -1,32 +1,7 @@
 import { AppException } from '@common/errors/AppException'
 
 import type { SceneGenerationQuestionVO } from '../vo/SceneGenerationVO'
-
-export type FailureClass =
-  | 'inputInvalid'
-  | 'blocked'
-  | 'modelTransient'
-  | 'modelAuth'
-  | 'modelRejected'
-  | 'contextOverflow'
-  | 'outputContract'
-  | 'noProgress'
-  | 'correctionsExhausted'
-  | 'internal'
-
-export type NextAction =
-  | 'retryOperation'
-  | 'retryRepair'
-  | 'regenerate'
-  | 'checkConnection'
-  | 'reviseRequirement'
-  | 'reduceInput'
-  | 'viewCandidate'
-  | 'resume'
-  | 'verifyTask'
-  | 'returnToCanvas'
-  | 'viewInputSummary'
-  | 'discard'
+import type { FailureClass, NextAction } from '../vo/SceneGenerationFailureVO'
 
 export type RunFailureReason =
   | 'noInformationGain'

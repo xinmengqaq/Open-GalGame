@@ -2,16 +2,7 @@ const { test, expect } = require('@playwright/test')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const evidenceDir = path.resolve(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'harness',
-  'handoffs',
-  'evidence',
-  '2026-11-04-p4-ui-acceptance'
-)
+const evidenceDir = path.resolve(__dirname, '..', '..', 'artifacts', 'generation-r06')
 const screensDir = path.join(evidenceDir, 'screens')
 const resultsPath = path.join(evidenceDir, 'results.json')
 
@@ -120,6 +111,83 @@ async function openView(page, label) {
     'aria-selected',
     'true'
   )
+}
+
+/**
+ * 只插桩真实客户端的调用次数和先后顺序，不替换返回值。
+ * 用于观察 statusRef/订阅/4s 收敛/启动前保存/取消这些页面副作用。
+ */
+async function instrumentGeneration(page) {
+  const patched = await page.evaluate(async () => {
+    const find = (name) =>
+      performance
+        .getEntriesByType('resource')
+        .map((entry) => entry.name)
+        .find((url) => url.includes(name))
+    const canvasUrl = find('SceneCanvasClientImpl')
+    const generationUrl = find('SceneGenerationClientImpl')
+    if (!canvasUrl || !generationUrl) return false
+    const canvasModule = await import(canvasUrl)
+    const generationModule = await import(generationUrl)
+    const stats = {
+      order: [],
+      status: 0,
+      subscribe: 0,
+      unsubscribe: 0,
+      cancel: 0,
+      reply: 0,
+      saveRequests: [],
+      startRequests: [],
+      retryRequests: []
+    }
+    globalThis.__generationProbe = stats
+
+    const saveArrangement = canvasModule.SceneCanvasClientImpl.prototype.saveSceneCanvasArrangement
+    canvasModule.SceneCanvasClientImpl.prototype.saveSceneCanvasArrangement = function (...args) {
+      stats.order.push('save')
+      stats.saveRequests.push(args[0])
+      return saveArrangement.apply(this, args)
+    }
+    const start = generationModule.SceneGenerationClientImpl.prototype.start
+    generationModule.SceneGenerationClientImpl.prototype.start = function (...args) {
+      stats.order.push('start')
+      stats.startRequests.push(args[0])
+      return start.apply(this, args)
+    }
+    const status = generationModule.SceneGenerationClientImpl.prototype.status
+    generationModule.SceneGenerationClientImpl.prototype.status = function (...args) {
+      stats.status += 1
+      return status.apply(this, args)
+    }
+    const subscribe = generationModule.SceneGenerationClientImpl.prototype.subscribeProgress
+    generationModule.SceneGenerationClientImpl.prototype.subscribeProgress = function (...args) {
+      stats.subscribe += 1
+      const unsubscribe = subscribe.apply(this, args)
+      return () => {
+        stats.unsubscribe += 1
+        return unsubscribe()
+      }
+    }
+    const cancel = generationModule.SceneGenerationClientImpl.prototype.cancel
+    generationModule.SceneGenerationClientImpl.prototype.cancel = function (...args) {
+      stats.cancel += 1
+      return cancel.apply(this, args)
+    }
+    const reply = generationModule.SceneGenerationClientImpl.prototype.reply
+    generationModule.SceneGenerationClientImpl.prototype.reply = function (...args) {
+      stats.reply += 1
+      return reply.apply(this, args)
+    }
+    const retryRepair = generationModule.SceneGenerationClientImpl.prototype.retryRepair
+    generationModule.SceneGenerationClientImpl.prototype.retryRepair = function (...args) {
+      stats.order.push('retryRepair')
+      stats.retryRequests.push(args[0])
+      return retryRepair.apply(this, args)
+    }
+    return true
+  })
+  if (!patched) throw new Error('生成客户端尚未加载，无法插桩真实调用')
+  return () => page.evaluate(() => ({ ...globalThis.__generationProbe }))
 }
 
 async function tabOrder(page) {
@@ -329,7 +397,7 @@ test.afterAll(async () => {
     viewport: viewportInfo,
     fixtures: [
       'workbench=mixed|empty|fail|damaged',
-      'generation=idle|running|decision|failed|commitUnknown|review|historyRecords|legacyFailure',
+      'generation=idle|running|decision|failed|commitUnknown|review|historyRecords|failureWithoutFacts',
       'history=fixture'
     ],
     screens,
@@ -484,11 +552,8 @@ test('八态 02：运行中与运行详情浮层', async ({ page }) => {
 
   await page.keyboard.press('Escape')
   await expect(popover).toBeHidden()
-  record(
-    '运行详情：Esc 关闭后焦点回到入口',
-    await trigger.evaluate((node) => node === document.activeElement),
-    'activeElement=trigger'
-  )
+  await expect(trigger).toBeFocused()
+  record('运行详情：Esc 关闭后焦点回到入口', true, 'activeElement=trigger')
 
   await trigger.click()
   await expect(popover).toBeVisible()
@@ -758,7 +823,7 @@ test('八态 07：AI 历史列表与详情', async ({ page }) => {
     '失败原因'
   )
 
-  await page.goto('/?workbench=mixed&generation=legacyFailure&history=fixture')
+  await page.goto('/?workbench=mixed&generation=failureWithoutFacts&history=fixture')
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 20000 })
   await page.getByRole('button', { name: '项目选择' }).click()
   await expect(page.getByRole('heading', { name: '项目' })).toBeVisible()
@@ -768,8 +833,14 @@ test('八态 07：AI 历史列表与详情', async ({ page }) => {
   await openView(page, 'AI 历史')
   await expect(page.locator('.wb-hist__row')).toHaveCount(1)
   await page.locator('.wb-hist__row').first().click()
-  await expect(detail.getByText('旧记录')).toBeVisible()
-  record('AI 历史详情：旧记录有明确标记', await detail.getByText('旧记录').isVisible(), '旧记录')
+  await expect(detail.getByText('操作边界')).toBeVisible()
+  await expect(detail.locator('.wb-hist__detail-badges .wb-hist__badge')).toHaveText('失败')
+  await expect(detail.getByText('旧记录')).toHaveCount(0)
+  record(
+    'AI 历史详情：缺少失败事实的失败记录保留失败反馈且无旧记录标记',
+    (await detail.getByText('旧记录').count()) === 0,
+    '旧记录 count=0'
+  )
 })
 
 test('八态 08：作品历史', async ({ page }) => {
@@ -1075,6 +1146,7 @@ test('关闭抽屉不取消任务，焦点返回生成入口', async ({ page }) 
   await openWorkbench(page, search)
   const dialog = await openDrawer(page)
   await expect(page.getByText('正在生成。')).toBeVisible()
+  const readStats = await instrumentGeneration(page)
 
   await page.locator('.wb-drawer__close').click()
   await expect(dialog).toBeHidden()
@@ -1090,6 +1162,11 @@ test('关闭抽屉不取消任务，焦点返回生成入口', async ({ page }) 
     await page.getByText('生成进行中').isVisible(),
     'generation lock visible'
   )
+  record(
+    '关闭抽屉：没有调用取消',
+    (await readStats()).cancel === 0,
+    JSON.stringify(await readStats())
+  )
 
   await page.getByRole('button', { name: '查看生成进度' }).click()
   await expect(dialog).toBeVisible()
@@ -1097,6 +1174,226 @@ test('关闭抽屉不取消任务，焦点返回生成入口', async ({ page }) 
     (await page.locator('[data-tab="current"] [role="tab"]').getAttribute('aria-label')) ?? ''
   record('关闭抽屉：重新打开仍是同一运行任务', label.includes('进行中'), label)
   await expect(page.getByText('正在生成。')).toBeVisible()
+  record(
+    '重新打开：仍没有调用取消',
+    (await readStats()).cancel === 0,
+    JSON.stringify(await readStats())
+  )
+})
+
+test('生成动作：启动前保存、订阅、4s 收敛、暂停继续取消', async ({ page }) => {
+  const search = '/?workbench=mixed&generation=idle&history=fixture'
+  await openWorkbench(page, search)
+  const node = page.getByTestId('rf__node-card-doc')
+  await expect(node).toBeVisible()
+  const box = await node.boundingBox()
+  if (!box) throw new Error('画布卡片没有可拖拽区域')
+  await page.mouse.move(box.x + box.width / 2, box.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 40, box.y + 50, { steps: 8 })
+  await page.mouse.up()
+  await expect(page.locator('[data-motion="save"]')).toContainText('有未保存改动')
+
+  const readStats = await instrumentGeneration(page)
+  const dialog = await openDrawer(page)
+  await dialog.getByRole('button', { name: /开始生成/ }).click()
+  await expect(page.getByText('正在生成。')).toBeVisible({ timeout: 20000 })
+
+  const started = await readStats()
+  record(
+    '启动前保存先于生成请求',
+    JSON.stringify(started.order) === JSON.stringify(['save', 'start']),
+    JSON.stringify(started)
+  )
+  record('运行中只建立一次进度订阅', started.subscribe === 1, JSON.stringify(started))
+  const savedArrangement = started.saveRequests[0]
+  const savedCard = savedArrangement?.arrangement?.cards?.find((card) => card.cardId === 'card-doc')
+  record(
+    '启动前保存提交真实拖动后的编排',
+    savedArrangement?.reason === 'beforeGeneration' &&
+      savedCard !== undefined &&
+      (savedCard.layout.x !== 32 || savedCard.layout.y !== 48),
+    JSON.stringify({ reason: savedArrangement?.reason, layout: savedCard?.layout })
+  )
+  const startedRequest = started.startRequests[0]
+  record(
+    '生成请求使用保存后的同一画布身份',
+    startedRequest?.projectId === savedArrangement?.projectId &&
+      startedRequest?.sceneId === savedArrangement?.sceneId &&
+      startedRequest?.canvasId === savedArrangement?.canvasId &&
+      Array.isArray(startedRequest?.confirmedControls) &&
+      typeof startedRequest?.policy === 'object',
+    JSON.stringify(startedRequest)
+  )
+  const beforeReconcile = started.status
+  await page.waitForTimeout(4500)
+  const afterReconcile = await readStats()
+  record(
+    '4s 状态收敛持续查询活动操作',
+    afterReconcile.status > beforeReconcile,
+    JSON.stringify(afterReconcile)
+  )
+
+  await dialog.getByRole('button', { name: '暂停生成' }).click()
+  await expect(page.getByText('已暂停').first()).toBeVisible({ timeout: 12000 })
+  await page.getByRole('button', { name: '继续生成' }).click()
+  await expect(page.getByText('正在生成。')).toBeVisible({ timeout: 12000 })
+
+  await dialog
+    .getByRole('button', { name: /^取消$/ })
+    .first()
+    .click()
+  const confirm = page.locator('.wb-gen-dialog')
+  await expect(confirm).toBeVisible()
+  await confirm.getByRole('button', { name: '取消本次生成' }).click()
+  await expect(page.getByText('已取消').first()).toBeVisible({ timeout: 12000 })
+  await page.waitForTimeout(800)
+  const cancelled = await readStats()
+  record('取消后释放进度订阅', cancelled.unsubscribe === 1, JSON.stringify(cancelled))
+  const terminalStatusCalls = cancelled.status
+  await page.waitForTimeout(4500)
+  record(
+    '终态后停止 4s 状态收敛',
+    (await readStats()).status === terminalStatusCalls,
+    JSON.stringify(await readStats())
+  )
+  await capture(page, '11-r06-actions.png', {
+    state: '生成动作：开始/暂停/继续/取消',
+    fixture: 'generation=idle; workbench=mixed; history=fixture',
+    search
+  })
+})
+
+test('决策草稿：选项生效并提交后继续生成', async ({ page }) => {
+  const search = '/?workbench=mixed&generation=decision&history=fixture'
+  await openWorkbench(page, search)
+  const dialog = await openDrawer(page)
+  await expect(page.getByText('旧友身份要在这里挑明吗？')).toBeVisible()
+  const readStats = await instrumentGeneration(page)
+  await expect(dialog.locator('.wb-gen-option.is-selected')).toHaveCount(0)
+  await dialog.getByRole('radio', { name: /现在挑明/ }).click()
+  record(
+    '草稿：选择一个选项',
+    (await dialog.locator('.wb-gen-option.is-selected').count()) === 1,
+    String(await dialog.locator('.wb-gen-option.is-selected').count())
+  )
+  await capture(page, '12-r06-decision-draft.png', {
+    state: '等待决策：草稿选项',
+    fixture: 'generation=decision; workbench=mixed; history=fixture',
+    search
+  })
+  await dialog.getByRole('button', { name: '提交决定并继续' }).click()
+  await expect(page.getByText('正在生成。')).toBeVisible({ timeout: 12000 })
+  const stats = await readStats()
+  record('决策回复只提交一次', stats.reply === 1, JSON.stringify(stats))
+})
+
+test('修复失败：重试入口经工作区与保存后提交修复请求', async ({ page }) => {
+  const search = '/?workbench=mixed&generation=repairFailure&history=fixture'
+  await openWorkbench(page, search)
+  const node = page.getByTestId('rf__node-card-doc')
+  const box = await node.boundingBox()
+  if (!box) throw new Error('画布卡片没有可拖拽区域')
+  await page.mouse.move(box.x + box.width / 2, box.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 40, box.y + 50, { steps: 8 })
+  await page.mouse.up()
+  await expect(page.locator('[data-motion="save"]')).toContainText('有未保存改动')
+
+  const readStats = await instrumentGeneration(page)
+  const dialog = await openDrawer(page)
+  const retry = dialog.getByRole('button', { name: '重试本次修改' })
+  await expect(retry).toBeVisible({ timeout: 12000 })
+  await retry.click()
+  const group = page.getByRole('group', { name: '确认重试本次修改' })
+  await expect(group).toBeVisible()
+  await expect(group).toContainText('把相认放到结尾')
+  await expect(group).toContainText('只读参考')
+  await capture(page, '13-r06-repair-confirm.png', {
+    state: '修复失败：确认重试',
+    fixture: 'generation=repairFailure; workbench=mixed; history=fixture',
+    search
+  })
+  await group.getByRole('button', { name: '确认重试本次修改' }).click()
+  await expect(page.getByText('正在生成。')).toBeVisible({ timeout: 15000 })
+
+  const stats = await readStats()
+  record(
+    '重试修复先保存画布再提交',
+    JSON.stringify(stats.order) === JSON.stringify(['save', 'retryRepair']),
+    JSON.stringify(stats.order)
+  )
+  const savedArrangement = stats.saveRequests[0]
+  const request = stats.retryRequests[0]
+  record(
+    '重试修复携带已保存画布与已确认修改来源',
+    request?.projectId === savedArrangement?.projectId &&
+      request?.sceneId === savedArrangement?.sceneId &&
+      request?.canvasId === savedArrangement?.canvasId &&
+      request?.repair?.instruction === '把相认放到结尾' &&
+      request?.repair?.sourceOperationId === 'fixture-operation' &&
+      request?.repair?.sourceThreadId === 'fixture-thread' &&
+      request?.repair?.sourceBranchId === 'fixture-branch' &&
+      request?.repair?.sourceCheckpointId === 'fixture-checkpoint' &&
+      request?.repair?.candidateSnapshotId === 'fixture-candidate',
+    JSON.stringify(request)
+  )
+  record(
+    '重试修复后消费真实运行状态',
+    (
+      await dialog.locator('[data-tab="current"] [role="tab"]').getAttribute('aria-label')
+    )?.includes('进行中') === true,
+    (await dialog.locator('[data-tab="current"] [role="tab"]').getAttribute('aria-label')) ?? ''
+  )
+  await page.screenshot({
+    path: path.join(screensDir, '14-r06-repair-running.png'),
+    animations: 'disabled',
+    caret: 'hide'
+  })
+  screens.push({
+    file: '14-r06-repair-running.png',
+    state: '修复失败：重试后运行中',
+    fixture: 'generation=repairFailure; workbench=mixed; history=fixture',
+    search,
+    viewport: viewportInfo
+  })
+})
+
+test('进度事件：有效事件更新可见状态，过期或异 scope 不覆盖', async ({ page }) => {
+  const search = '/?workbench=mixed&generation=progressEvents&history=fixture'
+  await openWorkbench(page, search)
+  const readStats = await instrumentGeneration(page)
+  const dialog = await openDrawer(page)
+  await dialog.getByRole('button', { name: '按画布重新生成' }).click()
+  await expect(page.getByText('正在生成。')).toBeVisible({ timeout: 15000 })
+  await page.waitForTimeout(500)
+  const beforeEvent = await readStats()
+
+  const validating = '正在校验候选脚本或按校验结果修正'
+  await expect(page.getByText(validating, { exact: true }).first()).toBeVisible({ timeout: 3000 })
+  const afterEvent = await readStats()
+  record(
+    '有效进度事件先于 4s 轮询更新可见状态',
+    afterEvent.status === beforeEvent.status,
+    JSON.stringify({ beforeStatusCalls: beforeEvent.status, afterStatusCalls: afterEvent.status })
+  )
+
+  await page.waitForTimeout(900)
+  await expect(page.getByText(validating, { exact: true }).first()).toBeVisible()
+  record(
+    '过期或异 scope 事件不覆盖当前可见状态',
+    (await page.getByText('生成失败', { exact: true }).count()) === 0 &&
+      (await page.getByText('作品已提交', { exact: true }).count()) === 0,
+    JSON.stringify({
+      failed: await page.getByText('生成失败', { exact: true }).count(),
+      completed: await page.getByText('作品已提交', { exact: true }).count()
+    })
+  )
+  await capture(page, '15-r06-progress-events.png', {
+    state: '进度事件：有效事件更新，过期/异scope拒绝',
+    fixture: 'generation=progressEvents; workbench=mixed; history=fixture',
+    search
+  })
 })
 
 test('作品历史写操作在途时禁止关闭', async ({ page }) => {

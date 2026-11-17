@@ -10,6 +10,7 @@ import type {
 } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type { SceneArtifactGateway } from '@application/scene-generation/ports/SceneArtifactGateway'
 import { toRenderStatusVO } from '@application/scene-generation/mapping/SceneGenerationRenderProjection'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import {
   WebGalGenerationCheckpointSaver,
@@ -26,11 +27,13 @@ import {
   validScript
 } from '../../../../harness/acceptance/support/generationFixture'
 
-function question(index: number): {
+type QuestionFixture = {
   prompt: string
   detail: string
-  options: { label: string; description: string }[]
-} {
+  options: Array<{ label: string; description: string }>
+}
+
+function question(index: number): QuestionFixture {
   return {
     prompt: `第 ${index} 个创作问题`,
     detail: `需要决定第 ${index} 项`,
@@ -218,7 +221,7 @@ it('完成结果没有题组事实时恢复不补造题目，也不重调模型'
   expect(fixture.git('rev-parse', 'HEAD')).toBe(baseline)
 })
 
-function fourQuestions() {
+function fourQuestions(): QuestionFixture[] {
   return [1, 2, 3, 4].map((index) => question(index))
 }
 
@@ -269,7 +272,10 @@ async function forgetStoredQuestions(
   }
 }
 
-async function replayCompletedWrite(fixture: QuestionRun, execution: SceneGenerationExecution) {
+async function replayCompletedWrite(
+  fixture: QuestionRun,
+  execution: SceneGenerationExecution
+): Promise<void> {
   const stateRoot = join(fixture.config.userStateRoot, 'ai')
   await rm(
     join(
@@ -304,6 +310,7 @@ async function replayCompletedWrite(fixture: QuestionRun, execution: SceneGenera
     saver: new WebGalGenerationCheckpointSaver(stateRoot),
     stateRoot,
     artifacts: fixture.app.ports.artifacts,
+    domain: new SceneGenerationDomainServiceImpl(),
     agent: {
       invoke: () => {
         calls += 1

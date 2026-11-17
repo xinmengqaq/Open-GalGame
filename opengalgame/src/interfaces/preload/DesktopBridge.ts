@@ -1,240 +1,225 @@
 import { webUtils } from 'electron'
 
-import type { DesktopBridge } from '../client/DesktopBridge'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-import type {
-  CheckForUpdateDTO,
-  DownloadUpdateDTO,
-  InstallUpdateDTO,
-  ReadUpdateStatusDTO
-} from '@application/app-update/dto/AppUpdateDTO'
-import type { UpdateCheckVO, UpdateStatusVO } from '@application/app-update/vo/AppUpdateVO'
+import type { UpdateStatusVO } from '@application/app-update/vo/AppUpdateVO'
 import type { ProjectProgressVO } from '@application/projects/vo/ProjectVO'
-import type {
-  ClearVersionHistoryDTO,
-  ListVersionHistoryDTO,
-  UndoVersionHistoryDTO
-} from '@application/project-versioning/dto/ProjectVersioningDTO'
-import type {
-  VersionHistoryClearVO,
-  VersionHistoryPageVO,
-  VersionHistoryUndoVO
-} from '@application/project-versioning/vo/VersionHistoryVO'
-import type {
-  SceneGenerationCandidatePreviewEventVO,
-  SceneGenerationCandidatePreviewVO,
-  SceneGenerationHistorySummaryVO,
-  SceneGenerationRenderProgressEventVO,
-  SceneGenerationRenderStatusVO
-} from '@application/scene-generation/vo/SceneGenerationRenderVO'
-import type { AjaxResult } from '@common/contracts/AjaxResult'
-import type { CandidatePreviewVO } from '@application/scene-preview/vo/CandidatePreviewVO'
-import type {
-  DialogueSaveSettlementVO,
-  SaveDialogueChangesVO
-} from '@application/scene-preview/vo/DialogueSaveVO'
-import type {
-  PreviewCommandResultVO,
-  PreviewDraftResultVO,
-  PreviewStageResultVO
-} from '@application/scene-preview/vo/PreviewRuntimeVO'
-import type { ScenePreviewAvailabilityVO } from '@application/scene-preview/vo/ScenePreviewAvailabilityVO'
-import type { ScenePreviewSessionVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
-import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
-import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewSaveVersionVO'
+import type { SceneGenerationRenderProgressEventVO } from '@application/scene-generation/vo/SceneGenerationRenderVO'
+import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
+import {
+  desktopBridgeChannels,
+  type DesktopBridgeEventChannel,
+  type DesktopBridgeInvokeChannel
+} from '@interfaces/contracts/desktopBridgeChannels'
 
+/** preload 对渲染进程暴露的最小传输端口；通道只来自冻结清单。 */
 export interface DesktopTransport {
-  invoke(channel: string, input?: unknown): Promise<unknown>
+  invoke(channel: DesktopBridgeInvokeChannel, input?: unknown): Promise<unknown>
   /**
    * @param listener - 不含 Electron event 的回调。
    */
-  subscribe(channel: string, listener: (value: unknown) => void): () => void
+  subscribe(channel: DesktopBridgeEventChannel, listener: (value: unknown) => void): () => void
 }
+
+const { event: eventChannels, invoke: invokeChannels } = desktopBridgeChannels
 
 /** 建立固定桥接，不向表现层暴露通用 IPC。 */
 export function createDesktopBridge(transport: DesktopTransport): DesktopBridge {
   return {
     chooseSaveLocation: () =>
-      transport.invoke('project:choose-save-location') as ReturnType<
+      transport.invoke(invokeChannels.chooseSaveLocation) as ReturnType<
         DesktopBridge['chooseSaveLocation']
       >,
     /** 清除新建待用的保存位置。 */
     clearSaveLocation: () =>
-      transport.invoke('project:clear-save-location') as ReturnType<
+      transport.invoke(invokeChannels.clearSaveLocation) as ReturnType<
         DesktopBridge['clearSaveLocation']
       >,
     createProject: (request) =>
-      transport.invoke('project:create', request) as ReturnType<DesktopBridge['createProject']>,
+      transport.invoke(invokeChannels.createProject, request) as ReturnType<
+        DesktopBridge['createProject']
+      >,
     importProject: (request) =>
-      transport.invoke('project:import', request) as ReturnType<DesktopBridge['importProject']>,
+      transport.invoke(invokeChannels.importProject, request) as ReturnType<
+        DesktopBridge['importProject']
+      >,
     /** 读取一页本机已登记项目。 */
     listProjects: (request) =>
-      transport.invoke('project:list', request) as ReturnType<DesktopBridge['listProjects']>,
+      transport.invoke(invokeChannels.listProjects, request) as ReturnType<
+        DesktopBridge['listProjects']
+      >,
     openProject: (request) =>
-      transport.invoke('project:open', request) as ReturnType<DesktopBridge['openProject']>,
+      transport.invoke(invokeChannels.openProject, request) as ReturnType<
+        DesktopBridge['openProject']
+      >,
     renameProject: (request) =>
-      transport.invoke('project:rename', request) as ReturnType<DesktopBridge['renameProject']>,
+      transport.invoke(invokeChannels.renameProject, request) as ReturnType<
+        DesktopBridge['renameProject']
+      >,
     unregisterProject: (request) =>
-      transport.invoke('project:unregister', request) as ReturnType<
+      transport.invoke(invokeChannels.unregisterProject, request) as ReturnType<
         DesktopBridge['unregisterProject']
       >,
     /** 核对已登记工程的默认场景和作品基线。 */
     ensureProjectWorkspace: (request) =>
-      transport.invoke('project:ensure-workspace', request) as ReturnType<
+      transport.invoke(invokeChannels.ensureProjectWorkspace, request) as ReturnType<
         DesktopBridge['ensureProjectWorkspace']
       >,
     /** 只读检查已登记工程的工作区，不补建。 */
     inspectProjectWorkspace: (request) =>
-      transport.invoke('project:inspect-workspace', request) as ReturnType<
+      transport.invoke(invokeChannels.inspectProjectWorkspace, request) as ReturnType<
         DesktopBridge['inspectProjectWorkspace']
       >,
     /** 检查工程输入来源及画布编排文件。 */
     inspectProjectFiles: (request) =>
-      transport.invoke('project-files:inspect', request) as ReturnType<
+      transport.invoke(invokeChannels.inspectProjectFiles, request) as ReturnType<
         DesktopBridge['inspectProjectFiles']
       >,
     listProjectInputSources: (request) =>
-      transport.invoke('project-files:list-input-sources', request) as ReturnType<
+      transport.invoke(invokeChannels.listProjectInputSources, request) as ReturnType<
         DesktopBridge['listProjectInputSources']
       >,
     /** 批量读取来源内容及本次读取版本。 */
     readProjectInputSources: (request) =>
-      transport.invoke('project-files:read-input-sources', request) as ReturnType<
+      transport.invoke(invokeChannels.readProjectInputSources, request) as ReturnType<
         DesktopBridge['readProjectInputSources']
       >,
     /** 按来源身份读取工程内媒体字节。 */
     readProjectMedia: (request) =>
-      transport.invoke('project-files:read-media', request) as ReturnType<
+      transport.invoke(invokeChannels.readProjectMedia, request) as ReturnType<
         DesktopBridge['readProjectMedia']
       >,
     /** 读取场景画布模块的已保存编排。 */
     readSceneCanvasArrangement: (request) =>
-      transport.invoke('scene-canvas:read-arrangement', request) as ReturnType<
+      transport.invoke(invokeChannels.readSceneCanvasArrangement, request) as ReturnType<
         DesktopBridge['readSceneCanvasArrangement']
       >,
     createSceneCanvasSourceCard: (request) =>
-      transport.invoke('scene-canvas:create-source-card', request) as ReturnType<
+      transport.invoke(invokeChannels.createSceneCanvasSourceCard, request) as ReturnType<
         DesktopBridge['createSceneCanvasSourceCard']
       >,
     createSceneCanvasPromptCard: (request) =>
-      transport.invoke('scene-canvas:create-prompt-card', request) as ReturnType<
+      transport.invoke(invokeChannels.createSceneCanvasPromptCard, request) as ReturnType<
         DesktopBridge['createSceneCanvasPromptCard']
       >,
     createSceneCanvasFieldCard: (request) =>
-      transport.invoke('scene-canvas:create-field-card', request) as ReturnType<
+      transport.invoke(invokeChannels.createSceneCanvasFieldCard, request) as ReturnType<
         DesktopBridge['createSceneCanvasFieldCard']
       >,
     editSceneCanvasCard: (request) =>
-      transport.invoke('scene-canvas:edit-card', request) as ReturnType<
+      transport.invoke(invokeChannels.editSceneCanvasCard, request) as ReturnType<
         DesktopBridge['editSceneCanvasCard']
       >,
     editSceneCanvasPromptBody: (request) =>
-      transport.invoke('scene-canvas:edit-prompt-body', request) as ReturnType<
+      transport.invoke(invokeChannels.editSceneCanvasPromptBody, request) as ReturnType<
         DesktopBridge['editSceneCanvasPromptBody']
       >,
     /** 绑定或清空字段预设。 */
     bindSceneCanvasFieldCardPreset: (request) =>
-      transport.invoke('scene-canvas:bind-field-card-preset', request) as ReturnType<
+      transport.invoke(invokeChannels.bindSceneCanvasFieldCardPreset, request) as ReturnType<
         DesktopBridge['bindSceneCanvasFieldCardPreset']
       >,
     editSceneCanvasMediaRole: (request) =>
-      transport.invoke('scene-canvas:edit-media-role', request) as ReturnType<
+      transport.invoke(invokeChannels.editSceneCanvasMediaRole, request) as ReturnType<
         DesktopBridge['editSceneCanvasMediaRole']
       >,
     copySceneCanvasCard: (request) =>
-      transport.invoke('scene-canvas:copy-card', request) as ReturnType<
+      transport.invoke(invokeChannels.copySceneCanvasCard, request) as ReturnType<
         DesktopBridge['copySceneCanvasCard']
       >,
     deleteSceneCanvasCard: (request) =>
-      transport.invoke('scene-canvas:delete-card', request) as ReturnType<
+      transport.invoke(invokeChannels.deleteSceneCanvasCard, request) as ReturnType<
         DesktopBridge['deleteSceneCanvasCard']
       >,
     connectSceneCanvasCards: (request) =>
-      transport.invoke('scene-canvas:connect-cards', request) as ReturnType<
+      transport.invoke(invokeChannels.connectSceneCanvasCards, request) as ReturnType<
         DesktopBridge['connectSceneCanvasCards']
       >,
     disconnectSceneCanvasCards: (request) =>
-      transport.invoke('scene-canvas:disconnect-cards', request) as ReturnType<
+      transport.invoke(invokeChannels.disconnectSceneCanvasCards, request) as ReturnType<
         DesktopBridge['disconnectSceneCanvasCards']
       >,
     editSceneCanvasRelationName: (request) =>
-      transport.invoke('scene-canvas:edit-relation-name', request) as ReturnType<
+      transport.invoke(invokeChannels.editSceneCanvasRelationName, request) as ReturnType<
         DesktopBridge['editSceneCanvasRelationName']
       >,
     attachSceneCanvasRelationRecord: (request) =>
-      transport.invoke('scene-canvas:attach-relation-record', request) as ReturnType<
+      transport.invoke(invokeChannels.attachSceneCanvasRelationRecord, request) as ReturnType<
         DesktopBridge['attachSceneCanvasRelationRecord']
       >,
     detachSceneCanvasRelationRecord: (request) =>
-      transport.invoke('scene-canvas:detach-relation-record', request) as ReturnType<
+      transport.invoke(invokeChannels.detachSceneCanvasRelationRecord, request) as ReturnType<
         DesktopBridge['detachSceneCanvasRelationRecord']
       >,
     saveSceneCanvasArrangement: (request) =>
-      transport.invoke('scene-canvas:save-arrangement', request) as ReturnType<
+      transport.invoke(invokeChannels.saveSceneCanvasArrangement, request) as ReturnType<
         DesktopBridge['saveSceneCanvasArrangement']
       >,
     chooseProjectFiles: () =>
-      transport.invoke('project-files:choose-files', {}) as ReturnType<
+      transport.invoke(invokeChannels.chooseProjectFiles, {}) as ReturnType<
         DesktopBridge['chooseProjectFiles']
       >,
     importProjectFiles: (request) =>
-      transport.invoke('project-files:import', request) as ReturnType<
+      transport.invoke(invokeChannels.importProjectFiles, request) as ReturnType<
         DesktopBridge['importProjectFiles']
       >,
     /** 用系统默认程序打开工程文件。 */
     openProjectFile: (request) =>
-      transport.invoke('project-files:open', request) as ReturnType<
+      transport.invoke(invokeChannels.openProjectFile, request) as ReturnType<
         DesktopBridge['openProjectFile']
       >,
     renameProjectFile: (request) =>
-      transport.invoke('project-files:rename', request) as ReturnType<
+      transport.invoke(invokeChannels.renameProjectFile, request) as ReturnType<
         DesktopBridge['renameProjectFile']
       >,
     /** 删除工程文件及来源记录。 */
     deleteProjectFile: (request) =>
-      transport.invoke('project-files:delete', request) as ReturnType<
+      transport.invoke(invokeChannels.deleteProjectFile, request) as ReturnType<
         DesktopBridge['deleteProjectFile']
       >,
     createProjectTextFile: (request) =>
-      transport.invoke('project-files:create-text', request) as ReturnType<
+      transport.invoke(invokeChannels.createProjectTextFile, request) as ReturnType<
         DesktopBridge['createProjectTextFile']
       >,
     /** 覆盖已导入文档的正文。 */
     updateProjectTextFileBody: (request) =>
-      transport.invoke('project-files:update-text-body', request) as ReturnType<
+      transport.invoke(invokeChannels.updateProjectTextFileBody, request) as ReturnType<
         DesktopBridge['updateProjectTextFileBody']
       >,
     createProjectFolder: (request) =>
-      transport.invoke('project-files:create-folder', request) as ReturnType<
+      transport.invoke(invokeChannels.createProjectFolder, request) as ReturnType<
         DesktopBridge['createProjectFolder']
       >,
     copyProjectFile: (request) =>
-      transport.invoke('project-files:copy-file', request) as ReturnType<
+      transport.invoke(invokeChannels.copyProjectFile, request) as ReturnType<
         DesktopBridge['copyProjectFile']
       >,
     moveProjectFile: (request) =>
-      transport.invoke('project-files:move-file', request) as ReturnType<
+      transport.invoke(invokeChannels.moveProjectFile, request) as ReturnType<
         DesktopBridge['moveProjectFile']
       >,
     copyProjectFolder: (request) =>
-      transport.invoke('project-files:copy-folder', request) as ReturnType<
+      transport.invoke(invokeChannels.copyProjectFolder, request) as ReturnType<
         DesktopBridge['copyProjectFolder']
       >,
     /** 按操作标识核对提交是否已经落地。 */
     readProjectFileOperation: (request) =>
-      transport.invoke('project-files:read-operation', request) as ReturnType<
+      transport.invoke(invokeChannels.readProjectFileOperation, request) as ReturnType<
         DesktopBridge['readProjectFileOperation']
       >,
+    recoverProjectFileOperations: (request) =>
+      transport.invoke(invokeChannels.recoverProjectFileOperations, request) as ReturnType<
+        DesktopBridge['recoverProjectFileOperations']
+      >,
     renameProjectFolder: (request) =>
-      transport.invoke('project-files:rename-folder', request) as ReturnType<
+      transport.invoke(invokeChannels.renameProjectFolder, request) as ReturnType<
         DesktopBridge['renameProjectFolder']
       >,
     readProjectFolderDeletionPlan: (request) =>
-      transport.invoke('project-files:folder-deletion-plan', request) as ReturnType<
+      transport.invoke(invokeChannels.readProjectFolderDeletionPlan, request) as ReturnType<
         DesktopBridge['readProjectFolderDeletionPlan']
       >,
     deleteProjectFolder: (request) =>
-      transport.invoke('project-files:delete-folder', request) as ReturnType<
+      transport.invoke(invokeChannels.deleteProjectFolder, request) as ReturnType<
         DesktopBridge['deleteProjectFolder']
       >,
     /** 把拖入的磁盘文件转成本机路径。不经过导入通道。 */
@@ -250,148 +235,184 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       }
     },
     getSettingsSummary: () =>
-      transport.invoke('connection:get-summary') as ReturnType<DesktopBridge['getSettingsSummary']>,
+      transport.invoke(invokeChannels.getSettingsSummary) as ReturnType<
+        DesktopBridge['getSettingsSummary']
+      >,
     testConnection: (request) =>
-      transport.invoke('connection:test', request) as ReturnType<DesktopBridge['testConnection']>,
+      transport.invoke(invokeChannels.testConnection, request) as ReturnType<
+        DesktopBridge['testConnection']
+      >,
     saveSettings: (request) =>
-      transport.invoke('connection:save', request) as ReturnType<DesktopBridge['saveSettings']>,
+      transport.invoke(invokeChannels.saveSettings, request) as ReturnType<
+        DesktopBridge['saveSettings']
+      >,
     listModels: (request) =>
-      transport.invoke('connection:list-models', request) as ReturnType<
+      transport.invoke(invokeChannels.listModels, request) as ReturnType<
         DesktopBridge['listModels']
       >,
-    listVersionHistory: (request: ListVersionHistoryDTO) =>
-      transport.invoke('project-versioning:list-history', request) as Promise<
-        AjaxResult<VersionHistoryPageVO>
+    listVersionHistory: (request) =>
+      transport.invoke(invokeChannels.listVersionHistory, request) as ReturnType<
+        DesktopBridge['listVersionHistory']
       >,
-    undoVersionHistoryEntry: (request: UndoVersionHistoryDTO) =>
-      transport.invoke('project-versioning:undo-history-entry', request) as Promise<
-        AjaxResult<VersionHistoryUndoVO>
+    undoVersionHistoryEntry: (request) =>
+      transport.invoke(invokeChannels.undoVersionHistoryEntry, request) as ReturnType<
+        DesktopBridge['undoVersionHistoryEntry']
       >,
-    clearVersionHistory: (request: ClearVersionHistoryDTO) =>
-      transport.invoke('project-versioning:clear-history', request) as Promise<
-        AjaxResult<VersionHistoryClearVO>
+    clearVersionHistory: (request) =>
+      transport.invoke(invokeChannels.clearVersionHistory, request) as ReturnType<
+        DesktopBridge['clearVersionHistory']
       >,
     onProjectProgress: (listener) =>
-      transport.subscribe('project:progress', (value) => listener(value as ProjectProgressVO)),
+      transport.subscribe(eventChannels.onProjectProgress, (value) =>
+        listener(value as ProjectProgressVO)
+      ),
     startSceneGeneration: (request) =>
-      transport.invoke('scene-generation:start', request) as Promise<
-        AjaxResult<SceneGenerationRenderStatusVO>
+      transport.invoke(invokeChannels.startSceneGeneration, request) as ReturnType<
+        DesktopBridge['startSceneGeneration']
       >,
     retrySceneGenerationRepair: (request) =>
-      transport.invoke('scene-generation:retry-repair', request) as Promise<
-        AjaxResult<SceneGenerationRenderStatusVO>
+      transport.invoke(invokeChannels.retrySceneGenerationRepair, request) as ReturnType<
+        DesktopBridge['retrySceneGenerationRepair']
       >,
     getSceneGenerationStatus: (request) =>
-      transport.invoke('scene-generation:status', request) as Promise<
-        AjaxResult<SceneGenerationRenderStatusVO>
+      transport.invoke(invokeChannels.getSceneGenerationStatus, request) as ReturnType<
+        DesktopBridge['getSceneGenerationStatus']
       >,
     getLatestSceneGeneration: (request) =>
-      transport.invoke('scene-generation:latest', request) as Promise<
-        AjaxResult<SceneGenerationRenderStatusVO | null>
+      transport.invoke(invokeChannels.getLatestSceneGeneration, request) as ReturnType<
+        DesktopBridge['getLatestSceneGeneration']
       >,
     replySceneGeneration: (request) =>
-      transport.invoke('scene-generation:reply', request) as Promise<
-        AjaxResult<SceneGenerationRenderStatusVO>
+      transport.invoke(invokeChannels.replySceneGeneration, request) as ReturnType<
+        DesktopBridge['replySceneGeneration']
       >,
     pauseSceneGeneration: (request) =>
-      transport.invoke('scene-generation:pause', request) as Promise<
-        AjaxResult<SceneGenerationRenderStatusVO>
+      transport.invoke(invokeChannels.pauseSceneGeneration, request) as ReturnType<
+        DesktopBridge['pauseSceneGeneration']
       >,
     resumeSceneGeneration: (request) =>
-      transport.invoke('scene-generation:resume', request) as Promise<
-        AjaxResult<SceneGenerationRenderStatusVO>
+      transport.invoke(invokeChannels.resumeSceneGeneration, request) as ReturnType<
+        DesktopBridge['resumeSceneGeneration']
       >,
     cancelSceneGeneration: (request) =>
-      transport.invoke('scene-generation:cancel', request) as Promise<
-        AjaxResult<SceneGenerationRenderStatusVO>
+      transport.invoke(invokeChannels.cancelSceneGeneration, request) as ReturnType<
+        DesktopBridge['cancelSceneGeneration']
       >,
     listSceneGenerationHistory: (request) =>
-      transport.invoke('scene-generation:list-history', request) as Promise<
-        AjaxResult<readonly SceneGenerationHistorySummaryVO[]>
+      transport.invoke(invokeChannels.listSceneGenerationHistory, request) as ReturnType<
+        DesktopBridge['listSceneGenerationHistory']
       >,
     readSceneGenerationCheckpoint: (request) =>
-      transport.invoke('scene-generation:read-checkpoint', request) as Promise<
-        AjaxResult<SceneGenerationHistorySummaryVO>
+      transport.invoke(invokeChannels.readSceneGenerationCheckpoint, request) as ReturnType<
+        DesktopBridge['readSceneGenerationCheckpoint']
       >,
     openSceneGenerationPreview: (request) =>
-      transport.invoke('scene-generation:open-preview', request) as Promise<
-        AjaxResult<SceneGenerationCandidatePreviewVO>
+      transport.invoke(invokeChannels.openSceneGenerationPreview, request) as ReturnType<
+        DesktopBridge['openSceneGenerationPreview']
       >,
     closeSceneGenerationPreview: (request) =>
-      transport.invoke('scene-generation:close-preview', request) as Promise<AjaxResult<null>>,
+      transport.invoke(invokeChannels.closeSceneGenerationPreview, request) as ReturnType<
+        DesktopBridge['closeSceneGenerationPreview']
+      >,
     subscribeSceneGenerationProgress: (request) =>
-      transport.invoke('scene-generation:progress', request) as Promise<AjaxResult<null>>,
+      transport.invoke(invokeChannels.subscribeSceneGenerationProgress, request) as ReturnType<
+        DesktopBridge['subscribeSceneGenerationProgress']
+      >,
     onSceneGenerationProgress: (listener) =>
-      transport.subscribe('scene-generation:progress', (value) =>
+      transport.subscribe(eventChannels.onSceneGenerationProgress, (value) =>
         listener(value as SceneGenerationRenderProgressEventVO)
       ),
     readScenePreviewAvailability: (request) =>
-      transport.invoke('scene-preview:availability', request) as Promise<
-        AjaxResult<ScenePreviewAvailabilityVO>
+      transport.invoke(invokeChannels.readScenePreviewAvailability, request) as ReturnType<
+        DesktopBridge['readScenePreviewAvailability']
       >,
     openScenePreview: (request) =>
-      transport.invoke('scene-preview:open', request) as Promise<AjaxResult<ScenePreviewSessionVO>>,
+      transport.invoke(invokeChannels.openScenePreview, request) as ReturnType<
+        DesktopBridge['openScenePreview']
+      >,
     preparePreviewStage: (request) =>
-      transport.invoke('scene-preview:prepare', request) as Promise<
-        AjaxResult<PreviewStageResultVO>
+      transport.invoke(invokeChannels.preparePreviewStage, request) as ReturnType<
+        DesktopBridge['preparePreviewStage']
       >,
     previewDialogueDraft: (request) =>
-      transport.invoke('scene-preview:draft', request) as Promise<AjaxResult<PreviewDraftResultVO>>,
+      transport.invoke(invokeChannels.previewDialogueDraft, request) as ReturnType<
+        DesktopBridge['previewDialogueDraft']
+      >,
     saveDialogueChanges: (request) =>
-      transport.invoke('scene-preview:save', request) as Promise<AjaxResult<SaveDialogueChangesVO>>,
+      transport.invoke(invokeChannels.saveDialogueChanges, request) as ReturnType<
+        DesktopBridge['saveDialogueChanges']
+      >,
     readDialogueSaveSettlement: (request) =>
-      transport.invoke('scene-preview:settlement', request) as Promise<
-        AjaxResult<DialogueSaveSettlementVO>
+      transport.invoke(invokeChannels.readDialogueSaveSettlement, request) as ReturnType<
+        DesktopBridge['readDialogueSaveSettlement']
       >,
     selectPreviewDialogue: (request) =>
-      transport.invoke('scene-preview:select-dialogue', request) as Promise<
-        AjaxResult<PreviewCommandResultVO>
+      transport.invoke(invokeChannels.selectPreviewDialogue, request) as ReturnType<
+        DesktopBridge['selectPreviewDialogue']
       >,
     playPreviousDialogue: (request) =>
-      transport.invoke('scene-preview:previous-dialogue', request) as Promise<
-        AjaxResult<PreviewCommandResultVO>
+      transport.invoke(invokeChannels.playPreviousDialogue, request) as ReturnType<
+        DesktopBridge['playPreviousDialogue']
       >,
     playNextDialogue: (request) =>
-      transport.invoke('scene-preview:next-dialogue', request) as Promise<
-        AjaxResult<PreviewCommandResultVO>
+      transport.invoke(invokeChannels.playNextDialogue, request) as ReturnType<
+        DesktopBridge['playNextDialogue']
       >,
     closeScenePreview: (request) =>
-      transport.invoke('scene-preview:close', request) as Promise<AjaxResult<null>>,
+      transport.invoke(invokeChannels.closeScenePreview, request) as ReturnType<
+        DesktopBridge['closeScenePreview']
+      >,
     subscribeScenePreviewRuntime: (request) =>
-      transport.invoke('scene-preview:subscribe', request) as Promise<AjaxResult<null>>,
-    onScenePreviewRuntime: (listener) => transport.subscribe('scene-preview:runtime', listener),
+      transport.invoke(invokeChannels.subscribeScenePreviewRuntime, request) as ReturnType<
+        DesktopBridge['subscribeScenePreviewRuntime']
+      >,
+    onScenePreviewRuntime: (listener) =>
+      transport.subscribe(eventChannels.onScenePreviewRuntime, listener),
     readCandidatePreview: (request) =>
-      transport.invoke('scene-preview:read-candidate', request) as Promise<
-        AjaxResult<CandidatePreviewVO>
+      transport.invoke(invokeChannels.readCandidatePreview, request) as ReturnType<
+        DesktopBridge['readCandidatePreview']
       >,
     readCandidatePreviewEvent: (request) =>
-      transport.invoke('scene-preview:candidate-event', request) as Promise<
-        AjaxResult<SceneGenerationCandidatePreviewEventVO | null>
+      transport.invoke(invokeChannels.readCandidatePreviewEvent, request) as ReturnType<
+        DesktopBridge['readCandidatePreviewEvent']
       >,
-    onCandidatePreviewReady: (listener) => transport.subscribe('scene-preview:ready', listener),
+    onCandidatePreviewReady: (listener) =>
+      transport.subscribe(eventChannels.onCandidatePreviewReady, listener),
     onCandidatePreviewStageFailed: (listener) =>
-      transport.subscribe('scene-preview:stage-failed', listener),
+      transport.subscribe(eventChannels.onCandidatePreviewStageFailed, listener),
     onCandidatePreviewInvalidated: (listener) =>
-      transport.subscribe('scene-preview:invalidated', listener),
+      transport.subscribe(eventChannels.onCandidatePreviewInvalidated, listener),
     exportSavedScene: (request) =>
-      transport.invoke('scene-export:export-saved-scene', request) as Promise<
-        AjaxResult<SceneExportResultVO>
+      transport.invoke(invokeChannels.exportSavedScene, request) as ReturnType<
+        DesktopBridge['exportSavedScene']
       >,
     readLatestPreviewSave: (request) =>
-      transport.invoke('scene-export:read-latest-preview-save', request) as Promise<
-        AjaxResult<PreviewSaveVersionVO | null>
+      transport.invoke(invokeChannels.readLatestPreviewSave, request) as ReturnType<
+        DesktopBridge['readLatestPreviewSave']
       >,
-    checkForUpdate: (request: CheckForUpdateDTO) =>
-      transport.invoke('app-update:check', request) as Promise<AjaxResult<UpdateCheckVO>>,
-    downloadUpdate: (request: DownloadUpdateDTO) =>
-      transport.invoke('app-update:download', request) as Promise<AjaxResult<UpdateStatusVO>>,
-    installUpdate: (request: InstallUpdateDTO) =>
-      transport.invoke('app-update:install', request) as Promise<AjaxResult<null>>,
-    readUpdateStatus: (request: ReadUpdateStatusDTO) =>
-      transport.invoke('app-update:read-status', request) as Promise<AjaxResult<UpdateStatusVO>>,
+    checkForUpdate: (request) =>
+      transport.invoke(invokeChannels.checkForUpdate, request) as ReturnType<
+        DesktopBridge['checkForUpdate']
+      >,
+    downloadUpdate: (request) =>
+      transport.invoke(invokeChannels.downloadUpdate, request) as ReturnType<
+        DesktopBridge['downloadUpdate']
+      >,
+    installUpdate: (request) =>
+      transport.invoke(invokeChannels.installUpdate, request) as ReturnType<
+        DesktopBridge['installUpdate']
+      >,
+    readUpdateStatus: (request) =>
+      transport.invoke(invokeChannels.readUpdateStatus, request) as ReturnType<
+        DesktopBridge['readUpdateStatus']
+      >,
     onAppUpdateStatus: (listener) =>
-      transport.subscribe('app-update:status', (value) => listener(value as UpdateStatusVO)),
+      transport.subscribe(eventChannels.onAppUpdateStatus, (value) =>
+        listener(value as UpdateStatusVO)
+      ),
     openDirectory: (request) =>
-      transport.invoke('system:open-directory', request) as Promise<AjaxResult<null>>
+      transport.invoke(invokeChannels.openDirectory, request) as ReturnType<
+        DesktopBridge['openDirectory']
+      >
   }
 }

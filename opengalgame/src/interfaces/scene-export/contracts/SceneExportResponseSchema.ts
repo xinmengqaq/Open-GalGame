@@ -4,6 +4,7 @@ import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewS
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { failureResultSchema } from '../../contracts/FailureResultSchema'
 
 const identity = z.string().min(1).max(128)
 const safeText = z.string().min(1).max(200)
@@ -48,10 +49,9 @@ const exportResult = z.discriminatedUnion('status', [
     message: safeText
   })
 ])
-const failedResult = z.strictObject({
-  code: z.number().refine((code) => code !== ErrorCodes.success),
-  msg: z.string().max(200)
-})
+
+/** 本域旧失败信封一直限制 msg≤200；共享失败模式其余不变。 */
+const boundedFailureResultSchema = failureResultSchema.extend({ msg: z.string().max(200) })
 
 export function parseSceneExportResult(value: unknown): AjaxResult<SceneExportResultVO> | null {
   const parsed = z
@@ -61,7 +61,7 @@ export function parseSceneExportResult(value: unknown): AjaxResult<SceneExportRe
         msg: z.string().max(200),
         data: exportResult
       }),
-      failedResult
+      boundedFailureResultSchema
     ])
     .safeParse(value)
   return parsed.success ? parsed.data : null
@@ -86,7 +86,7 @@ export function parseLatestPreviewSaveResult(
         msg: z.string().max(200),
         data: previewSaveVersion.nullable()
       }),
-      failedResult
+      boundedFailureResultSchema
     ])
     .safeParse(value)
   return parsed.success ? parsed.data : null

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  AppUpdateApplicationServiceImpl,
+  ManageAppUpdate,
   type AppUpdateApplicationDependencies
-} from '@application/app-update/services/impl/AppUpdateApplicationServiceImpl'
+} from '@application/app-update/services/impl/ManageAppUpdate'
 import type { UpdateInstallAttemptGateway } from '@application/app-update/ports/UpdateInstallAttemptGateway'
 import type { UpdateReleaseGateway } from '@application/app-update/ports/UpdateReleaseGateway'
 import type { UpdateStatusVO } from '@application/app-update/vo/AppUpdateVO'
@@ -106,7 +106,7 @@ function createService(
     previousInstallFailed?: boolean
   } = {}
 ): {
-  service: AppUpdateApplicationServiceImpl
+  service: ManageAppUpdate
   release: ControlledReleaseGateway
   attempts: MemoryInstallAttemptGateway
 } {
@@ -121,11 +121,11 @@ function createService(
       ? {}
       : { previousInstallFailed: options.previousInstallFailed })
   }
-  return { service: new AppUpdateApplicationServiceImpl(dependencies), release, attempts }
+  return { service: new ManageAppUpdate(dependencies), release, attempts }
 }
 
 function nextPhase(
-  service: AppUpdateApplicationServiceImpl,
+  service: ManageAppUpdate,
   phase: UpdateStatusVO['phase']
 ): Promise<UpdateStatusVO> {
   const { promise, resolve } = Promise.withResolvers<UpdateStatusVO>()
@@ -144,7 +144,7 @@ function nextImmediate(): Promise<void> {
 }
 
 async function downloadAvailableUpdate(
-  service: AppUpdateApplicationServiceImpl,
+  service: ManageAppUpdate,
   release: ControlledReleaseGateway
 ): Promise<void> {
   release.releases.push({ version: '0.1.1' })
@@ -489,7 +489,7 @@ describe('应用更新编排', () => {
       logger,
       now: () => Date.UTC(2026, 10, 12, 3, 4, 5)
     }
-    const isolated = new AppUpdateApplicationServiceImpl(dependencies)
+    const isolated = new ManageAppUpdate(dependencies)
     isolated.subscribe(() => {
       throw new Error('subscriber broke')
     })

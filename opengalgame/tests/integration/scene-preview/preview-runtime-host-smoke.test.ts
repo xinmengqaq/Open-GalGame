@@ -1,9 +1,12 @@
+import { createHash } from 'node:crypto'
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { ParsedScene } from '@application/scenes/models/ParsedScene'
+import type { SceneTextOverlayRequest } from '@application/scene-preview/ports/PreviewRuntimeGateway'
+import type { PreviewRuntimeEventVO } from '@application/scene-preview/vo/PreviewRuntimeVO'
 import { CandidatePreviewSessionGatewayImpl } from '@infrastructure/scene-preview/CandidatePreviewSessionGatewayImpl'
 import { GitCandidatePreviewGatewayImpl } from '@infrastructure/scene-generation/preview/GitCandidatePreviewGatewayImpl'
 import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
@@ -22,7 +25,13 @@ import {
   type WebgalPreviewConnection
 } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
 import { chromium, type Browser } from 'playwright'
+import { WebSocket } from 'ws'
 
+/**
+ * 隔离运行要求：本文件需要真实 `webgal-engine@4.6.5` 与 Chromium。
+ * 缺少夹具时会在启动阶段失败；历史上的夹具失败不代表产品行为回归，
+ * 不得为确认它反复重跑，应在独立工作区、独立记录中执行。
+ */
 const roots: string[] = []
 const dialogueText = '放学后的空地渐渐安静下来。澪一直没有把手里的画稿递出去。'
 
@@ -679,6 +688,338 @@ describe('隔离 WebGAL 运行时宿主', () => {
       await gateway.close()
     }
   }, 45_000)
+
+  it('真实宿主覆盖层按会话代次接受、读取和清除，准备换代与重复释放保持幂等', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'opengalgame-preview-overlay-'))
+    roots.push(root)
+    const entry = join(root, 'game', 'scene', 'start.txt')
+    await mkdir(join(root, 'game', 'scene'), { recursive: true })
+    const source = '旁白:原文;\n'
+    await writeFile(entry, source, 'utf8')
+    await mkdir(join(root, '.opengalgame'), { recursive: true })
+    await writeFile(
+      join(root, '.opengalgame/manifest.json'),
+      JSON.stringify({
+        formatVersion: 2,
+        projectId: 'project-overlay',
+        operationId: 'op-register'
+      })
+    )
+    const host = new WebgalRuntimeHostImpl({
+      projectRoot: root,
+      engineRoot: join(process.cwd(), 'node_modules', 'webgal-engine')
+    })
+    const bridge = new WebgalPreviewControlBridge(host)
+    const gateway = new PreviewRuntimeGatewayImpl({ host, bridge, timeoutMs: 30 })
+    const handle = await host.start()
+    const overlay = (
+      runtimeGeneration: number,
+      editRevision: number
+    ): SceneTextOverlayRequest => {
+      const text = `旁白:草稿${editRevision};\n`
+      return {
+        previewSessionId: 'overlay-a',
+        sceneFileName: 'start.txt',
+        editRevision,
+        text,
+        digest: createHash('sha256').update(text, 'utf8').digest('hex'),
+        runtimeGeneration
+      }
+    }
+    try {
+      const prepared = await gateway.prepare({
+        previewSessionId: 'overlay-a',
+        contentBasis: {
+          digest: 'digest-1',
+          parserVersion: '4.6.5',
+          engineVersion: handle.build.engineVersion
+        },
+        runtimeGeneration: 1,
+        projectRoot: root,
+        entryFile: 'game/scene/start.txt',
+        scene: hostScene(),
+        dialogueId: '0'
+      })
+      expect(prepared).toMatchObject({ status: 'ready', stage: { runtimeGeneration: 1 } })
+
+      await gateway.setSceneTextOverlay(overlay(1, 1))
+      await expect(
+        gateway.currentSceneTextOverlayRevision({
+          previewSessionId: 'overlay-a',
+          runtimeGeneration: 1
+        })
+      ).resolves.toBe(1)
+
+      await gateway.clearSceneTextOverlay({
+        previewSessionId: 'overlay-a',
+        runtimeGeneration: 2
+      })
+      await expect(
+        gateway.currentSceneTextOverlayRevision({
+          previewSessionId: 'overlay-a',
+          runtimeGeneration: 1
+        })
+      ).resolves.toBe(1)
+      await gateway.clearSceneTextOverlay({
+        previewSessionId: 'overlay-a',
+        runtimeGeneration: 1
+      })
+      await expect(
+        gateway.currentSceneTextOverlayRevision({
+          previewSessionId: 'overlay-a',
+          runtimeGeneration: 1
+        })
+      ).resolves.toBe(0)
+
+      await gateway.setSceneTextOverlay(overlay(1, 2))
+      await gateway.prepare({
+        previewSessionId: 'overlay-a',
+        contentBasis: {
+          digest: 'digest-2',
+          parserVersion: '4.6.5',
+          engineVersion: handle.build.engineVersion
+        },
+        runtimeGeneration: 2,
+        projectRoot: root,
+        entryFile: 'game/scene/start.txt',
+        scene: hostScene(),
+        dialogueId: '0'
+      })
+      await expect(
+        gateway.currentSceneTextOverlayRevision({
+          previewSessionId: 'overlay-a',
+          runtimeGeneration: 2
+        })
+      ).resolves.toBe(0)
+      await expect(
+        gateway.playDialogue({
+          previewSessionId: 'overlay-a',
+          expectedRuntimeGeneration: 1,
+          dialogueId: '0',
+          scene: hostScene()
+        })
+      ).resolves.toMatchObject({ status: 'failed', failure: { code: 'staleRuntimeGeneration' } })
+
+      await gateway.release({ previewSessionId: 'overlay-a' })
+      await gateway.release({ previewSessionId: 'overlay-a' })
+      await expect(gateway.setSceneTextOverlay(overlay(2, 3))).rejects.toThrow('场景覆盖不可用')
+      expect(await readFile(entry, 'utf8')).toBe(source)
+    } finally {
+      await gateway.dispose()
+      bridge.dispose()
+      await host.dispose()
+    }
+  })
+
+  it('真实宿主连接按注册与就绪过滤事件，定位接受响应后的同场景快照，释放后迟到快照不再转发', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'opengalgame-preview-ws-'))
+    roots.push(root)
+    const entry = join(root, 'game', 'scene', 'start.txt')
+    await mkdir(join(root, 'game', 'scene'), { recursive: true })
+    const source = '旁白:原文;\n'
+    await writeFile(entry, source, 'utf8')
+    await mkdir(join(root, '.opengalgame'), { recursive: true })
+    await writeFile(
+      join(root, '.opengalgame/manifest.json'),
+      JSON.stringify({
+        formatVersion: 2,
+        projectId: 'project-ws',
+        operationId: 'op-register'
+      })
+    )
+    const host = new WebgalRuntimeHostImpl({
+      projectRoot: root,
+      engineRoot: join(process.cwd(), 'node_modules', 'webgal-engine')
+    })
+    const bridge = new WebgalPreviewControlBridge(host)
+    const gateway = new PreviewRuntimeGatewayImpl({ host, bridge, timeoutMs: 2_000 })
+    const handle = await host.start()
+    const messages: ProtocolMessage[] = []
+    const waiters = new Set<() => void>()
+    const notify = (): void => {
+      for (const waiter of [...waiters]) waiter()
+    }
+    const until = (ready: (items: readonly ProtocolMessage[]) => boolean): Promise<void> => {
+      const { promise, resolve, reject } = Promise.withResolvers<void>()
+      const timer = setTimeout(() => {
+        waiters.delete(check)
+        reject(new Error(`引擎协议没有出现预期消息：${JSON.stringify(messages)}`))
+      }, 2_000)
+      const check = (): void => {
+        if (!ready(messages)) return
+        clearTimeout(timer)
+        waiters.delete(check)
+        resolve()
+      }
+      waiters.add(check)
+      check()
+      return promise
+    }
+    let socket: WebSocket | undefined
+    try {
+      await gateway.prepare({
+        previewSessionId: 'ws-a',
+        contentBasis: {
+          digest: 'digest-ws-1',
+          parserVersion: '4.6.5',
+          engineVersion: handle.build.engineVersion
+        },
+        runtimeGeneration: 1,
+        projectRoot: root,
+        entryFile: 'game/scene/start.txt',
+        scene: hostScene(),
+        dialogueId: '0'
+      })
+      const events: PreviewRuntimeEventVO[] = []
+      gateway.subscribe({ previewSessionId: 'ws-a' }, (event) => {
+        events.push(event)
+        notify()
+      })
+      const preview = await connectPreview(handle.previewUrl, messages, notify)
+      socket = preview
+      preview.send(
+        JSON.stringify({
+          kind: 'request',
+          type: 'session.register-preview',
+          requestId: 'register-ws',
+          payload: {}
+        })
+      )
+      await until((items) =>
+        items.some(
+          (item) =>
+            item.kind === 'response' &&
+            item.type === 'session.register-preview' &&
+            item.requestId === 'register-ws'
+        )
+      )
+      preview.send(
+        JSON.stringify({
+          kind: 'event',
+          type: 'preview.ready.updated',
+          payload: { ready: true }
+        })
+      )
+      preview.send(
+        JSON.stringify({
+          kind: 'event',
+          type: 'stage.snapshot.updated',
+          payload: { sceneName: 'start.txt', sentenceId: 1, stageState: {} }
+        })
+      )
+      await until(() => events.some((event) => event.type === 'stage'))
+      expect(events.at(-1)).toMatchObject({
+        type: 'stage',
+        previewSessionId: 'ws-a',
+        runtimeGeneration: 1,
+        sequence: 2,
+        position: { kind: 'dialogue', dialogueId: '0' }
+      })
+
+      const playing = gateway.playDialogue({
+        previewSessionId: 'ws-a',
+        expectedRuntimeGeneration: 1,
+        dialogueId: '0',
+        scene: hostScene()
+      })
+      await until((items) =>
+        items.some(
+          (item) => item.kind === 'request' && item.type === 'preview.command.sync-scene'
+        )
+      )
+      const request = [...messages]
+        .reverse()
+        .find((item) => item.kind === 'request' && item.type === 'preview.command.sync-scene')
+      if (!request?.requestId) throw new Error('定位请求缺少 requestId')
+      preview.send(
+        JSON.stringify({
+          kind: 'response',
+          type: 'preview.command.sync-scene',
+          requestId: request.requestId,
+          payload: {}
+        })
+      )
+      preview.send(
+        JSON.stringify({
+          kind: 'event',
+          type: 'stage.snapshot.updated',
+          payload: { sceneName: 'start.txt', sentenceId: 1, stageState: {} }
+        })
+      )
+      await expect(playing).resolves.toMatchObject({ status: 'confirmed' })
+
+      await gateway.rebaseSession({
+        previewSessionId: 'ws-a',
+        contentBasis: {
+          digest: 'digest-ws-2',
+          parserVersion: '4.6.5',
+          engineVersion: handle.build.engineVersion
+        },
+        runtimeGeneration: 2,
+        scene: hostScene()
+      })
+      preview.send(
+        JSON.stringify({
+          kind: 'event',
+          type: 'stage.snapshot.updated',
+          payload: { sceneName: 'start.txt', sentenceId: 1, stageState: {} }
+        })
+      )
+      await until(() =>
+        events.some((event) => event.type === 'stage' && event.runtimeGeneration === 2)
+      )
+      expect(events.at(-1)).toMatchObject({
+        type: 'stage',
+        previewSessionId: 'ws-a',
+        runtimeGeneration: 2,
+        sequence: 1,
+        position: { kind: 'dialogue', dialogueId: '0' }
+      })
+      await expect(
+        gateway.playDialogue({
+          previewSessionId: 'ws-a',
+          expectedRuntimeGeneration: 1,
+          dialogueId: '0',
+          scene: hostScene()
+        })
+      ).resolves.toMatchObject({ status: 'failed', failure: { code: 'staleRuntimeGeneration' } })
+
+      await gateway.release({ previewSessionId: 'ws-a' })
+      await gateway.release({ previewSessionId: 'ws-a' })
+      const forwarded = events.length
+      preview.send(
+        JSON.stringify({
+          kind: 'event',
+          type: 'stage.snapshot.updated',
+          payload: { sceneName: 'start.txt', sentenceId: 1, stageState: {} }
+        })
+      )
+      // 同一连接按序处理：注册响应到达即证明上一条迟到快照已被网关处理。
+      preview.send(
+        JSON.stringify({
+          kind: 'request',
+          type: 'session.register-preview',
+          requestId: 'register-after-release',
+          payload: {}
+        })
+      )
+      await until((items) =>
+        items.some(
+          (item) =>
+            item.kind === 'response' &&
+            item.type === 'session.register-preview' &&
+            item.requestId === 'register-after-release'
+        )
+      )
+      expect(events).toHaveLength(forwarded)
+      expect(await readFile(entry, 'utf8')).toBe(source)
+    } finally {
+      socket?.close()
+      await gateway.dispose()
+      bridge.dispose()
+      await host.dispose()
+    }
+  }, 10_000)
 })
 
 type ProtocolMessage = {
@@ -703,6 +1044,26 @@ type CandidateEvent = {
   readonly previewSessionId: string
   readonly candidateSnapshotId: string
   readonly message?: string
+}
+
+function connectPreview(
+  previewUrl: string,
+  received: ProtocolMessage[],
+  notify: () => void
+): Promise<WebSocket> {
+  const socket = new WebSocket(previewUrl, [WEBGAL_COMPATIBILITY_PROFILE.previewProtocol])
+  socket.on('message', (data) => {
+    try {
+      received.push(JSON.parse(data.toString()))
+      notify()
+    } catch {
+      // 非 JSON 帧不参与协议断言。
+    }
+  })
+  const { promise, resolve, reject } = Promise.withResolvers<WebSocket>()
+  socket.once('open', () => resolve(socket))
+  socket.once('error', reject)
+  return promise
 }
 
 function locateScene(): ParsedScene {

@@ -45,33 +45,64 @@ export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGat
       sourceModule: SOURCE_MODULE,
       callerOperationId: request.operationId
     })
+    if (existing?.state === 'notCommitted' || existing?.state === 'notStarted') {
+      throw new AppException({
+        code: ErrorCodes.operationConflict,
+        msg: '操作已终止，不能重试'
+      })
+    }
+    const historical = existing
+      ? null
+      : await this.versioning.readCallerIdentity(
+          request.project.projectId,
+          SOURCE_MODULE,
+          request.operationId
+        )
+    if (
+      historical?.state === 'notCommitted' ||
+      historical?.state === 'notStarted'
+    ) {
+      throw new AppException({
+        code: ErrorCodes.operationConflict,
+        msg: '操作已终止，不能重试'
+      })
+    }
     const prepared = existing
       ? await this.versioning.readPreparedOperation({
           projectId: request.project.projectId,
           operationId: existing.operationId
         })
-      : await this.versioning.prepareOperation({
-          projectId: request.project.projectId,
-          sourceModule: SOURCE_MODULE,
-          targets,
-          changePaths,
-          watchedPaths
-        })
-    await this.versioning.bindCallerOperation({
-      projectId: request.project.projectId,
-      sourceModule: SOURCE_MODULE,
-      callerOperationId: request.operationId,
-      operationId: prepared.operationId,
-      targets,
-      changePaths,
-      watchedPaths
-    })
+      : historical
+        ? await this.versioning.readPreparedOperation({
+            projectId: request.project.projectId,
+            operationId: historical.operationId
+          })
+        : await this.versioning.prepareOrClaimCallerOperation({
+            projectId: request.project.projectId,
+            sourceModule: SOURCE_MODULE,
+            callerOperationId: request.operationId,
+            targets,
+            changePaths,
+            watchedPaths
+          })
+    if (historical?.state !== 'committed' && (existing || historical)) {
+      await this.versioning.bindCallerOperation({
+        projectId: request.project.projectId,
+        sourceModule: SOURCE_MODULE,
+        callerOperationId: request.operationId,
+        operationId: prepared.operationId,
+        targets,
+        changePaths,
+        watchedPaths
+      })
+    }
     const changes = await inlineFileChanges(request.changes)
     try {
       await this.versioning.commitOperation(
         {
           projectId: request.project.projectId,
           operationId: prepared.operationId,
+          callerOperationId: request.operationId,
           baselineRef: prepared.baselineRef,
           input: { kind: 'files', changes },
           saveMode: 'manual',
@@ -82,6 +113,8 @@ export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGat
         () => this.requirePublishPreconditions(request)
       )
     } catch (error) {
+      const conflict = proofConflictOf(error)
+      if (conflict) throw conflict
       if (
         error instanceof AppException &&
         (error.code === ProjectVersioningErrorCodes.insufficientEvidence ||
@@ -107,7 +140,19 @@ export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGat
       sourceModule: SOURCE_MODULE,
       callerOperationId: operationId
     })
-    if (!link || link.projectId !== project.projectId) return 'unsettled'
+    if (!link || link.projectId !== project.projectId) {
+      const identity = await this.versioning.readCallerIdentity(
+        project.projectId,
+        SOURCE_MODULE,
+        operationId
+      )
+      if (identity?.state === 'committed') return 'committed'
+      if (identity?.state === 'notCommitted') return 'notCommitted'
+      return 'unsettled'
+    }
+    if (link.state === 'notStarted') return 'notStarted'
+    if (link.state === 'committed') return 'committed'
+    if (link.state === 'notCommitted') return 'notCommitted'
     try {
       const settlement = await this.versioning.readOperationSettlement({
         projectId: project.projectId,
@@ -118,9 +163,43 @@ export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGat
       if (settlement.state === '未提交') return 'notCommitted'
       return 'unsettled'
     } catch (error) {
+      const conflict = proofConflictOf(error)
+      if (conflict) throw conflict
       if (error instanceof AppException) return 'unsettled'
       throw error
     }
+  }
+
+  async hasOperationLink(
+    project: VerifiedProjectReadLocation,
+    operationId: string
+  ): Promise<boolean> {
+    const link = await this.versioning.readCallerOperation({
+      projectId: project.projectId,
+      sourceModule: SOURCE_MODULE,
+      callerOperationId: operationId
+    })
+    return link?.projectId === project.projectId
+  }
+
+  resolveCallerOperations(
+    project: VerifiedProjectReadLocation,
+    operationIds: readonly string[]
+  ): Promise<
+    readonly {
+      callerOperationId: string
+      state: 'pending' | 'notStarted' | 'committed' | 'notCommitted'
+    }[]
+  > {
+    return this.versioning.resolveCallerOperations(
+      project.projectId,
+      SOURCE_MODULE,
+      operationIds
+    )
+  }
+
+  recoverProject(project: VerifiedProjectReadLocation): Promise<void> {
+    return this.versioning.recoverProject(project.projectId, SOURCE_MODULE)
   }
 
   /** 在版本服务的短提交边界内重读目录，并拒绝占用已有路径的新增。 */
@@ -138,6 +217,16 @@ export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGat
     }
     await rejectOccupiedAdds(request.project.location.directory, request.changes)
   }
+}
+
+/** 恢复层已确认证据冲突时保留技术错误，不再降级成“结果不明”。 */
+function proofConflictOf(error: unknown): AppException | null {
+  if (!(error instanceof AppException)) return null
+  const cause = 'cause' in error ? error.cause : undefined
+  return cause instanceof AppException &&
+    cause.code === ProjectVersioningErrorCodes.gitQueryFailed
+    ? cause
+    : null
 }
 
 /**

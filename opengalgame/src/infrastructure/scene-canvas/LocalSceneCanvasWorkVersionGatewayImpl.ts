@@ -11,16 +11,16 @@ import type { ProjectVersioningApplicationService } from '@application/project-v
 import type { VersionSettlementVO } from '@application/project-versioning/vo/ProjectVersioningVO'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
-import { SceneCanvasErrorCodes } from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
 import { resolveContained } from '@infrastructure/git/containedPath'
 import {
-  arrangementPath,
   digestBytes,
   digestVersionParts
-} from '@infrastructure/project-files/projectFilePaths'
+} from '@infrastructure/project-files/public/projectFileStorage'
 
 import type { SceneCanvasProjectLocation } from './LocalSceneCanvasArrangementPersistenceGatewayImpl'
+import { arrangementPath } from './sceneCanvasPaths'
 
 const SOURCE_MODULE = 'scene-canvas'
 

@@ -72,7 +72,7 @@ describe('创建执行记录时的场景生成守卫', () => {
   })
 })
 
-function sceneRequest() {
+function sceneRequest(): { projectId: string; sceneId: string; limit: number } {
   return { projectId: 'project-1', sceneId: 'scene-1', limit: 100 }
 }
 

@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, expect, it } from 'vitest'
 
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import { createSceneGeneration } from '@bootstrap/sceneGeneration'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
 
@@ -26,7 +26,7 @@ it('没有可用模型连接设置时仍能装配场景生成服务', async () =
     loadSettings: async () => null,
     dispatch: () => undefined,
     publishProgress: () => undefined,
-    versioning: new ProjectVersioningApplicationServiceImpl({
+    versioning: new ManageProjectVersioning({
       ...createProjectVersioningGateways(join(root, 'state')),
       nextId: randomUUID
     }),

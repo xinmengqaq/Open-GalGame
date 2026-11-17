@@ -10,10 +10,10 @@ import {
   isTerminalState,
   phaseOf
 } from '@application/scene-generation/mapping/SceneGenerationStateProjection'
+import type { FailureClass } from '@application/scene-generation/vo/SceneGenerationFailureVO'
 import {
   NEXT_ACTIONS,
-  failureClassOfLegacyReason,
-  type FailureClass
+  failureClassOfLegacyReason
 } from '@application/scene-generation/models/SceneGenerationRunOutcome'
 import type {
   SceneGenerationInputSummaryDetailsVO,
@@ -384,8 +384,6 @@ export type FailureView = {
   retryHint: string | null
 }
 
-type FailureReason = NonNullable<NonNullable<SceneGenerationRenderStatusVO['failure']>['reason']>
-
 /** 失败分类的用户语言固定标题；新文案只按分类决策，不按旧 reason 分叉。 */
 const failureClassTitles: Record<GenerationRunFailureClass, string> = {
   inputInvalid: '输入无效',
@@ -400,20 +398,6 @@ const failureClassTitles: Record<GenerationRunFailureClass, string> = {
   internal: '内部错误'
 }
 
-/** 旧 reason 文案只作 legacy 兜底；记录能桥接出分类时一律用分类标题。 */
-const legacyFailureTitles: Record<FailureReason, string> = {
-  noInformationGain: '生成已停止',
-  missingCandidateWrite: '生成已停止',
-  outputTruncated: '输出被截断',
-  missingStructuredResult: '提交结果不可用',
-  structuredOutput: '提交结果不可用',
-  modelFailure: '模型调用失败',
-  modelRejected: '请求被拒绝',
-  modelAccess: '鉴权失败',
-  contextOverflow: '输入过长',
-  correctionsExhausted: '修正次数用尽'
-}
-
 export function failureClassTitle(failureClass: GenerationRunFailureClass): string {
   return failureClassTitles[failureClass]
 }
@@ -424,7 +408,7 @@ function failureTitleOf(failure: NonNullable<SceneGenerationRenderStatusVO['fail
     failure.failureClass ??
     (failure.reason ? failureClassOfLegacyReason(failure.reason) : undefined)
   if (failureClass) return failureClassTitle(failureClass)
-  return (failure.reason && legacyFailureTitles[failure.reason]) || '生成没有完成'
+  return '生成没有完成'
 }
 
 const unverifiedRetryHint = '先重新读取任务状态，确认这次生成是否已经提交。'

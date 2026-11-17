@@ -1,7 +1,9 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { StateSnapshot } from '@langchain/langgraph'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createSceneGeneration } from '@bootstrap/sceneGeneration'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { createWebGalGenerationGraph } from '@infrastructure/scene-generation/workflow/createWebGalGenerationGraph'
 import { WebGalGenerationCheckpointSaver } from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
 import { langGraphThreadKey } from '@infrastructure/workflow/WorkflowIdentity'
@@ -41,7 +43,15 @@ async function effectRecords(
   projectId: string,
   threadId: string,
   operationId: string
-) {
+): Promise<
+  Array<{
+    stepId: string
+    status: string
+    resultDigest?: string
+    candidateRevision?: string
+    questions?: unknown
+  }>
+> {
   const directory = join(
     root,
     'state/ai/projects',
@@ -71,11 +81,12 @@ async function graphState(
   stateRoot: string,
   artifacts: Parameters<typeof createWebGalGenerationGraph>[0]['artifacts'],
   execution: { projectId: string; threadId: string; branchId: string; operationId: string }
-) {
+): Promise<StateSnapshot> {
   const graph = createWebGalGenerationGraph({
     stateRoot,
     saver: new WebGalGenerationCheckpointSaver(stateRoot),
-    artifacts
+    artifacts,
+    domain: new SceneGenerationDomainServiceImpl()
   })
   return graph.getState({ configurable: { thread_id: langGraphThreadKey(execution) } })
 }

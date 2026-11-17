@@ -1,4 +1,4 @@
-import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
+import type { SceneExportContentBasis } from './SceneExportContentBasis'
 
 export type SceneExportVersionReference = {
   readonly kind: 'preview-save'
@@ -13,7 +13,7 @@ export type WindowsScenePackageVO = {
   readonly bytes: number
   readonly containsFixedEngine: true
   readonly entryRelativePath: string
-  readonly contentBasis: SceneContentBasisVO
+  readonly contentBasis: SceneExportContentBasis
   readonly versionReference: SceneExportVersionReference
 }
 

@@ -86,6 +86,7 @@ interface FakeCalls {
   editCard: number
   deleteCard: number
   editPromptBody: number
+  promptBodies: string[]
   save: SaveSceneCanvasArrangementDTO[]
 }
 
@@ -94,9 +95,17 @@ function createFakeClient(options?: {
   editCardCode?: number
   promptGate?: Promise<void>
   saveCode?: number
+  saveCodes?: number[]
+  saveGate?: Promise<void>
   promptResponseBody?: string
 }): { client: SceneCanvasClient; calls: FakeCalls } {
-  const calls: FakeCalls = { editCard: 0, deleteCard: 0, editPromptBody: 0, save: [] }
+  const calls: FakeCalls = {
+    editCard: 0,
+    deleteCard: 0,
+    editPromptBody: 0,
+    promptBodies: [],
+    save: []
+  }
   const echo = (request: { arrangement: SceneCanvasArrangementVO }): SceneCanvasArrangementVO =>
     structuredClone(request.arrangement)
   const client = {
@@ -135,6 +144,7 @@ function createFakeClient(options?: {
       body: string
     }) => {
       calls.editPromptBody += 1
+      calls.promptBodies.push(request.body)
       if (options?.promptGate) await options.promptGate
       const next = echo(request)
       next.cards = next.cards.map((card) =>
@@ -146,8 +156,10 @@ function createFakeClient(options?: {
     },
     saveSceneCanvasArrangement: async (request: SaveSceneCanvasArrangementDTO) => {
       calls.save.push(request)
-      if (options?.saveCode && options.saveCode !== ErrorCodes.success) {
-        return { code: options.saveCode, msg: '保存失败' }
+      if (options?.saveGate) await options.saveGate
+      const code = options?.saveCodes?.shift() ?? options?.saveCode
+      if (code && code !== ErrorCodes.success) {
+        return { code, msg: '保存失败' }
       }
       return ok(null)
     }
@@ -187,6 +199,21 @@ describe('工作台命令', () => {
     expect(calls.deleteCard).toBe(0)
     release()
     await Promise.all([first, second])
+    expect(calls.deleteCard).toBe(1)
+    expect(useWorkbenchSessionStore.getState().cards.map((card) => card.cardId)).toEqual([
+      'doc',
+      'prompt'
+    ])
+  })
+
+  it('前一个编辑请求失败后，后续请求继续执行', async () => {
+    const { client, calls } = createFakeClient({ editCardCode: 500 })
+    commands = commandsFor(client)
+    const failed = commands.editCard('doc', { title: '写不进去' })
+    const removed = commands.deleteCard('img')
+    expect(await failed).toBe('failed')
+    expect(await removed).toBe('applied')
+    expect(calls.editCard).toBe(1)
     expect(calls.deleteCard).toBe(1)
     expect(useWorkbenchSessionStore.getState().cards.map((card) => card.cardId)).toEqual([
       'doc',
@@ -262,6 +289,26 @@ describe('工作台命令', () => {
     ).toMatchObject({ body: '第二次' })
   })
 
+  it('提示词连续输入在首次编辑 450ms 后合并为一次请求', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = createFakeClient()
+    commands = commandsFor(client)
+    commands.editPromptBody('prompt', '第一段')
+    await vi.advanceTimersByTimeAsync(200)
+    commands.editPromptBody('prompt', '第一段，第二段')
+    await vi.advanceTimersByTimeAsync(249)
+    expect(calls.editPromptBody).toBe(0)
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls.editPromptBody).toBe(1)
+    expect(calls.promptBodies).toEqual(['第一段，第二段'])
+    const state = useWorkbenchSessionStore.getState()
+    expect(state.cards.find((card) => card.cardId === 'prompt')).toMatchObject({
+      body: '第一段，第二段'
+    })
+    expect(state.saveState).toBe('dirty')
+  })
+
   it('保存失败按错误码映射为未保存、已落盘未提交、结果待核对', async () => {
     const codes = [4411, 4412, 4413]
     const expected = ['unsaved', 'committedUnsubmitted', 'unverified']
@@ -327,6 +374,59 @@ describe('工作台命令', () => {
     expect(useWorkbenchSessionStore.getState().cards[0]?.layout).toMatchObject({ x: 80, y: 90 })
   })
 
+  it('4413 后停止自动保存，手动保存成功才恢复 30 秒排程', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = createFakeClient({ saveCodes: [4413] })
+    commands = commandsFor(client)
+    commands.moveCards([{ cardId: 'doc', x: 40, y: 50 }])
+    await commands.save('manual')
+    expect(useWorkbenchSessionStore.getState().saveState).toBe('unverified')
+    expect(calls.save).toHaveLength(1)
+
+    commands.moveCards([{ cardId: 'doc', x: 80, y: 90 }])
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(calls.save).toHaveLength(1)
+
+    await commands.save('manual')
+    expect(useWorkbenchSessionStore.getState().saveState).toBe('saved')
+    expect(calls.save).toHaveLength(2)
+    expect(calls.save[1]?.reason).toBe('manual')
+
+    commands.moveCards([{ cardId: 'doc', x: 120, y: 130 }])
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect(calls.save).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls.save).toHaveLength(3)
+    expect(calls.save[2]?.reason).toBe('periodic')
+    expect(useWorkbenchSessionStore.getState().saveState).toBe('saved')
+  })
+
+  it('在途保存合并后续请求，手动保存升级为下一次保存', async () => {
+    const gate = Promise.withResolvers<void>()
+    const { client, calls } = createFakeClient({ saveGate: gate.promise })
+    commands = commandsFor(client)
+    commands.moveCards([{ cardId: 'doc', x: 40, y: 50 }])
+    const first = commands.save('periodic')
+    await vi.waitFor(() => expect(calls.save).toHaveLength(1))
+
+    commands.moveCards([{ cardId: 'doc', x: 80, y: 90 }])
+    const second = commands.save('periodic')
+    const manual = commands.save('manual')
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(calls.save).toHaveLength(1)
+
+    gate.resolve()
+    await Promise.all([first, second, manual])
+    await vi.waitFor(() => expect(calls.save).toHaveLength(2))
+    expect(calls.save.map((request) => request.reason)).toEqual(['periodic', 'manual'])
+    expect(
+      calls.save[1]?.arrangement.cards.find((card) => card.cardId === 'doc')?.layout
+    ).toMatchObject({ x: 80, y: 90 })
+    await vi.waitFor(() => expect(useWorkbenchSessionStore.getState().saveState).toBe('saved'))
+  })
+
   it('确定失败保持未保存，后续本地编辑仍安排普通自动保存', async () => {
     vi.useFakeTimers()
     const { client, calls } = createFakeClient({ saveCode: 4411 })
@@ -375,6 +475,44 @@ describe('工作台命令', () => {
     expect(calls.deleteCard).toBe(0)
   })
 
+  it('撤销和重做取消尚未发出的提示词请求', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = createFakeClient()
+    commands = commandsFor(client)
+    commands.editPromptBody('prompt', '撤销前草稿')
+    commands.undo()
+    expect(
+      useWorkbenchSessionStore.getState().cards.find((card) => card.cardId === 'prompt')
+    ).toMatchObject({ body: '旧正文' })
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(calls.editPromptBody).toBe(0)
+
+    commands.redo()
+    expect(
+      useWorkbenchSessionStore.getState().cards.find((card) => card.cardId === 'prompt')
+    ).toMatchObject({ body: '撤销前草稿' })
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(calls.editPromptBody).toBe(0)
+    expect(calls.save).toHaveLength(0)
+  })
+
+  it('dispose 取消延迟提示词和自动保存排程', async () => {
+    vi.useFakeTimers()
+    const { client, calls } = createFakeClient()
+    commands = commandsFor(client)
+    commands.moveCards([{ cardId: 'doc', x: 40, y: 50 }])
+    commands.editPromptBody('prompt', '未发送草稿')
+    commands.dispose()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(calls.editPromptBody).toBe(0)
+    expect(calls.save).toHaveLength(0)
+    const state = useWorkbenchSessionStore.getState()
+    expect(state.cards.find((card) => card.cardId === 'prompt')).toMatchObject({
+      body: '未发送草稿'
+    })
+    expect(sessionIsDirty(state)).toBe(true)
+  })
+
   it('历史写操作前取消延迟编辑；视图过期时挂起保存', async () => {
     vi.useFakeTimers()
     const { client, calls } = createFakeClient()
@@ -394,6 +532,49 @@ describe('工作台命令', () => {
     await vi.advanceTimersByTimeAsync(30_000)
     expect(calls.save).toHaveLength(1)
     expect(calls.save[0]?.reason).toBe('periodic')
+  })
+
+  it('历史写前等待在途请求结算，不补发延迟编辑也不保存', async () => {
+    vi.useFakeTimers()
+    const gate = Promise.withResolvers<void>()
+    const { client, calls } = createFakeClient({ editCardGate: gate.promise, editCardCode: 500 })
+    commands = commandsFor(client)
+    commands.moveCards([{ cardId: 'doc', x: 40, y: 50 }])
+    const pending = commands.editCard('doc', { title: '写前标题' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls.editCard).toBe(1)
+
+    commands.editPromptBody('prompt', '写前草稿')
+    let settled = false
+    const prepared = commands.prepareHistoryWrite().then(() => {
+      settled = true
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(settled).toBe(false)
+
+    gate.resolve()
+    await prepared
+    expect(settled).toBe(true)
+    expect(await pending).toBe('failed')
+    expect(calls.editPromptBody).toBe(0)
+    expect(calls.save).toHaveLength(0)
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(calls.editPromptBody).toBe(0)
+    expect(calls.save).toHaveLength(0)
+    const state = useWorkbenchSessionStore.getState()
+    expect(state.cards.find((card) => card.cardId === 'doc')).toMatchObject({ title: '角色' })
+    expect(state.cards.find((card) => card.cardId === 'prompt')).toMatchObject({
+      body: '写前草稿'
+    })
+
+    const pastCount = state.past.length
+    commands.editPromptBody('prompt', '写后草稿')
+    const edited = useWorkbenchSessionStore.getState()
+    expect(edited.cards.find((card) => card.cardId === 'prompt')).toMatchObject({
+      body: '写后草稿'
+    })
+    expect(edited.past).toHaveLength(pastCount + 1)
   })
 
   it('复制卡片时按画布放置避开源卡和相邻卡', async () => {

@@ -6,7 +6,9 @@ export type AgentStreamDiagnostic = (message: string) => void
 export function reportAgentStreamFault(message: string): void {
   try {
     process.stderr.write(`${message}\n`)
-  } catch {}
+  } catch {
+    // 诊断输出失败被忽略；不改变订阅分发。
+  }
 }
 
 /**
@@ -26,7 +28,9 @@ export function createAgentStreamConsumer(
   const report = (): void => {
     try {
       diagnostic('Agent 观察订阅输出失败')
-    } catch {}
+    } catch {
+      // 诊断回调失败已隔离；订阅已移除，不产生未处理拒绝。
+    }
   }
   return {
     /** 注册观察回调；注销信号只退出订阅，不影响任务。 */

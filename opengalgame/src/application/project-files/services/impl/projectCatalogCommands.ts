@@ -46,7 +46,6 @@ export type CatalogCommandDeps = {
   createSourceId: () => string
   createFolderId: () => string
   createFileId: () => string
-  createOperationId: () => string
 }
 
 export async function createProjectTextFile(
@@ -77,7 +76,8 @@ export async function createProjectTextFile(
     project,
     [...textChanges, ...catalogChanges.changes],
     catalogChanges.watchedPaths,
-    catalog.catalogVersion
+    catalog.catalogVersion,
+    request.operationId
   )
   return toProjectInputSourceSummaryVO(
     {
@@ -102,7 +102,7 @@ export async function updateProjectTextFileBody(
     expectedVersion: request.expectedSourceVersion
   })
   const catalog = await deps.sources.readProjectInputCatalog(project)
-  await publish(deps, project, changes, [], catalog.catalogVersion)
+  await publish(deps, project, changes, [], catalog.catalogVersion, request.operationId)
   const fact = await deps.sources.readProjectInputSources(project, [request.sourceId])
   const source = fact.sources.find((item) => item.sourceId === request.sourceId)
   if (fact.projectId !== project.projectId || !source) {
@@ -133,7 +133,8 @@ export async function createProjectFolder(
     project,
     [...catalog.folders, folder],
     storedPlacements(catalog),
-    catalog.catalogVersion
+    catalog.catalogVersion,
+    request.operationId
   )
   return folder
 }
@@ -294,7 +295,14 @@ export async function renameProjectFolder(
   const folders = catalog.folders.map((item) =>
     item.folderId === folder.folderId ? { ...item, name: decision.name } : item
   )
-  await writeCatalog(deps, project, folders, storedPlacements(catalog), catalog.catalogVersion)
+  await writeCatalog(
+    deps,
+    project,
+    folders,
+    storedPlacements(catalog),
+    catalog.catalogVersion,
+    request.operationId
+  )
   return { ...folder, name: decision.name }
 }
 
@@ -346,7 +354,8 @@ export async function deleteProjectFolder(
     project,
     [...prepared.changes, ...catalogChanges.changes],
     [...prepared.watchedPaths, ...catalogChanges.watchedPaths],
-    catalog.catalogVersion
+    catalog.catalogVersion,
+    request.operationId
   )
 }
 
@@ -385,7 +394,7 @@ async function writeCatalog(
   folders: readonly ProjectFolder[],
   placements: readonly { sourceId: string; parentFolderId: string }[],
   expectedCatalogVersion: string,
-  operationId?: string
+  operationId: string
 ): Promise<void> {
   const prepared = await deps.files.prepareCatalogWrite(project, { folders, placements })
   await publish(
@@ -409,12 +418,13 @@ async function publish(
   }[],
   watchedPaths: readonly string[],
   expectedCatalogVersion: string,
-  operationId?: string
+  operationId: string
 ): Promise<void> {
+  requireOperationId(operationId)
   if (changes.length === 0) return
   await deps.versions.publish({
     project,
-    operationId: operationId ?? deps.createOperationId(),
+    operationId,
     changes,
     watchedPaths,
     expectedCatalogVersion

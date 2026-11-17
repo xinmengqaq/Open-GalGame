@@ -4,11 +4,7 @@ import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
 import { sceneCanvasArrangementSchema } from './SceneCanvasProtocolSchema'
-
-const failedResultSchema = z.strictObject({
-  code: z.number().refine((code) => code !== ErrorCodes.success),
-  msg: z.string()
-})
+import { failureResultSchema } from '../../contracts/FailureResultSchema'
 
 const arrangementResultSchema = z.union([
   z.strictObject({
@@ -16,7 +12,7 @@ const arrangementResultSchema = z.union([
     msg: z.string(),
     data: sceneCanvasArrangementSchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 
 const nullableArrangementResultSchema = z.union([
@@ -25,7 +21,7 @@ const nullableArrangementResultSchema = z.union([
     msg: z.string(),
     data: sceneCanvasArrangementSchema.nullable()
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 
 const nullResultSchema = z.union([
@@ -34,7 +30,7 @@ const nullResultSchema = z.union([
     msg: z.string(),
     data: z.null()
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 
 function parseResult<T>(schema: z.ZodType<T>, value: unknown): T | null {

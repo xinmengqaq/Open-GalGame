@@ -3,7 +3,6 @@ import { z } from 'zod'
 import type { CandidatePreviewVO } from '@application/scene-preview/vo/CandidatePreviewVO'
 import type {
   DialogueSaveSettlementVO,
-  PreviewUpdateVO,
   SaveDialogueChangesVO
 } from '@application/scene-preview/vo/DialogueSaveVO'
 import type {
@@ -20,6 +19,7 @@ import type { ScenePreviewAvailabilityVO } from '@application/scene-preview/vo/S
 import type { ScenePreviewSessionVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { failureResultSchema } from '../../contracts/FailureResultSchema'
 
 const identity = z.string().min(1).max(128)
 const safeText = z.string().min(1).max(4000)
@@ -101,11 +101,6 @@ const stageUrl = z
   .url()
   .max(300)
   .refine((value) => !/[ \t\r\n]/.test(value))
-const failedResult = z.strictObject({
-  code: z.number().refine((code) => code !== ErrorCodes.success),
-  msg: z.string()
-})
-
 const availability = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('available') }),
   z.strictObject({
@@ -287,7 +282,7 @@ const candidateEvent = z.discriminatedUnion('type', [
 function success<T extends z.ZodType>(data: T): z.ZodType<AjaxResult<z.output<T>>> {
   return z.union([
     z.strictObject({ code: z.literal(ErrorCodes.success), msg: z.string().max(200), data }),
-    failedResult
+    failureResultSchema
   ])
 }
 
@@ -326,10 +321,6 @@ export function parseDialogueSaveSettlementResult(
   value: unknown
 ): AjaxResult<DialogueSaveSettlementVO> | null {
   return parseResult(success(settlementResult), value)
-}
-
-export function parsePreviewUpdateResult(value: unknown): AjaxResult<PreviewUpdateVO> | null {
-  return parseResult(success(previewUpdate), value)
 }
 
 export function parsePreviewCommandResult(

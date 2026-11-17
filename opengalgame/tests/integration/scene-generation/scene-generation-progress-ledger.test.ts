@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
+import type { WebGalGenerationStateValue } from '@infrastructure/scene-generation/workflow/WebGalGenerationState'
 import type { AgentExecution } from '@infrastructure/ai/agents/AgentExecution'
 import { estimateTokens } from '@infrastructure/ai/context/contextBudget'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
@@ -253,7 +254,7 @@ function sceneInput(
     writtenFiles?: readonly string[]
     memoryMessages?: ReadonlyArray<{ id: string; role: 'user' | 'assistant'; content: string }>
   } = {}
-) {
+): Partial<WebGalGenerationStateValue> {
   const memoryMessages = options.memoryMessages ?? [
     { id: 'history', role: 'user', content: '已有讨论' }
   ]

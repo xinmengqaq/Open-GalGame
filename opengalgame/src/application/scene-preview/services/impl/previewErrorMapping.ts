@@ -102,10 +102,6 @@ export function previewFailure(code: PreviewErrorCode): AppException {
   })
 }
 
-export function isPreviewFailure(error: unknown, code: PreviewErrorCode): boolean {
-  return error instanceof AppException && error.cause === code
-}
-
 export function rejectionFromDomain(error: unknown): PreviewErrorVO | undefined {
   if (!(error instanceof AppException)) return undefined
   const code = domainRejectionCodes[error.code]

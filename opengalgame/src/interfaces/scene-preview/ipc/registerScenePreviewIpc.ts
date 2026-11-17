@@ -1,7 +1,6 @@
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 
 import type { SceneGenerationCandidatePreviewEventVO } from '@application/scene-generation/vo/SceneGenerationRenderVO'
-import type { SceneCandidatePreviewGateway } from '@application/scene-generation/ports/SceneCandidatePreviewGateway'
 import type { PreviewRuntimeEventVO } from '@application/scene-preview/vo/PreviewRuntimeVO'
 import { createIpcRequestAccess, isTrustedIpcSender } from '../../ipc/createIpcRequestAccess'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -11,7 +10,6 @@ import type { ScenePreviewController } from './ScenePreviewController'
 
 interface ScenePreviewIpcBinding {
   scenePreview: ScenePreviewController
-  candidatePreview?: SceneCandidatePreviewGateway
   getWindow: () => BrowserWindow | null
   rendererUrl: string
 }
@@ -24,9 +22,11 @@ interface ScenePreviewSubscription {
   unsubscribe: () => void
 }
 
-const subscriptions = new Map<number, ScenePreviewSubscription>()
-const seenGenerations = new Map<string, number>()
-let stopCandidateEvents: (() => void) | undefined
+interface ScenePreviewIpcScope {
+  readonly subscriptions: Map<number, ScenePreviewSubscription>
+  readonly seenGenerations: Map<string, number>
+  stopCandidateEvents: (() => void) | undefined
+}
 
 /**
  * 注册固定预览通道。运行时订阅随窗口、关闭和注销一起释放。
@@ -34,6 +34,11 @@ let stopCandidateEvents: (() => void) | undefined
  */
 export function registerScenePreviewIpc(options: ScenePreviewIpcBinding): () => void {
   const access = createIpcRequestAccess(options)
+  const scope: ScenePreviewIpcScope = {
+    subscriptions: new Map(),
+    seenGenerations: new Map(),
+    stopCandidateEvents: undefined
+  }
   const handlers: Record<string, (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>> =
     {
       'scene-preview:availability': (event, input) =>
@@ -51,61 +56,62 @@ export function registerScenePreviewIpc(options: ScenePreviewIpcBinding): () => 
         options.scenePreview.previousDialogue(input, access(event)),
       'scene-preview:next-dialogue': (event, input) =>
         options.scenePreview.nextDialogue(input, access(event)),
-      'scene-preview:close': (event, input) => closeScenePreview(options, event, input),
+      'scene-preview:close': (event, input) => closeScenePreview(options, event, input, scope),
       'scene-preview:subscribe': (event, input) =>
-        subscribeScenePreviewRuntime(options, event, input),
+        subscribeScenePreviewRuntime(options, event, input, scope),
       'scene-preview:read-candidate': (event, input) =>
         options.scenePreview.readCandidate(input, access(event)),
       'scene-preview:candidate-event': (event, input) =>
-        options.scenePreview.readCandidateEvent(input, access(event), (previewSessionId) =>
-          options.candidatePreview?.readCandidatePreviewEvent(previewSessionId)
-        )
+        options.scenePreview.readCandidateEvent(input, access(event))
     }
   for (const [channel, handler] of Object.entries(handlers)) ipcMain.handle(channel, handler)
-  stopCandidateEvents?.()
-  stopCandidateEvents = options.candidatePreview
-    ? bindCandidatePreviewEvents(options.candidatePreview, options.getWindow)
-    : undefined
+  scope.stopCandidateEvents = bindCandidatePreviewEvents(
+    options.scenePreview,
+    options.getWindow
+  )
   return () => {
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel)
-    releaseScenePreviewSubscriptions()
+    releaseScenePreviewSubscriptions(scope)
   }
 }
 
-export function releaseScenePreviewSubscriptions(): void {
-  for (const subscription of subscriptions.values()) subscription.unsubscribe()
-  subscriptions.clear()
-  seenGenerations.clear()
-  stopCandidateEvents?.()
-  stopCandidateEvents = undefined
+function releaseScenePreviewSubscriptions(scope: ScenePreviewIpcScope): void {
+  for (const subscription of scope.subscriptions.values()) subscription.unsubscribe()
+  scope.subscriptions.clear()
+  scope.seenGenerations.clear()
+  scope.stopCandidateEvents?.()
+  scope.stopCandidateEvents = undefined
 }
 
 async function closeScenePreview(
   options: ScenePreviewIpcBinding,
   event: IpcMainInvokeEvent,
-  input: unknown
+  input: unknown,
+  scope: ScenePreviewIpcScope
 ): Promise<unknown> {
   const requestAccess = createIpcRequestAccess(options)(event)
   const closed = await options.scenePreview.close(input, requestAccess)
-  if (closed.code === 2000) releaseSenderSubscription(event.sender?.id)
+  if (closed.code === 2000) releaseSenderSubscription(scope, event.sender?.id)
   return closed
 }
 
 async function subscribeScenePreviewRuntime(
   options: ScenePreviewIpcBinding,
   event: IpcMainInvokeEvent,
-  input: unknown
+  input: unknown,
+  scope: ScenePreviewIpcScope
 ): Promise<unknown> {
   const requestAccess = createIpcRequestAccess(options)(event)
   const sender = event.sender
   const queued: PreviewRuntimeEventVO[] = []
-  let current: ScenePreviewSubscription | undefined
+  const subscription: { current: ScenePreviewSubscription | undefined } = { current: undefined }
   const publish = (runtimeEvent: PreviewRuntimeEventVO): void => {
-    if (!current) {
+    const active = subscription.current
+    if (!active) {
       queued.push(runtimeEvent)
       return
     }
-    deliverRuntimeEvent(options, event, sender, current, runtimeEvent)
+    deliverRuntimeEvent(options, event, sender, active, runtimeEvent, scope)
   }
   const subscribed = await options.scenePreview.subscribe(input, requestAccess, publish)
   if (
@@ -118,20 +124,21 @@ async function subscribeScenePreviewRuntime(
     return subscribed.accepted
   }
   const request = parseRequest(subscribePreviewRuntimeSchema, input, requestAccess)
-  releaseSenderSubscription(sender.id)
-  current = {
+  releaseSenderSubscription(scope, sender.id)
+  const current: ScenePreviewSubscription = {
     senderId: sender.id,
     previewSessionId: request.previewSessionId,
     lastGeneration: 0,
     lastSequence: 0,
     unsubscribe: subscribed.unsubscribe
   }
-  subscriptions.set(sender.id, current)
+  subscription.current = current
+  scope.subscriptions.set(sender.id, current)
   for (const runtimeEvent of queued) {
-    deliverRuntimeEvent(options, event, sender, current, runtimeEvent)
+    deliverRuntimeEvent(options, event, sender, current, runtimeEvent, scope)
   }
   sender.once('destroyed', () => {
-    releaseSenderSubscription(sender.id)
+    releaseSenderSubscription(scope, sender.id)
   })
   return subscribed.accepted
 }
@@ -141,36 +148,41 @@ function deliverRuntimeEvent(
   event: IpcMainInvokeEvent,
   sender: IpcMainInvokeEvent['sender'] | undefined,
   current: ScenePreviewSubscription,
-  runtimeEvent: PreviewRuntimeEventVO
+  runtimeEvent: PreviewRuntimeEventVO,
+  scope: ScenePreviewIpcScope
 ): void {
   if (
     !sender ||
     sender.isDestroyed() ||
     !isTrustedIpcSender(event, options) ||
-    !isCurrentRuntimeEvent(current, runtimeEvent)
+    !isCurrentRuntimeEvent(scope, current, runtimeEvent)
   ) {
     return
   }
-  const seenGeneration = seenGenerations.get(current.previewSessionId) ?? 0
+  const seenGeneration = scope.seenGenerations.get(current.previewSessionId) ?? 0
   current.lastGeneration = Math.max(seenGeneration, runtimeEvent.runtimeGeneration)
   current.lastSequence = runtimeEvent.sequence
-  seenGenerations.set(current.previewSessionId, current.lastGeneration)
+  scope.seenGenerations.set(current.previewSessionId, current.lastGeneration)
   sender.send('scene-preview:runtime', runtimeEvent)
 }
 
-function releaseSenderSubscription(senderId: number | undefined): void {
+function releaseSenderSubscription(
+  scope: ScenePreviewIpcScope,
+  senderId: number | undefined
+): void {
   if (senderId === undefined) return
-  subscriptions.get(senderId)?.unsubscribe()
-  subscriptions.delete(senderId)
+  scope.subscriptions.get(senderId)?.unsubscribe()
+  scope.subscriptions.delete(senderId)
 }
 
 function isCurrentRuntimeEvent(
+  scope: ScenePreviewIpcScope,
   subscription: ScenePreviewSubscription,
   runtimeEvent: PreviewRuntimeEventVO
 ): boolean {
   if (runtimeEvent.previewSessionId !== subscription.previewSessionId) return false
   const seenGeneration = Math.max(
-    seenGenerations.get(subscription.previewSessionId) ?? 0,
+    scope.seenGenerations.get(subscription.previewSessionId) ?? 0,
     subscription.lastGeneration
   )
   if (runtimeEvent.runtimeGeneration < seenGeneration) return false
@@ -191,15 +203,14 @@ const candidateChannels = {
  * 只发给当前窗口；窗口销毁或注销时退订。载荷不含路径和诊断。
  */
 function bindCandidatePreviewEvents(
-  preview: SceneCandidatePreviewGateway,
+  scenePreview: ScenePreviewController,
   getWindow: () => BrowserWindow | null
 ): () => void {
-  const unsubscribe = preview.subscribeCandidatePreviewEvents((event) => {
+  return scenePreview.subscribeCandidateEvents((event) => {
     const window = getWindow()
     if (!window || window.isDestroyed() || window.webContents.isDestroyed()) return
     window.webContents.send(candidateChannels[event.type], safeCandidateEvent(event))
   })
-  return unsubscribe
 }
 
 function safeCandidateEvent(

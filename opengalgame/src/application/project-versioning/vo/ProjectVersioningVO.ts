@@ -17,6 +17,7 @@ export type CallerVersionOperationVO = {
   sourceModule: string
   callerOperationId: string
   operationId: string
+  state: 'pending' | 'notStarted' | 'committed' | 'notCommitted'
 }
 
 /** 可靠提交结果。无变更也必须对应已核对的作品版本。 */
@@ -30,6 +31,12 @@ export type VersionCommitVO = {
  * 操作结算。
  * 字段随状态收窄，不使用可空组合表示缺失事实。
  */
+export type CallerOperationState =
+  | 'pending'
+  | 'notStarted'
+  | 'committed'
+  | 'notCommitted'
+
 export type VersionSettlementVO = { operationId: string } & (
   | { state: '已提交'; revisionRef: string }
   | { state: '无变更'; revisionRef: string }

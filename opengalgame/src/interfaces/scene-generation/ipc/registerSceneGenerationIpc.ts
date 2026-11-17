@@ -17,7 +17,9 @@ interface SceneGenerationSubscription {
   unsubscribe: () => void
 }
 
-const subscriptions = new Map<number, SceneGenerationSubscription>()
+interface SceneGenerationIpcScope {
+  readonly subscriptions: Map<number, SceneGenerationSubscription>
+}
 
 /**
  * 注册固定生成通道。进度订阅随窗口和注销一起释放。
@@ -25,6 +27,7 @@ const subscriptions = new Map<number, SceneGenerationSubscription>()
  */
 export function registerSceneGenerationIpc(options: SceneGenerationIpcBinding): () => void {
   const access = createIpcRequestAccess(options)
+  const scope: SceneGenerationIpcScope = { subscriptions: new Map() }
   const handlers: Record<string, (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>> =
     {
       'scene-generation:start': (event, input) =>
@@ -52,25 +55,26 @@ export function registerSceneGenerationIpc(options: SceneGenerationIpcBinding): 
       'scene-generation:close-preview': (event, input) =>
         options.sceneGeneration.closePreview(input, access(event)),
       'scene-generation:progress': (event, input) =>
-        subscribeSceneGenerationProgress(options, event, input)
+        subscribeSceneGenerationProgress(options, event, input, scope)
     }
   for (const [channel, handler] of Object.entries(handlers)) ipcMain.handle(channel, handler)
   return () => {
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel)
-    releaseSceneGenerationSubscriptions()
+    releaseSceneGenerationSubscriptions(scope)
   }
 }
 
-/** 后端关闭时释放全部生成进度订阅。预览运行时由生成装配关闭。 */
-export function releaseSceneGenerationSubscriptions(): void {
-  for (const subscription of subscriptions.values()) subscription.unsubscribe()
-  subscriptions.clear()
+/** 释放本次注册持有的全部生成进度订阅。预览运行时由生成装配关闭。 */
+function releaseSceneGenerationSubscriptions(scope: SceneGenerationIpcScope): void {
+  for (const subscription of scope.subscriptions.values()) subscription.unsubscribe()
+  scope.subscriptions.clear()
 }
 
 async function subscribeSceneGenerationProgress(
   options: SceneGenerationIpcBinding,
   event: IpcMainInvokeEvent,
-  input: unknown
+  input: unknown,
+  scope: SceneGenerationIpcScope
 ): Promise<unknown> {
   const requestAccess = createIpcRequestAccess(options)(event)
   const accepted = await options.sceneGeneration.subscribe(input, requestAccess)
@@ -88,12 +92,12 @@ async function subscribeSceneGenerationProgress(
     }
     event.sender.send('scene-generation:progress', progress)
   }
-  subscriptions.get(event.sender.id)?.unsubscribe()
+  scope.subscriptions.get(event.sender.id)?.unsubscribe()
   const unsubscribe = options.sceneGeneration.watchProgress(request, publish)
-  subscriptions.set(event.sender.id, { senderId: event.sender.id, unsubscribe })
+  scope.subscriptions.set(event.sender.id, { senderId: event.sender.id, unsubscribe })
   event.sender.once('destroyed', () => {
     unsubscribe()
-    if (!event.sender.isDestroyed()) subscriptions.delete(event.sender.id)
+    if (!event.sender.isDestroyed()) scope.subscriptions.delete(event.sender.id)
   })
   return accepted
 }

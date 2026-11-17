@@ -28,13 +28,17 @@ import type {
   ProjectFileScopeDTO,
   ProjectFolderScopeDTO,
   ReadProjectFileOperationDTO,
+  RecoverProjectFileOperationsDTO,
   ReadProjectInputSourcesDTO,
   ReadProjectMediaDTO,
   RenameProjectFileDTO,
   RenameProjectFolderDTO,
   UpdateProjectTextFileBodyDTO
 } from '@application/project-files/dto/ProjectFilesDTO'
-import type { ProjectFileOperationSettlementVO } from '@application/project-files/vo/ProjectFileOperationVO'
+import type {
+  ProjectFileOperationRecoveryVO,
+  ProjectFileOperationSettlementVO
+} from '@application/project-files/vo/ProjectFileOperationVO'
 import type { ProjectFilesInspectionVO } from '@application/project-files/vo/ProjectFilesInspectionVO'
 import type {
   ProjectFolderDeletionPlanVO,
@@ -151,6 +155,12 @@ import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewS
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
 import type { OpenDirectoryDTO } from '@application/system-path/dto/OpenDirectoryDTO'
 
+/**
+ * 渲染进程可用的桌面能力契约：方法名与签名的唯一权威。
+ *
+ * preload 与浏览器桥都实现本接口；通道字符串只由
+ * `interfaces/contracts/desktopBridgeChannels.ts` 持有。
+ */
 export interface DesktopBridge {
   /**
    * @returns 选中目录或取消。
@@ -258,6 +268,9 @@ export interface DesktopBridge {
   readProjectFileOperation(
     request: ReadProjectFileOperationDTO
   ): Promise<AjaxResult<ProjectFileOperationSettlementVO>>
+  recoverProjectFileOperations(
+    request: RecoverProjectFileOperationsDTO
+  ): Promise<AjaxResult<readonly ProjectFileOperationRecoveryVO[]>>
   pathForDroppedFile(file: File): Promise<AjaxResult<string>>
   /**
    * @returns 不含凭据的配置。

@@ -1,5 +1,5 @@
 import { AppException } from '@common/errors/AppException'
-import { SceneCanvasErrorCodes } from '../errors/SceneCanvasErrorCodes'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import type {
   SceneCanvasArrangement,
   SceneCanvasAudioRole,
@@ -35,8 +35,11 @@ export function createSceneCanvasPromptCard(
   return withCard(arrangement, {
     kind: 'prompt',
     cardId: card.cardId,
+    title: trimmedTitle(card.title),
+    summary: card.summary,
     body: card.body,
     references: card.references ?? [],
+    usage: card.usage,
     layout: card.layout
   })
 }

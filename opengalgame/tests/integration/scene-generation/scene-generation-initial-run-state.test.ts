@@ -1,8 +1,13 @@
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
+import type { ReplySceneGenerationInteractionDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import type { WebGalGenerationStateValue } from '@infrastructure/scene-generation/workflow/WebGalGenerationState'
-import { createWebGalGenerationGraph } from '@infrastructure/scene-generation/workflow/createWebGalGenerationGraph'
+import {
+  createWebGalGenerationGraph,
+  type WebGalGenerationGraph
+} from '@infrastructure/scene-generation/workflow/createWebGalGenerationGraph'
 import { WebGalGenerationCheckpointSaver } from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
 import { langGraphThreadKey } from '@infrastructure/workflow/WorkflowIdentity'
 import {
@@ -11,12 +16,13 @@ import {
   type GenerationFixture
 } from '../../../../harness/acceptance/support/generationFixture'
 
-function graphOf(f: GenerationFixture) {
+function graphOf(f: GenerationFixture): WebGalGenerationGraph {
   const stateRoot = join(f.config.userStateRoot, 'ai')
   return createWebGalGenerationGraph({
     stateRoot,
     saver: new WebGalGenerationCheckpointSaver(stateRoot),
-    artifacts: f.app.ports.artifacts
+    artifacts: f.app.ports.artifacts,
+    domain: new SceneGenerationDomainServiceImpl()
   })
 }
 
@@ -94,7 +100,7 @@ const retainedContext = {
   ]
 }
 
-function replyFact(execution: SceneGenerationExecution) {
+function replyFact(execution: SceneGenerationExecution): ReplySceneGenerationInteractionDTO {
   return {
     projectId: execution.projectId,
     sceneId: execution.sceneId,

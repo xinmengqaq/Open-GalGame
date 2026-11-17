@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { AppException } from '@common/errors/AppException'
+import { FailureReasons } from '@common/errors/FailureReasons'
 import {
   SceneCanvasErrorCodes,
   type SceneCanvasErrorCode
-} from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
+} from '@common/errors/SceneCanvasErrorCodes'
 import type {
   SceneCanvasArrangement,
   SceneCanvasCard,
@@ -30,12 +31,13 @@ import {
 } from '@domain/scene-canvas/services/editSceneCanvasRelations'
 import { validateSceneCanvasArrangement } from '@domain/scene-canvas/services/validateSceneCanvasArrangement'
 
-function expectCode(run: () => unknown, code: SceneCanvasErrorCode): void {
+function expectCode(run: () => unknown, code: SceneCanvasErrorCode, reason?: string): void {
   try {
     run()
   } catch (error) {
     expect(error).toBeInstanceOf(AppException)
     expect(error).toMatchObject({ code })
+    expect((error as AppException).reason).toBe(reason)
     return
   }
   throw new Error(`expected AppException ${code}`)
@@ -66,14 +68,50 @@ function documentCard(cardId = 'doc', sourceId = 'source-doc'): SceneCanvasCard 
     sourceId,
     title: '设定',
     summary: '',
+    usage: { targetIds: [] },
     layout: layout()
   }
+}
+
+function promptCard(
+  cardId: string,
+  body = '',
+  references?: readonly { cardId: string }[]
+): SceneCanvasCard {
+  return {
+    kind: 'prompt',
+    cardId,
+    title: cardId,
+    summary: '',
+    body,
+    ...(references === undefined ? {} : { references }),
+    usage: { targetIds: [] },
+    layout: layout()
+  }
+}
+
+function fieldCard(
+  kind: 'animation' | 'effect',
+  cardId: string,
+  webgalPreset: { command: string; name: string } | null = null
+): SceneCanvasCard {
+  const base = {
+    cardId,
+    title: cardId,
+    summary: '',
+    webgalPreset,
+    usage: { targetIds: [] },
+    layout: layout()
+  }
+  return kind === 'animation'
+    ? { ...base, kind: 'animation' as const }
+    : { ...base, kind: 'effect' as const }
 }
 
 function cardsOfEveryKind(): SceneCanvasCard[] {
   return [
     documentCard('document'),
-    { kind: 'prompt', cardId: 'prompt', body: '', layout: layout() },
+    promptCard('prompt'),
     {
       kind: 'image',
       cardId: 'image',
@@ -81,6 +119,7 @@ function cardsOfEveryKind(): SceneCanvasCard[] {
       role: 'background',
       title: '图',
       summary: '',
+      usage: { targetIds: [] },
       layout: layout()
     },
     {
@@ -90,6 +129,7 @@ function cardsOfEveryKind(): SceneCanvasCard[] {
       role: 'music',
       title: '声',
       summary: '',
+      usage: { targetIds: [] },
       layout: layout()
     },
     {
@@ -98,10 +138,11 @@ function cardsOfEveryKind(): SceneCanvasCard[] {
       sourceId: 'source-video',
       title: '影',
       summary: '',
+      usage: { targetIds: [] },
       layout: layout()
     },
-    { kind: 'animation', cardId: 'animation', webgalPreset: null, layout: layout() },
-    { kind: 'effect', cardId: 'effect', webgalPreset: null, layout: layout() }
+    fieldCard('animation', 'animation'),
+    fieldCard('effect', 'effect')
   ]
 }
 
@@ -110,8 +151,8 @@ describe('场景画布编排规则', () => {
     const draft = arrangement([
       documentCard('doc-a', 'same-source'),
       documentCard('doc-b', 'same-source'),
-      { kind: 'prompt', cardId: 'prompt', body: '', layout: layout() },
-      { kind: 'animation', cardId: 'animation', webgalPreset: null, layout: layout() }
+      promptCard('prompt'),
+      fieldCard('animation', 'animation')
     ])
 
     expect(() => validateSceneCanvasArrangement(draft)).not.toThrow()
@@ -132,14 +173,7 @@ describe('场景画布编排规则', () => {
     expectCode(
       () =>
         validateSceneCanvasArrangement(
-          arrangement([
-            {
-              kind: 'effect',
-              cardId: 'effect',
-              webgalPreset: { command: ' ', name: '闪白' },
-              layout: layout()
-            }
-          ])
+          arrangement([fieldCard('effect', 'effect', { command: ' ', name: '闪白' })])
         ),
       SceneCanvasErrorCodes.invalidField
     )
@@ -170,15 +204,13 @@ describe('场景画布编排规则', () => {
       () =>
         validateSceneCanvasArrangement(
           arrangement(
-            [
-              documentCard('doc'),
-              { kind: 'prompt', cardId: 'prompt', body: 'x', layout: layout() }
-            ],
+            [documentCard('doc'), promptCard('prompt', 'x')],
             [
               {
                 relationId: 'rel',
                 fromCardId: 'doc',
                 toCardId: 'missing',
+                defaultRelation: 'associated',
                 specificName: '',
                 recordCardId: null
               }
@@ -220,7 +252,7 @@ describe('场景画布编排规则', () => {
   it('记录卡可以兼任端点，提示词记录只能装载一次', () => {
     const cards = [
       documentCard('doc'),
-      { kind: 'prompt', cardId: 'prompt', body: '关系说明', layout: layout() },
+      promptCard('prompt', '关系说明'),
       {
         kind: 'image',
         cardId: 'image',
@@ -228,6 +260,7 @@ describe('场景画布编排规则', () => {
         role: 'background',
         title: '图',
         summary: '',
+        usage: { targetIds: [] },
         layout: layout()
       }
     ]
@@ -258,7 +291,7 @@ describe('场景画布编排规则', () => {
   it('复制不带关联，删除先清端点再卸记录', () => {
     const cards = [
       documentCard('doc'),
-      { kind: 'prompt', cardId: 'prompt', body: '正文', layout: layout() },
+      promptCard('prompt', '正文'),
       {
         kind: 'image',
         cardId: 'image',
@@ -266,6 +299,7 @@ describe('场景画布编排规则', () => {
         role: 'background',
         title: '图',
         summary: '',
+        usage: { targetIds: [] },
         layout: layout()
       }
     ]
@@ -297,8 +331,8 @@ describe('场景画布编排规则', () => {
   it('字段只接受该类别拥有的内容，失败不改原稿', () => {
     const draft = arrangement([
       documentCard(),
-      { kind: 'prompt', cardId: 'prompt', body: '旧正文', layout: layout() },
-      { kind: 'animation', cardId: 'animation', webgalPreset: null, layout: layout() }
+      promptCard('prompt', '旧正文'),
+      fieldCard('animation', 'animation')
     ])
     const original = structuredClone(draft)
     expectCode(
@@ -334,6 +368,7 @@ describe('场景画布编排规则', () => {
         role: 'background',
         title: '图',
         summary: '旧说明',
+        usage: { targetIds: [] },
         layout: layout()
       },
       {
@@ -342,10 +377,11 @@ describe('场景画布编排规则', () => {
         sourceId: 'source-video',
         title: '影',
         summary: '旧说明',
+        usage: { targetIds: [] },
         layout: layout()
       },
-      { kind: 'prompt', cardId: 'prompt', body: '正文', layout: layout() },
-      { kind: 'effect', cardId: 'effect', webgalPreset: null, layout: layout() }
+      promptCard('prompt', '正文'),
+      fieldCard('effect', 'effect')
     ])
     const original = structuredClone(draft)
     const image = editSceneCanvasCard(draft, 'image', { summary: '  屋顶夜景  ' })
@@ -370,16 +406,32 @@ describe('场景画布编排规则', () => {
     const created = createSceneCanvasPromptCard(arrangement(), {
       kind: 'prompt',
       cardId: 'prompt-1',
+      title: 'prompt-1',
+      summary: '',
       body: '',
+      references: [],
+      usage: { targetIds: [] },
       layout: layout()
     })
     expect(created.cards).toEqual([
-      { kind: 'prompt', cardId: 'prompt-1', body: '', references: [], layout: layout() }
+      {
+        kind: 'prompt',
+        cardId: 'prompt-1',
+        title: 'prompt-1',
+        summary: '',
+        body: '',
+        references: [],
+        usage: { targetIds: [] },
+        layout: layout()
+      }
     ])
     const field = createSceneCanvasFieldCard(created, {
       kind: 'effect',
       cardId: 'effect-1',
+      title: 'effect-1',
+      summary: '',
       webgalPreset: null,
+      usage: { targetIds: [] },
       layout: layout()
     })
     expect(field.cards.map((card) => card.cardId)).toEqual(['prompt-1', 'effect-1'])
@@ -392,7 +444,7 @@ describe('场景画布编排规则', () => {
       connectSceneCanvasCards(
         arrangement([
           documentCard('doc'),
-          { kind: 'prompt', cardId: 'prompt', body: '', layout: layout() }
+          promptCard('prompt', '')
         ]),
         'rel',
         'doc',
@@ -412,22 +464,13 @@ describe('场景画布编排规则', () => {
   })
 
   it('旧提示词缺省引用仍合法，重命名不改变引用身份', () => {
-    const legacy = arrangement([
-      documentCard('doc'),
-      { kind: 'prompt', cardId: 'prompt', body: '旧正文', layout: layout() }
-    ])
+    const legacy = arrangement([documentCard('doc'), promptCard('prompt', '旧正文')])
     expect(() => validateSceneCanvasArrangement(legacy)).not.toThrow()
 
     const renamed = editSceneCanvasCard(
       arrangement([
         documentCard('doc'),
-        {
-          kind: 'prompt',
-          cardId: 'prompt',
-          body: '引用',
-          references: [{ cardId: 'doc' }],
-          layout: layout()
-        }
+        promptCard('prompt', '引用', [{ cardId: 'doc' }])
       ]),
       'doc',
       { title: '新标题' }
@@ -448,84 +491,46 @@ describe('场景画布编排规则', () => {
         role: 'characterImage' as const,
         title: '人物',
         summary: '',
+        usage: { targetIds: [] },
         layout: layout()
       }
     ]
     expect(() =>
       validateSceneCanvasArrangement(
-        arrangement([
-          ...cards,
-          {
-            kind: 'prompt',
-            cardId: 'prompt',
-            body: '用这张图',
-            references: [{ cardId: 'image' }],
-            layout: layout()
-          }
-        ])
+        arrangement([...cards, promptCard('prompt', '用这张图', [{ cardId: 'image' }])])
       )
     ).not.toThrow()
     expectCode(
       () =>
         validateSceneCanvasArrangement(
-          arrangement([
-            ...cards,
-            {
-              kind: 'prompt',
-              cardId: 'prompt',
-              body: '引用自己',
-              references: [{ cardId: 'prompt' }],
-              layout: layout()
-            }
-          ])
+          arrangement([...cards, promptCard('prompt', '引用自己', [{ cardId: 'prompt' }])])
         ),
-      SceneCanvasErrorCodes.targetMissing
+      SceneCanvasErrorCodes.targetMissing,
+      FailureReasons.promptReferenceTargetMissing
     )
     expectCode(
       () =>
         validateSceneCanvasArrangement(
           arrangement([
             ...cards,
-            {
-              kind: 'prompt',
-              cardId: 'prompt',
-              body: '引用重复',
-              references: [{ cardId: 'doc' }, { cardId: 'doc' }],
-              layout: layout()
-            }
+            promptCard('prompt', '引用重复', [{ cardId: 'doc' }, { cardId: 'doc' }])
           ])
         ),
-      SceneCanvasErrorCodes.identityConflict
+      SceneCanvasErrorCodes.identityConflict,
+      FailureReasons.promptReferenceDuplicate
     )
     expectCode(
       () =>
         validateSceneCanvasArrangement(
-          arrangement([
-            ...cards,
-            {
-              kind: 'prompt',
-              cardId: 'prompt',
-              body: '引用缺失',
-              references: [{ cardId: 'missing' }],
-              layout: layout()
-            }
-          ])
+          arrangement([...cards, promptCard('prompt', '引用缺失', [{ cardId: 'missing' }])])
         ),
-      SceneCanvasErrorCodes.targetMissing
+      SceneCanvasErrorCodes.targetMissing,
+      FailureReasons.promptReferenceTargetMissing
     )
     expectCode(
       () =>
         validateSceneCanvasArrangement(
-          arrangement([
-            ...cards,
-            {
-              kind: 'prompt',
-              cardId: 'prompt',
-              body: '引用空白',
-              references: [{ cardId: ' ' }],
-              layout: layout()
-            }
-          ])
+          arrangement([...cards, promptCard('prompt', '引用空白', [{ cardId: ' ' }])])
         ),
       SceneCanvasErrorCodes.invalidField
     )
@@ -537,23 +542,12 @@ describe('场景画布编排规则', () => {
         validateSceneCanvasArrangement(
           arrangement([
             documentCard('doc'),
-            {
-              kind: 'prompt',
-              cardId: 'other-prompt',
-              body: '另一张提示词',
-              references: [],
-              layout: layout()
-            },
-            {
-              kind: 'prompt',
-              cardId: 'prompt',
-              body: '引用提示词',
-              references: [{ cardId: 'other-prompt' }],
-              layout: layout()
-            }
+            promptCard('other-prompt', '另一张提示词', []),
+            promptCard('prompt', '引用提示词', [{ cardId: 'other-prompt' }])
           ])
         ),
-      SceneCanvasErrorCodes.targetMissing
+      SceneCanvasErrorCodes.targetMissing,
+      FailureReasons.promptReferenceTargetMissing
     )
   })
 
@@ -561,13 +555,7 @@ describe('场景画布编排规则', () => {
     const draft = arrangement([
       documentCard('doc'),
       documentCard('same-title'),
-      {
-        kind: 'prompt',
-        cardId: 'prompt',
-        body: '引用文档',
-        references: [{ cardId: 'doc' }],
-        layout: layout()
-      }
+      promptCard('prompt', '引用文档', [{ cardId: 'doc' }])
     ])
     const deleted = deleteSceneCanvasCard(draft, 'doc')
     expect(deleted.cards.find((card) => card.cardId === 'prompt')).toMatchObject({

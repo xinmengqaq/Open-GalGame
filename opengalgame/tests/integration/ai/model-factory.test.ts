@@ -445,7 +445,7 @@ describe('LangChain 聊天模型构造', () => {
     let requestSignal: AbortSignal | null | undefined
     const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       requestSignal = init?.signal
-      return new Response(new ReadableStream<Uint8Array>({ start() {} }), {
+      return new Response(new ReadableStream<Uint8Array>(), {
         headers: { 'content-type': 'text/event-stream' }
       })
     })

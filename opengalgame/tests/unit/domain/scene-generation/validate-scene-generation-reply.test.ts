@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
+import type { ReplySceneGenerationInteractionDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
 import {
   canPreviewPublishedCandidate,
   canRequestSceneGenerationPause,
@@ -100,7 +101,10 @@ function questionGroup(count: number): SceneGenerationReplyInteraction {
   }
 }
 
-function groupReply(interaction: SceneGenerationReplyInteraction, bodies: readonly string[] = []) {
+function groupReply(
+  interaction: SceneGenerationReplyInteraction,
+  bodies: readonly string[] = []
+): ReplySceneGenerationInteractionDTO {
   return {
     ...request(),
     reply: {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { toRenderStatusVO } from '@application/scene-generation/mapping/SceneGenerationRenderProjection'
-import { SceneGenerationLaunchServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationLaunchServiceImpl'
+import { LaunchSceneGeneration } from '@application/scene-generation/services/impl/LaunchSceneGeneration'
 import type { SceneGenerationRenderDependencies } from '@application/scene-generation/services/impl/SceneGenerationRenderDependencies'
 import type { SceneGenerationApplicationService } from '@application/scene-generation/services/SceneGenerationApplicationService'
 import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
@@ -361,7 +361,7 @@ describe('场景生成动作分路径', () => {
         return { operationId: request.operationId }
       }
     } as unknown as SceneGenerationApplicationService
-    const launch = new SceneGenerationLaunchServiceImpl(
+    const launch = new LaunchSceneGeneration(
       f.deps,
       renderDeps,
       generation,

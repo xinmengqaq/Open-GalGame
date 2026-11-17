@@ -2,11 +2,17 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type {
   SceneGenerationHistorySummaryVO,
+  SceneGenerationRenderProgressEventVO,
   SceneGenerationRenderStatusVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
+import { SceneGenerationClientImpl } from '@interfaces/scene-generation/client/SceneGenerationClientImpl'
 import type { SceneGenerationClient } from '@interfaces/scene-generation/client/SceneGenerationClient'
+import type { ProjectClient } from '@interfaces/client/ProjectClient'
+import { AppException } from '@common/errors/AppException'
+import { PROJECT_WORKSPACE_NOT_READY_CODE } from '@presentation/feedback/workbenchFeedback'
 import {
   failureViewOf,
   generationPhaseOf,
@@ -17,7 +23,11 @@ import {
 } from '@presentation/pages/workbench/drawer/generation/generationPresentation'
 import { generationRunViewOf } from '@presentation/pages/workbench/drawer/generation/generationRunView'
 import { activeHistoryRowViewOf } from '@presentation/pages/workbench/drawer/generation/generationHistoryPresentation'
-import { readGenerationHistory } from '@presentation/pages/workbench/drawer/generation/useSceneGeneration'
+import {
+  prepareGenerationWorkspace,
+  readGenerationHistory,
+  WORKSPACE_NOT_READY_GENERATION_MESSAGE
+} from '@presentation/pages/workbench/drawer/generation/useSceneGeneration'
 
 function ok<T>(data: T): AjaxResult<T> {
   return { code: ErrorCodes.success, msg: 'ok', data }
@@ -255,5 +265,155 @@ describe('生成历史投影', () => {
     expect(activeHistoryRowViewOf(status({ state: 'cancelled', stage: 'cancelled' }))).toBeNull()
     expect(activeHistoryRowViewOf(status({ state: 'succeeded', stage: 'completed' }))).toBeNull()
     expect(activeHistoryRowViewOf(null)).toBeNull()
+  })
+})
+
+describe('生成历史读取错误与启动前工作区核对', () => {
+  it('历史列表失败按错误返回，forbidden 单独保留', async () => {
+    const failed = {
+      listHistory: vi.fn(async () => ({
+        code: ErrorCodes.communicationFailed,
+        msg: '场景历史暂时读取失败，画布和作品都没有受影响。'
+      })),
+      status: vi.fn(),
+      latest: vi.fn()
+    } as unknown as Pick<SceneGenerationClient, 'listHistory' | 'status' | 'latest'>
+    await expect(readGenerationHistory(failed, 'project-1', 'scene-1')).resolves.toEqual({
+      kind: 'error',
+      message: '场景历史暂时读取失败，画布和作品都没有受影响。',
+      forbidden: false
+    })
+    expect(failed.status).not.toHaveBeenCalled()
+
+    const forbidden = {
+      listHistory: vi.fn(async () => ({
+        code: ErrorCodes.forbidden,
+        msg: '当前环境不能读取生成历史'
+      })),
+      status: vi.fn(),
+      latest: vi.fn()
+    } as unknown as Pick<SceneGenerationClient, 'listHistory' | 'status' | 'latest'>
+    await expect(readGenerationHistory(forbidden, 'project-1', 'scene-1')).resolves.toEqual({
+      kind: 'error',
+      message: '当前环境不能读取生成历史',
+      forbidden: true
+    })
+    expect(forbidden.latest).not.toHaveBeenCalled()
+  })
+
+  it('历史存在但状态读取失败时不伪造空态或最近执行', async () => {
+    const summary: SceneGenerationHistorySummaryVO = {
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      operationId: 'operation-1',
+      threadId: 'thread-1',
+      branchId: 'branch-1',
+      checkpointId: 'checkpoint-1',
+      boundary: 'failed',
+      stage: 'failed',
+      message: '生成已停止',
+      createdAt: '2026-10-31T12:00:00.000Z'
+    }
+    const readLatest = vi.fn()
+    const client = {
+      listHistory: vi.fn(async () => ok([summary])),
+      status: vi.fn(async () => ({ code: ErrorCodes.internalError, msg: '状态读取失败' })),
+      latest: readLatest
+    } as unknown as Pick<SceneGenerationClient, 'listHistory' | 'status' | 'latest'>
+
+    await expect(readGenerationHistory(client, 'project-1', 'scene-1')).resolves.toEqual({
+      kind: 'error',
+      message: '状态读取失败',
+      forbidden: false
+    })
+    expect(readLatest).not.toHaveBeenCalled()
+  })
+
+  it('启动前工作区核对成功、1309 与普通失败分别给确定结果', async () => {
+    const successClient = {
+      ensureProjectWorkspace: vi.fn(async () => ok({ projectId: 'project-1' }))
+    } as unknown as ProjectClient
+    await expect(prepareGenerationWorkspace(successClient, 'project-1')).resolves.toEqual({
+      ok: true
+    })
+
+    const notReadyClient = {
+      ensureProjectWorkspace: vi.fn(async () => {
+        throw new AppException({
+          code: PROJECT_WORKSPACE_NOT_READY_CODE,
+          msg: '工程初始化未完成'
+        })
+      })
+    } as unknown as ProjectClient
+    await expect(prepareGenerationWorkspace(notReadyClient, 'project-1')).resolves.toEqual({
+      ok: false,
+      message: WORKSPACE_NOT_READY_GENERATION_MESSAGE,
+      workspaceNotReady: true
+    })
+
+    const failedClient = {
+      ensureProjectWorkspace: vi.fn(async () => {
+        throw new AppException({ code: ErrorCodes.internalError, msg: '工程读取失败' })
+      })
+    } as unknown as ProjectClient
+    await expect(prepareGenerationWorkspace(failedClient, 'project-1')).resolves.toEqual({
+      ok: false,
+      message: '工程读取失败',
+      workspaceNotReady: false
+    })
+  })
+})
+
+
+describe('进度事件载荷过滤', () => {
+  it('只把同一身份的新序号事件交给消费者，事件驱动状态投影可见更新', async () => {
+    let emit: ((event: SceneGenerationRenderProgressEventVO) => void) | undefined
+    const bridge = {
+      onSceneGenerationProgress: (listener: (event: SceneGenerationRenderProgressEventVO) => void) => {
+        emit = listener
+        return () => {
+          emit = undefined
+        }
+      },
+      subscribeSceneGenerationProgress: vi.fn(async () => ok(null))
+    } as unknown as DesktopBridge
+    const client = new SceneGenerationClientImpl(bridge)
+    const scope = {
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      operationId: 'operation-1',
+      threadId: 'thread-1',
+      branchId: 'branch-1'
+    }
+    const seen: number[] = []
+    const stop = client.subscribeProgress(scope, (event) => seen.push(event.sequence))
+    if (!emit) throw new Error('客户端没有注册进度监听')
+
+    const event: SceneGenerationRenderProgressEventVO = {
+      ...status({ state: 'running', stage: 'generating', sequence: 6 }),
+      message: 'AI 正在生成候选脚本'
+    }
+    emit(event)
+    emit({ ...event, projectId: 'project-2', sequence: 7 })
+    emit({ ...event, sceneId: 'scene-2', sequence: 8 })
+    emit({ ...event, operationId: 'operation-2', sequence: 9 })
+    emit({ ...event, threadId: 'thread-2', sequence: 10 })
+    emit({ ...event, branchId: 'branch-2', sequence: 11 })
+    emit(event)
+    expect(seen).toEqual([6])
+
+    const validating: SceneGenerationRenderProgressEventVO = {
+      ...event,
+      sequence: 7,
+      stage: 'validating',
+      stageMessage: '正在校验候选脚本或按校验结果修正',
+      message: '正在校验候选脚本或按校验结果修正'
+    }
+    emit(validating)
+    expect(seen).toEqual([6, 7])
+    expect(mergeRenderStatus(event, { ...event, sequence: 5 })).toBe(event)
+    expect(mergeRenderStatus(event, validating)).toBe(validating)
+    stop()
+    expect(emit).toBeUndefined()
   })
 })

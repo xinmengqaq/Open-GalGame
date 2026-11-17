@@ -8,7 +8,7 @@ import type {
   ProjectFileOperationGateway
 } from '@application/project-files/ports/ProjectFileOperationGateway'
 import type { ProjectWorkVersionGateway } from '@application/project-files/ports/ProjectWorkVersionGateway'
-import { ProjectFilesApplicationServiceImpl } from '@application/project-files/services/impl/ProjectFilesApplicationServiceImpl'
+import { ManageProjectFiles } from '@application/project-files/services/impl/ManageProjectFiles'
 import type { ProjectListQueryGateway } from '@application/projects/ports/ProjectListQueryGateway'
 import type { ProjectStorageGateway } from '@application/projects/ports/ProjectStorageGateway'
 import { AppException } from '@common/errors/AppException'
@@ -16,7 +16,18 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileErrorCodes'
 import { ProjectDomainServiceImpl } from '@domain/projects/services/impl/ProjectDomainServiceImpl'
 
-function createOperations() {
+type ProjectFileTestOperations = {
+  service: ManageProjectFiles
+  published: string[]
+  opened: string[]
+  inspections: Map<string, InspectedImportFile>
+  occupied: string[]
+  textUpdates: { sourceId: string; body: string; expectedVersion: string }[]
+}
+
+function createOperations(
+  importSettlement: 'unsettled' | 'committed' | 'notCommitted' = 'unsettled'
+): ProjectFileTestOperations {
   const published: string[] = []
   const opened: string[] = []
   const occupied = ['taken.png']
@@ -117,7 +128,9 @@ function createOperations() {
     }
   }
   const versions: ProjectWorkVersionGateway = {
-    readOperation: async () => 'unsettled',
+    readOperation: async () => importSettlement,
+    hasOperationLink: async () => true,
+    recoverProject: async () => undefined,
     publish: async (request) => {
       if (request.operationId === 'unclear') {
         throw new AppException({
@@ -134,7 +147,6 @@ function createOperations() {
       opened.push(absolutePath)
     }
   }
-  let operationCount = 0
   const listQuery: ProjectListQueryGateway = {
     listRegistrations: async () => [],
     countRegistrations: async () => 0,
@@ -146,7 +158,7 @@ function createOperations() {
       project: { id: 'project-1', name: '作品', synopsis: '' }
     })
   } as unknown as ProjectStorageGateway
-  const service = new ProjectFilesApplicationServiceImpl({
+  const service = new ManageProjectFiles({
     listQuery,
     domain: new ProjectDomainServiceImpl(),
     storage,
@@ -200,13 +212,15 @@ function createOperations() {
     files: filePort,
     versions,
     desktopOpen,
-    createSourceId: () => `source-${files.size + 1}`,
-    createOperationId: () => {
-      operationCount += 1
-      return operationCount === 2 ? 'unclear' : `op-${operationCount}`
-    }
+    createSourceId: () => `source-${files.size + 1}`
   })
   return { service, published, opened, inspections, occupied, textUpdates }
+}
+
+let testOperationCounter = 0
+function testOperationId(): string {
+  testOperationCounter += 1
+  return `test-op-${testOperationCounter}`
 }
 
 describe('工程文件操作编排', () => {
@@ -217,10 +231,11 @@ describe('工程文件操作编排', () => {
         projectId: 'project-1',
         parentFolderId: null,
         expectedCatalogVersion: 'catalog-v1',
+        operationIds: [],
         localFilePaths: []
       })
     ).rejects.toMatchObject({ code: ErrorCodes.invalidRequest })
-    const unregistered = new ProjectFilesApplicationServiceImpl({
+    const unregistered = new ManageProjectFiles({
       listQuery: {
         listRegistrations: async () => [],
         countRegistrations: async () => 0,
@@ -248,9 +263,30 @@ describe('工程文件操作编排', () => {
         projectId: 'missing',
         parentFolderId: null,
         expectedCatalogVersion: 'catalog-v1',
+        operationIds: ['op-unregistered'],
         localFilePaths: ['C:/a.png']
       })
     ).rejects.toBeInstanceOf(AppException)
+  })
+
+  it('缺少 caller operationId 的写调用直接拒绝', async () => {
+    const { service } = createOperations()
+    await expect(
+      service.importProjectFiles({
+        projectId: 'project-1',
+        parentFolderId: null,
+        expectedCatalogVersion: 'catalog-v1',
+        localFilePaths: ['C:/a.png']
+      } as never)
+    ).rejects.toMatchObject({ code: ErrorCodes.invalidRequest })
+    await expect(
+      service.renameProjectFile({
+        projectId: 'project-1',
+        sourceId: 'src-1',
+        newFileName: 'Other.md',
+        expectedCatalogVersion: 'catalog-v1'
+      } as never)
+    ).rejects.toMatchObject({ code: ErrorCodes.invalidRequest })
   })
 
   it('导入成功后继续处理普通失败，提交不明时停止后续文件', async () => {
@@ -263,10 +299,49 @@ describe('工程文件操作编排', () => {
         projectId: 'project-1',
         parentFolderId: null,
         expectedCatalogVersion: 'catalog-v1',
+        operationIds: ['op-1', 'unused-bad', 'unclear'],
         localFilePaths: ['C:/ok.png', 'C:/bad.txt', 'C:/later.png']
       })
     ).rejects.toMatchObject({ code: ProjectFileErrorCodes.commitUnclear })
     expect(published).toEqual(['op-1'])
+  })
+
+  it('导入结果不明但已核实提交时继续批次并计入成功', async () => {
+    const { service, inspections } = createOperations('committed')
+    inspections.set('C:/ok.png', { ok: true, fileName: 'ok.png', fileType: 'image' })
+    inspections.set('C:/unclear.png', { ok: true, fileName: 'unclear.png', fileType: 'image' })
+    inspections.set('C:/later.png', { ok: true, fileName: 'later.png', fileType: 'image' })
+    const imported = await service.importProjectFiles({
+      projectId: 'project-1',
+      parentFolderId: null,
+      expectedCatalogVersion: 'catalog-v1',
+      operationIds: ['op-1', 'unclear', 'op-3'],
+      localFilePaths: ['C:/ok.png', 'C:/unclear.png', 'C:/later.png']
+    })
+    expect(imported.importedFiles.map((file) => file.name)).toEqual([
+      'ok.png',
+      'unclear.png',
+      'later.png'
+    ])
+    expect(imported.failedFiles).toEqual([])
+  })
+
+  it('导入结果不明且核实未提交时记为该项失败并继续', async () => {
+    const { service, inspections } = createOperations('notCommitted')
+    inspections.set('C:/ok.png', { ok: true, fileName: 'ok.png', fileType: 'image' })
+    inspections.set('C:/unclear.png', { ok: true, fileName: 'unclear.png', fileType: 'image' })
+    inspections.set('C:/later.png', { ok: true, fileName: 'later.png', fileType: 'image' })
+    const imported = await service.importProjectFiles({
+      projectId: 'project-1',
+      parentFolderId: null,
+      expectedCatalogVersion: 'catalog-v1',
+      operationIds: ['op-1', 'unclear', 'op-3'],
+      localFilePaths: ['C:/ok.png', 'C:/unclear.png', 'C:/later.png']
+    })
+    expect(imported.importedFiles.map((file) => file.name)).toEqual(['ok.png', 'later.png'])
+    expect(imported.failedFiles).toEqual([
+      { fileName: 'unclear.png', message: '提交未完成，请重试' }
+    ])
   })
 
   it('同名导入追加序号，名称未变化的重命名不提交', async () => {
@@ -276,12 +351,14 @@ describe('工程文件操作编排', () => {
       projectId: 'project-1',
       parentFolderId: null,
       expectedCatalogVersion: 'catalog-v1',
+      operationIds: ['op-1'],
       localFilePaths: ['C:/taken.png']
     })
     expect(imported.importedFiles[0]?.name).toBe('taken (1).png')
     expect(published).toEqual(['op-1'])
     const renamed = await service.renameProjectFile({
       projectId: 'project-1',
+      operationId: testOperationId(),
       sourceId: 'src-1',
       newFileName: 'Notes.md',
       expectedCatalogVersion: 'catalog-v1'
@@ -294,6 +371,7 @@ describe('工程文件操作编排', () => {
     const { service, published, textUpdates } = createOperations()
     const updated = await service.updateProjectTextFileBody({
       projectId: 'project-1',
+      operationId: testOperationId(),
       sourceId: 'src-1',
       expectedSourceVersion: 'source-v1',
       content: { textKind: 'document', body: '新正文' }
@@ -301,7 +379,8 @@ describe('工程文件操作编排', () => {
     expect(textUpdates).toEqual([
       { sourceId: 'src-1', expectedVersion: 'source-v1', body: '新正文' }
     ])
-    expect(published).toEqual(['op-1'])
+    expect(published).toHaveLength(1)
+    expect(published[0]).toMatch(/^test-op-/)
     expect(updated).toEqual({
       sourceId: 'src-1',
       version: 'source-v2',
@@ -318,6 +397,7 @@ describe('工程文件操作编排', () => {
     const { service, textUpdates } = createOperations()
     const updated = await service.updateProjectTextFileBody({
       projectId: 'project-1',
+      operationId: testOperationId(),
       sourceId: 'src-1',
       expectedSourceVersion: 'source-v1',
       content: { textKind: 'document', body: '' }
@@ -331,6 +411,7 @@ describe('工程文件操作编排', () => {
     await expect(
       service.updateProjectTextFileBody({
         projectId: 'project-1',
+        operationId: testOperationId(),
         sourceId: ' ',
         expectedSourceVersion: 'source-v1',
         content: { textKind: 'document', body: '新正文' }
@@ -339,6 +420,7 @@ describe('工程文件操作编排', () => {
     await expect(
       service.updateProjectTextFileBody({
         projectId: 'project-1',
+        operationId: testOperationId(),
         sourceId: 'src-1',
         expectedSourceVersion: ' ',
         content: { textKind: 'document', body: '新正文' }
@@ -347,6 +429,7 @@ describe('工程文件操作编排', () => {
     await expect(
       service.updateProjectTextFileBody({
         projectId: 'project-1',
+        operationId: testOperationId(),
         sourceId: 'src-1',
         expectedSourceVersion: 'stale',
         content: { textKind: 'document', body: '新正文' }
@@ -363,13 +446,16 @@ describe('工程文件操作编排', () => {
     expect(published).toEqual([])
     await service.deleteProjectFile({
       projectId: 'project-1',
+      operationId: testOperationId(),
       sourceId: 'src-1',
       expectedCatalogVersion: 'catalog-v1'
     })
-    expect(published).toEqual(['op-1'])
+    expect(published).toHaveLength(1)
+    expect(published[0]).toMatch(/^test-op-/)
     await expect(
       service.deleteProjectFile({
         projectId: 'project-1',
+        operationId: testOperationId(),
         sourceId: 'missing',
         expectedCatalogVersion: 'catalog-v1'
       })

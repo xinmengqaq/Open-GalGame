@@ -248,17 +248,6 @@
   background-clip: content-box;
 }
 
-/* Radix ScrollArea 自带滚动条，避免原生滚动条重复出现。 */
-.drawer-surface [data-slot='scroll-area-viewport'],
-[data-slot='sheet-content'] [data-slot='scroll-area-viewport'] {
-  scrollbar-width: none;
-}
-
-.drawer-surface [data-slot='scroll-area-viewport']::-webkit-scrollbar,
-[data-slot='sheet-content'] [data-slot='scroll-area-viewport']::-webkit-scrollbar {
-  display: none;
-}
-
 /*
  * 减少动态效果：进入/退出只保留短淡入，不位移、不缩放。base.css 已把动画时长
  * 压到 0.01ms，这里再清掉位移和缩放变量，避免依赖时长兜底。

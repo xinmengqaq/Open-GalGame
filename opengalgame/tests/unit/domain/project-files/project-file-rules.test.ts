@@ -71,6 +71,7 @@ function sourceCard(patch: Partial<SceneCanvasDocumentCard> = {}): SceneCanvasDo
     sourceId: 'doc-1',
     title: '设定',
     summary: '',
+    usage: { targetIds: [] },
     layout: { x: 0, y: -10, width: 120, height: 80 },
     ...patch
   }
@@ -80,8 +81,11 @@ function promptCard(patch: Partial<SceneCanvasPromptCard> = {}): SceneCanvasProm
   return {
     cardId: 'card-prompt',
     kind: 'prompt',
+    title: '提示词',
+    summary: '',
     body: '保持短句',
     references: [],
+    usage: { targetIds: [] },
     layout: { x: 20, y: 20, width: 120, height: 80 },
     ...patch
   }
@@ -97,10 +101,13 @@ function fieldCard(
 ): SceneCanvasFieldCard {
   const shared = {
     cardId: patch.cardId ?? 'card-anim',
+    title: patch.kind === 'effect' ? '特效' : '演出',
+    summary: '',
     webgalPreset:
       patch.webgalPreset === undefined
         ? { command: 'setAnimation', name: 'enter' }
         : patch.webgalPreset,
+    usage: { targetIds: [] },
     layout: patch.layout ?? { x: 10, y: 20, width: 120, height: 80 }
   }
   if (patch.kind === 'effect') return { ...shared, kind: 'effect' }
@@ -162,7 +169,7 @@ describe('validateProjectInputSources', () => {
   })
 })
 
-describe('工程检查中的 v4 编排', () => {
+describe('工程检查中的画布编排', () => {
   it('提示词卡片保存正文，不要求来源身份', () => {
     expect(
       inspectProjectFileFacts({
@@ -180,6 +187,7 @@ describe('工程检查中的 v4 编排', () => {
                   relationId: 'rel-1',
                   fromCardId: 'card-1',
                   toCardId: 'card-prompt',
+                  defaultRelation: 'associated',
                   specificName: '',
                   recordCardId: 'card-prompt'
                 }
@@ -217,7 +225,7 @@ describe('工程检查中的 v4 编排', () => {
     ).toEqual([])
   })
 
-  it('领域不合法的 v4 编排记为损坏', () => {
+  it('领域不合法的画布编排记为损坏', () => {
     const card = sourceCard()
     expect(
       inspectProjectFileFacts({

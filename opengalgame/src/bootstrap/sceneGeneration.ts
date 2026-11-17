@@ -1,21 +1,23 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute, join } from 'node:path'
-import { SceneGenerationApplicationServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationApplicationServiceImpl'
-import { SceneGenerationCandidatePreviewServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationCandidatePreviewServiceImpl'
-import { SceneGenerationControlServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationControlServiceImpl'
-import { SceneGenerationLaunchServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationLaunchServiceImpl'
-import { SceneGenerationRenderQueryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationRenderQueryServiceImpl'
+import { RunSceneGeneration } from '@application/scene-generation/services/impl/RunSceneGeneration'
+import { PreviewSceneGenerationCandidate } from '@application/scene-generation/services/impl/PreviewSceneGenerationCandidate'
+import { ControlSceneGeneration } from '@application/scene-generation/services/impl/ControlSceneGeneration'
+import { LaunchSceneGeneration } from '@application/scene-generation/services/impl/LaunchSceneGeneration'
+import { QuerySceneGenerationRender } from '@application/scene-generation/services/impl/QuerySceneGenerationRender'
 import type { SceneGenerationRenderDependencies } from '@application/scene-generation/services/impl/SceneGenerationRenderDependencies'
-import { SceneGenerationStatusQueryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationStatusQueryServiceImpl'
-import { SceneGenerationHistoryQueryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationHistoryQueryServiceImpl'
-import { SceneGenerationCandidateEditServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationCandidateEditServiceImpl'
-import { SceneGenerationMemoryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationMemoryServiceImpl'
+import { QuerySceneGenerationStatus } from '@application/scene-generation/services/impl/QuerySceneGenerationStatus'
+import { QuerySceneGenerationHistory } from '@application/scene-generation/services/impl/QuerySceneGenerationHistory'
+import { EditSceneGenerationCandidate } from '@application/scene-generation/services/impl/EditSceneGenerationCandidate'
+import { safeFailureWithDiagnosticRef } from '@application/scene-generation/services/impl/SceneGenerationFailureFacts'
+import { ClearSceneGenerationMemory } from '@application/scene-generation/services/impl/ClearSceneGenerationMemory'
 import {
   SceneGenerationCoordinator,
   type SceneGenerationDependencies,
   type SceneGenerationDispatchIdentity
 } from '@application/scene-generation/services/impl/SceneGenerationCoordinator'
 import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import type { SceneGenerationProgressVO } from '@application/scene-generation/vo/SceneGenerationVO'
 import {
   SceneInputGatewayImpl,
@@ -41,6 +43,7 @@ import { SceneScriptParserGatewayImpl } from '@infrastructure/scenes/SceneScript
 import { SceneAssetReferenceGatewayImpl } from '@infrastructure/scenes/SceneAssetReferenceGatewayImpl'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { CanvasArrangementMigration } from '@infrastructure/scene-canvas/migration/CanvasArrangementMigration'
 import { assertUserDirectory } from './userDirectory'
 
 export type SceneGenerationBootstrapOptions = {
@@ -57,15 +60,15 @@ export type SceneGenerationBootstrapOptions = {
 }
 
 export type SceneGenerationServices = {
-  generation: SceneGenerationApplicationServiceImpl
-  launch?: SceneGenerationLaunchServiceImpl
-  renderQuery?: SceneGenerationRenderQueryServiceImpl
-  control?: SceneGenerationControlServiceImpl
-  candidatePreview?: SceneGenerationCandidatePreviewServiceImpl
-  status: SceneGenerationStatusQueryServiceImpl
-  history: SceneGenerationHistoryQueryServiceImpl
-  candidateEdit: SceneGenerationCandidateEditServiceImpl
-  memory: SceneGenerationMemoryServiceImpl
+  generation: RunSceneGeneration
+  launch?: LaunchSceneGeneration
+  renderQuery?: QuerySceneGenerationRender
+  control?: ControlSceneGeneration
+  candidatePreview?: PreviewSceneGenerationCandidate
+  status: QuerySceneGenerationStatus
+  history: QuerySceneGenerationHistory
+  candidateEdit: EditSceneGenerationCandidate
+  memory: ClearSceneGenerationMemory
   close: () => Promise<void>
   ports: {
     input: SceneInputGatewayImpl
@@ -92,14 +95,24 @@ export async function createSceneGeneration(
   const stateRoot = join(options.userStateRoot, 'ai')
   const files = new AiProjectFileSystemImpl(options.userStateRoot)
   const saver = new WebGalGenerationCheckpointSaver(stateRoot)
-  const input = new SceneInputGatewayImpl(options.registrations ?? [], options.render?.production)
+  const canvasMigration = new CanvasArrangementMigration({
+    backupRoot: join(options.userStateRoot, 'migrations', 'scene-canvas')
+  })
+  const input = new SceneInputGatewayImpl(
+    options.registrations ?? [],
+    canvasMigration,
+    options.render?.production
+  )
   const executions = new FileSceneGenerationExecutionRepositoryImpl(options.userStateRoot)
   const workspace = new WebGalSceneGenerationWorkspaceGatewayImpl(files)
+  /** 领域服务无状态，实例身份不参与判定；组合根注入同一实例。 */
+  const domain = new SceneGenerationDomainServiceImpl()
   const artifacts = new WebGalSceneArtifactGatewayImpl(
     files,
     new SceneSourceReaderGatewayImpl(),
     new SceneScriptParserGatewayImpl(),
-    new SceneAssetReferenceGatewayImpl()
+    new SceneAssetReferenceGatewayImpl(),
+    domain
   )
   const versions = new SceneVersionGatewayImpl(options.versioning, options.projects)
   const factory = new LangChainAgentFactoryImpl(
@@ -107,17 +120,22 @@ export async function createSceneGeneration(
     new FilePromptLoader(options.promptRoot)
   )
   const agentImplementation = WebGalSceneAgentImpl
-  const graphDependencies = { saver, stateRoot, artifacts }
+  const graphDependencies = { saver, stateRoot, artifacts, domain }
   /** 模型连接可在启动后配置；装配阶段不创建需要已存设置的智能体。 */
-  const workflow = new WebGalSceneGenerationWorkflowImpl(graphDependencies, files, () =>
-    factory.create(agentImplementation, {
-      model: { override: { requestTimeoutMs: undefined } },
-      override: { toolTimeoutMs: undefined }
-    })
+  const workflow = new WebGalSceneGenerationWorkflowImpl(
+    graphDependencies,
+    files,
+    () =>
+      factory.create(agentImplementation, {
+        model: { override: { requestTimeoutMs: undefined } },
+        override: { toolTimeoutMs: undefined }
+      }),
+    safeFailureWithDiagnosticRef
   )
   const history = new WebGalSceneGenerationHistoryReaderImpl(graphDependencies, files, executions)
   const memory = new SceneGenerationMemoryGatewayImpl(stateRoot, executions)
   const dependencies: SceneGenerationDependencies = {
+    domain,
     input,
     executions,
     workspace,
@@ -134,32 +152,32 @@ export async function createSceneGeneration(
     publishProgress: options.publishProgress
   }
   const coordinator = new SceneGenerationCoordinator(dependencies)
-  const generation = new SceneGenerationApplicationServiceImpl(dependencies, coordinator)
+  const generation = new RunSceneGeneration(dependencies, coordinator)
   const launch = options.render
-    ? new SceneGenerationLaunchServiceImpl(dependencies, options.render, generation, coordinator)
+    ? new LaunchSceneGeneration(dependencies, options.render, generation, coordinator)
     : undefined
   return {
     generation,
     ...(launch ? { launch } : {}),
     ...(options.render
       ? {
-          renderQuery: new SceneGenerationRenderQueryServiceImpl(dependencies, coordinator),
-          control: new SceneGenerationControlServiceImpl(dependencies, coordinator, generation),
-          candidatePreview: new SceneGenerationCandidatePreviewServiceImpl(
+          renderQuery: new QuerySceneGenerationRender(dependencies, coordinator),
+          control: new ControlSceneGeneration(dependencies, coordinator, generation),
+          candidatePreview: new PreviewSceneGenerationCandidate(
             dependencies,
             options.render,
             coordinator
           )
         }
       : {}),
-    status: new SceneGenerationStatusQueryServiceImpl(dependencies, coordinator),
-    history: new SceneGenerationHistoryQueryServiceImpl(history, executions),
-    candidateEdit: new SceneGenerationCandidateEditServiceImpl(
+    status: new QuerySceneGenerationStatus(dependencies, coordinator),
+    history: new QuerySceneGenerationHistory(history, executions),
+    candidateEdit: new EditSceneGenerationCandidate(
       dependencies,
       coordinator,
       options.render?.preview
     ),
-    memory: new SceneGenerationMemoryServiceImpl(dependencies, coordinator),
+    memory: new ClearSceneGenerationMemory(dependencies, coordinator),
     close: async () => {
       await options.render?.preview.close?.()
     },

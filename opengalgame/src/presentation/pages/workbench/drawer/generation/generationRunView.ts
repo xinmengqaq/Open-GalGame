@@ -43,8 +43,6 @@ export type GenerationRunProgress = {
 export type GenerationRunFailureView = FailureView & {
   failureClass: GenerationRunFailureClass | null
   nextActions: readonly GenerationRunNextAction[]
-  /** failed 且执行记录缺少分类或动作的旧记录近似。 */
-  legacy: boolean
   /** 当前失败是否可按现有修复重试规则重发；只修复失败且身份完整时为 true。 */
   canRetryRepair: boolean
 }
@@ -101,8 +99,6 @@ export type GenerationRunView = {
   resume: { canResume: boolean; reason: string | null }
   /** 只有真实可结束的运行才可取消；待核对中断不冒充可取消。 */
   canCancel: boolean
-  /** failed 且执行记录缺少分类或动作的旧记录近似。 */
-  legacy: boolean
 }
 
 /**
@@ -140,8 +136,7 @@ export function generationRunViewOf(
     progress: status.recentProgress ?? progress,
     resume,
     // 待核对和候选冲突的中断没有可确认的结束语义，不显示取消；暂停仍可结束本次生成。
-    canCancel: status.canCancel && (status.state !== 'interrupted' || status.stage === 'paused'),
-    legacy: failure?.legacy === true
+    canCancel: status.canCancel && (status.state !== 'interrupted' || status.stage === 'paused')
   }
 }
 
@@ -165,7 +160,7 @@ export function failureFactsOf(failure: RenderFailure | null): GenerationRunFail
 }
 
 /**
- * 失败视图在已有安全失败文案上增加分类、下一步动作和旧记录近似。
+ * 失败视图在已有安全失败文案上增加分类和下一步动作。
  * 没有失败对象的失败阶段仍给出通用说明，不从本地猜测原因。
  */
 function failureViewFor(
@@ -179,7 +174,6 @@ function failureViewFor(
     ...failureViewOf(status),
     failureClass: failureFacts.failureClass,
     nextActions: failureFacts.nextActions,
-    legacy: failure?.legacy === true,
     canRetryRepair: repairRetryViewOf(status).eligible
   }
 }

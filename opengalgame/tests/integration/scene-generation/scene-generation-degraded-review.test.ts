@@ -11,6 +11,7 @@ import type {
   SceneGenerationExecution
 } from '@application/scene-generation/models/SceneGenerationExecution'
 import type { SceneGenerationArtifact } from '@domain/scene-generation/models/SceneGenerationArtifact'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import { recordWrittenFile } from '@infrastructure/ai/execution/writtenFileLedger'
 import { WebGalSceneAgentImpl } from '@infrastructure/scene-generation/agents/WebGalSceneAgentImpl'
@@ -108,6 +109,7 @@ async function degradedHarness(): Promise<DegradedHarness> {
   const graph = createWebGalGenerationGraph({
     stateRoot: root,
     saver: new FileCheckpointSaver(root),
+    domain: new SceneGenerationDomainServiceImpl(),
     budget,
     runtime: {
       get execution() {

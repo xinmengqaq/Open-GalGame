@@ -9,6 +9,7 @@ import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
 import { AppUpdateClientImpl } from '@interfaces/app-update/client/AppUpdateClientImpl'
 import { AppUpdateController } from '@interfaces/app-update/ipc/AppUpdateController'
 import { registerAppUpdateIpc } from '@interfaces/app-update/ipc/registerAppUpdateIpc'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { createDesktopBridge } from '@interfaces/preload/DesktopBridge'
 
@@ -119,7 +120,7 @@ function windowFixture(): {
 
 function register(service: AppUpdateApplicationService, window: unknown): () => void {
   return registerAppUpdateIpc({
-    controller: new AppUpdateController(service, new IpcExceptionHandler(loggerOf())),
+    controller: new AppUpdateController(service, new IpcExceptionHandler(loggerOf(), new IpcErrorMapper())),
     subscribe: (listener) => service.subscribe(listener),
     getWindow: () => window as never,
     rendererUrl

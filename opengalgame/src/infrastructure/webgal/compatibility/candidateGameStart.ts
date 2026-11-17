@@ -1,10 +1,11 @@
+import { WEBGAL_AUDITED_VERSION } from '@common/config/WebgalVersion'
+
 import { WEBGAL_COMPATIBILITY_PROFILE } from './WebgalCompatibilityProfile'
 
 /**
  * 固定 4.6.5 公开命令里没有“离开标题并开始候选入口”的命令。
  * `sync-scene` 只定位，`run-scene-content` 会替换运行内容，可见性命令只改界面标志。
  */
-const AUDITED_ENGINE_VERSION = '4.6.5'
 
 export type CandidateStartFailure =
   '当前引擎不支持开始游戏' | '宿主无法开始游戏' | '游戏没有离开当前画面' | '游戏没有进入场景'
@@ -61,7 +62,7 @@ export function selectCandidateStartSupport(input: {
   readonly packageVersion: string
   readonly commands: readonly string[]
 }): CandidateStartSupport {
-  if (input.packageVersion !== AUDITED_ENGINE_VERSION) return 'unsupported'
+  if (input.packageVersion !== WEBGAL_AUDITED_VERSION) return 'unsupported'
   const actual = [...input.commands].sort()
   const expected = [...WEBGAL_COMPATIBILITY_PROFILE.previewCommands].sort()
   if (

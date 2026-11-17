@@ -12,13 +12,17 @@ import type {
   ProjectFileScopeDTO,
   ProjectFolderScopeDTO,
   ReadProjectFileOperationDTO,
+  RecoverProjectFileOperationsDTO,
   ReadProjectInputSourcesDTO,
   ReadProjectMediaDTO,
   RenameProjectFileDTO,
   RenameProjectFolderDTO,
   UpdateProjectTextFileBodyDTO
 } from '@application/project-files/dto/ProjectFilesDTO'
-import type { ProjectFileOperationSettlementVO } from '@application/project-files/vo/ProjectFileOperationVO'
+import type {
+  ProjectFileOperationRecoveryVO,
+  ProjectFileOperationSettlementVO
+} from '@application/project-files/vo/ProjectFileOperationVO'
 import type { ProjectFilesInspectionVO } from '@application/project-files/vo/ProjectFilesInspectionVO'
 import type {
   ProjectFolderDeletionPlanVO,
@@ -117,6 +121,11 @@ export interface ProjectFilesClient {
   readProjectFileOperation(
     request: ReadProjectFileOperationDTO
   ): Promise<AjaxResult<ProjectFileOperationSettlementVO>>
+
+  /** 明确恢复写入口：打开工程后按 caller ID 固化终态。 */
+  recoverProjectFileOperations(
+    request: RecoverProjectFileOperationsDTO
+  ): Promise<AjaxResult<readonly ProjectFileOperationRecoveryVO[]>>
 
   /**
    * 把拖入的磁盘文件转成本机路径。不经过导入通道。

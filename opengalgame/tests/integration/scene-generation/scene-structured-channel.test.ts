@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -113,7 +113,6 @@ async function runChannel(plan: readonly Step[], model = 'chosen'): Promise<{
   roots.push(workspace)
   await mkdir(join(workspace, 'game/scene'), { recursive: true })
   const bodies: Array<Record<string, unknown>> = []
-  let step = 0
   const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>
     bodies.push(body)
@@ -189,15 +188,6 @@ function toolNames(body: Record<string, unknown>): string[] {
       : []
   )
 }
-
-function latestMessageText(body: Record<string, unknown>): string {
-  const messages = body.messages
-  if (!Array.isArray(messages)) return ''
-  const latest = messages.at(-1)
-  if (!latest || typeof latest !== 'object' || !('content' in latest)) return ''
-  return typeof latest.content === 'string' ? latest.content : JSON.stringify(latest.content)
-}
-
 
 function responseFormatType(body: Record<string, unknown>): string | undefined {
   const format = body.response_format

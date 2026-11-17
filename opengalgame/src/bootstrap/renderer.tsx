@@ -14,6 +14,7 @@ import { SceneCanvasClientImpl } from '@interfaces/scene-canvas/client/SceneCanv
 import { SceneExportClientImpl } from '@interfaces/scene-export/client/SceneExportClientImpl'
 import { SceneGenerationClientImpl } from '@interfaces/scene-generation/client/SceneGenerationClientImpl'
 import { ScenePreviewClientImpl } from '@interfaces/scene-preview/client/ScenePreviewClientImpl'
+import { SystemPathClientImpl } from '@interfaces/system-path/client/SystemPathClientImpl'
 import { App } from '@presentation/app/App'
 
 import '@presentation/effects/base.css'
@@ -44,6 +45,7 @@ function startRenderer(): void {
   const sceneGenerationClient = new SceneGenerationClientImpl(bridge)
   const scenePreviewClient = new ScenePreviewClientImpl(bridge)
   const sceneExportClient = new SceneExportClientImpl(bridge)
+  const systemPathClient = new SystemPathClientImpl(bridge)
   createRoot(rootElement).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
@@ -57,6 +59,7 @@ function startRenderer(): void {
           sceneGenerationClient={sceneGenerationClient}
           scenePreviewClient={scenePreviewClient}
           sceneExportClient={sceneExportClient}
+          systemPathClient={systemPathClient}
         />
       </QueryClientProvider>
     </StrictMode>

@@ -12,7 +12,9 @@ export default defineConfig(
       '**/node_modules',
       '**/dist',
       '**/out',
+      '**/output/**',
       '**/coverage',
+      'artifacts/**',
       'scripts/**/*.cjs',
       'tests/electron/**/*.cjs',
       'tests/e2e/**/*.cjs',
@@ -72,9 +74,7 @@ export default defineConfig(
         {
           allowExportNames: [
             'buttonVariants',
-            'buttonGroupVariants',
-            'tabsListVariants',
-            'messagesToMarkdown'
+            'buttonGroupVariants'
           ]
         }
       ]
@@ -118,6 +118,11 @@ export default defineConfig(
         { type: 'application', pattern: 'src/application', mode: 'folder' },
         { type: 'domain', pattern: 'src/domain', mode: 'folder' },
         { type: 'infrastructure', pattern: 'src/infrastructure', mode: 'folder' },
+        {
+          type: 'common-operation-id',
+          pattern: 'src/common/contracts/OperationId.ts',
+          mode: 'full'
+        },
         { type: 'common-errors', pattern: 'src/common/errors', mode: 'folder' },
         { type: 'common', pattern: 'src/common', mode: 'folder' }
       ]
@@ -137,7 +142,8 @@ export default defineConfig(
                 'domain',
                 'infrastructure',
                 'common',
-                'common-errors'
+                'common-errors',
+                'common-operation-id'
               ]
             },
             {
@@ -146,19 +152,37 @@ export default defineConfig(
             },
             {
               from: 'interfaces',
-              allow: ['application', 'interfaces', 'common', 'common-errors']
+              allow: [
+                'application',
+                'interfaces',
+                'common',
+                'common-errors',
+                'common-operation-id'
+              ]
             },
             {
               from: 'application',
-              allow: ['domain', 'application', 'common', 'common-errors']
+              allow: [
+                'domain',
+                'application',
+                'common',
+                'common-errors',
+                'common-operation-id'
+              ]
             },
             {
               from: 'domain',
-              allow: ['common-errors']
+              allow: ['common-errors', 'common-operation-id']
             },
             {
               from: 'infrastructure',
-              allow: ['domain', 'application', 'common', 'common-errors']
+              allow: [
+                'domain',
+                'application',
+                'common',
+                'common-errors',
+                'common-operation-id'
+              ]
             },
             {
               from: ['bootstrap', 'presentation', 'interfaces', 'application', 'infrastructure'],

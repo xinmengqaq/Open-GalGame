@@ -85,7 +85,7 @@ export type WebGalSceneAgentOutput = Omit<
   z.infer<typeof sceneAgentOutputSchema>,
   'action'
 > & {
-  /** 旧假智能体可能不返回动作，调用方按 submit_scene_result 兼容。 */
-  action?: SceneAgentAction
+  /** 结构化输出契约强制返回终态动作，调用方不得再按缺省提交兼容。 */
+  action: SceneAgentAction
   memoryMessages: readonly WebGalSceneMemoryMessage[]
 }

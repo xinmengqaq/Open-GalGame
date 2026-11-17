@@ -11,6 +11,7 @@ import type {
   SceneGenerationHistoryBoundary,
   SceneGenerationHistorySummaryVO,
   SceneGenerationRenderInteractionVO,
+  SceneGenerationRenderProgressEventVO,
   SceneGenerationRenderStage,
   SceneGenerationRenderStatusVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
@@ -21,10 +22,11 @@ export type GenerationFixtureScenario =
   | 'idle'
   | 'startFailure'
   | 'runFailure'
-  | 'runLegacyFailure'
+  | 'runFailureWithoutFacts'
   | 'runCommitUnknown'
   | 'runCandidateConflict'
   | 'running'
+  | 'progressEvents'
   | 'decision'
   | 'questions'
   | 'questionsSingle'
@@ -39,7 +41,8 @@ export type GenerationFixtureScenario =
   | 'cancelling'
   | 'completed'
   | 'failed'
-  | 'legacyFailure'
+  | 'repairFailure'
+  | 'failureWithoutFacts'
   | 'commitUnknown'
   | 'candidateConflict'
   | 'cancelled'
@@ -64,6 +67,11 @@ export interface SceneGenerationFixture {
   readCheckpoint(
     request: ReadSceneGenerationCheckpointDTO
   ): AjaxResult<SceneGenerationHistorySummaryVO>
+  subscribeProgress(
+    request: SceneGenerationScopeDTO & { readonly threadId: string; readonly branchId: string },
+    publish: (event: SceneGenerationRenderProgressEventVO) => void
+  ): () => void
+  stopProgress(): void
 }
 
 const stageMessage: Record<SceneGenerationRenderStage, string> = {
@@ -404,8 +412,38 @@ function statusOf(
           unverified: false
         }
       }
-    case 'legacyFailure': {
-      // 旧记录没有执行时间线，最近安全进度保持缺失，不能从基础夹具继承。
+    case 'repairFailure':
+      return {
+        ...base,
+        state: 'failed',
+        stage: 'failed',
+        stageMessage: stageMessage.failed,
+        canPause: false,
+        canCancel: false,
+        mode: 'repair',
+        repairSource: {
+          operationId: 'fixture-operation',
+          threadId: 'fixture-thread',
+          branchId: 'fixture-branch',
+          checkpointId: 'fixture-checkpoint',
+          candidateSnapshotId: 'fixture-candidate'
+        },
+        checkpointId: 'fixture-checkpoint',
+        candidateSnapshotId: 'fixture-candidate',
+        userMessages: [{ kind: 'revise', body: '把相认放到结尾', round: 1 }],
+        failure: {
+          code: ErrorCodes.operationConflict,
+          message: '修正轮没有完成，可以携带这次修改要求重试。',
+          reason: 'modelFailure',
+          failureClass: 'noProgress',
+          nextActions: ['retryOperation', 'viewCandidate'],
+          reference: '7c14d8e6a2f9',
+          unverified: false
+        }
+      }
+    case 'failureWithoutFacts': {
+      // 失败但缺少持久失败分类、动作与原因，且没有执行时间线；
+      // 最近安全进度保持缺失，不能从基础夹具继承。
       const legacyBase = { ...base }
       delete legacyBase.recentProgress
       return {
@@ -418,8 +456,7 @@ function statusOf(
         failure: {
           code: ErrorCodes.operationConflict,
           message: '模型连接中断，本次生成未完成。',
-          unverified: false,
-          legacy: true
+          unverified: false
         }
       }
     }
@@ -461,6 +498,16 @@ function statusOf(
         canPause: false,
         canCancel: false
       }
+    case 'progressEvents':
+      return {
+        ...base,
+        state: 'succeeded',
+        stage: 'completed',
+        stageMessage: stageMessage.completed,
+        canPause: false,
+        canResume: false,
+        canCancel: false
+      }
     case 'historyRecords':
     case 'historyEmpty':
     case 'historyLoading':
@@ -483,7 +530,7 @@ function boundaryOf(scenario: GenerationFixtureScenario): SceneGenerationHistory
   if (scenario === 'completed') return 'committed'
   if (
     scenario === 'failed' ||
-    scenario === 'legacyFailure' ||
+    scenario === 'failureWithoutFacts' ||
     scenario === 'commitUnknown' ||
     scenario === 'candidateConflict'
   ) {
@@ -516,8 +563,7 @@ function historyOf(
     ...(status.result ? { commitId: status.result.commitId } : {}),
     ...(boundaryOf(scenario) === 'failed' && status.failure?.reason
       ? { failureReason: status.failure.reason }
-      : {}),
-    ...(status.failure?.legacy === true ? { legacy: true } : {})
+      : {})
   }
 }
 
@@ -603,7 +649,7 @@ function historyRecordsForScenario(
     scenario === 'idle' ||
     scenario === 'startFailure' ||
     scenario === 'runFailure' ||
-    scenario === 'runLegacyFailure' ||
+    scenario === 'runFailureWithoutFacts' ||
     scenario === 'runCommitUnknown' ||
     scenario === 'runCandidateConflict' ||
     scenario === 'historyEmpty'
@@ -634,10 +680,11 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
     'idle',
     'startFailure',
     'runFailure',
-    'runLegacyFailure',
+    'runFailureWithoutFacts',
     'runCommitUnknown',
     'runCandidateConflict',
     'running',
+    'progressEvents',
     'decision',
     'questions',
     'questionsSingle',
@@ -651,7 +698,8 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
     'cancelling',
     'completed',
     'failed',
-    'legacyFailure',
+    'repairFailure',
+    'failureWithoutFacts',
     'commitUnknown',
     'candidateConflict',
     'cancelled',
@@ -665,6 +713,7 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
   let current: GenerationFixtureScenario = initial
   let identity = { projectId: 'p-01', sceneId: 'scene-1' }
   let sequence = statusOf(initial, identity).sequence
+  let progressStarted = false
   let recordedAnswers: SceneGenerationRenderStatusVO['answeredQuestions']
 
   const adopt = (scope: { projectId: string; sceneId: string }): void => {
@@ -683,9 +732,78 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
       ? null
       : { code: ErrorCodes.invalidRequest, msg: '夹具里没有这个生成操作' }
 
+  let progressTimer: number | null = null
+
+  const stopProgress = (): void => {
+    if (progressTimer !== null) window.clearTimeout(progressTimer)
+    progressTimer = null
+  }
+
+  const progressStatus = (
+    scope: { projectId: string; sceneId: string },
+    nextSequence: number
+  ): SceneGenerationRenderStatusVO => ({
+    ...statusOf('progressEvents', scope),
+    state: 'running',
+    stage: 'generating',
+    stageMessage: stageMessage.generating,
+    canPause: true,
+    canResume: false,
+    canCancel: true,
+    sequence: nextSequence
+  })
+
+  const progressEvent = (
+    identity: { projectId: string; sceneId: string },
+    publish: (event: SceneGenerationRenderProgressEventVO) => void
+  ): void => {
+    const base = progressStatus(identity, sequence)
+    const valid: SceneGenerationRenderProgressEventVO = {
+      ...base,
+      sequence: sequence + 1,
+      stage: 'validating',
+      stageMessage: stageMessage.validating,
+      message: stageMessage.validating
+    }
+    const stale: SceneGenerationRenderProgressEventVO = {
+      ...base,
+      sequence: 2,
+      stage: 'failed',
+      stageMessage: stageMessage.failed,
+      message: '过期事件不应覆盖当前状态'
+    }
+    const foreign: SceneGenerationRenderProgressEventVO = {
+      ...valid,
+      projectId: 'fixture-foreign-project',
+      sequence: 9,
+      stage: 'completed',
+      stageMessage: stageMessage.completed,
+      message: '异工程事件不应进入当前场景'
+    }
+    const events = [valid, stale, foreign, valid]
+    let index = 0
+    const next = (): void => {
+      const event = events[index]
+      index += 1
+      if (!event) {
+        progressTimer = null
+        return
+      }
+      publish(event)
+      progressTimer = index < events.length ? window.setTimeout(next, 220) : null
+    }
+    progressTimer = window.setTimeout(next, 700)
+  }
+
   return {
     start(request) {
       adopt(request)
+      if (initial === 'progressEvents') {
+        progressStarted = true
+        current = 'progressEvents'
+        sequence += 1
+        return success('场景生成已启动', progressStatus(identity, sequence))
+      }
       if (initial === 'startFailure') {
         return {
           code: ErrorCodes.invalidConfig,
@@ -693,7 +811,8 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
         }
       }
       if (initial === 'runFailure') return success('场景生成已启动', advance('failed'))
-      if (initial === 'runLegacyFailure') return success('场景生成已启动', advance('legacyFailure'))
+      if (initial === 'runFailureWithoutFacts')
+        return success('场景生成已启动', advance('failureWithoutFacts'))
       if (initial === 'runCommitUnknown') return success('场景生成已启动', advance('commitUnknown'))
       if (initial === 'runCandidateConflict')
         return success('场景生成已启动', advance('candidateConflict'))
@@ -723,7 +842,10 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
       const invalid = expectScope(request)
       if (invalid) return invalid
       adopt(request)
-      const status = { ...statusOf(current, identity), sequence }
+      const status =
+        current === 'progressEvents' && progressStarted
+          ? progressStatus(identity, sequence)
+          : { ...statusOf(current, identity), sequence }
       return success(
         '生成状态已读取',
         current === 'questionsFollowup' && recordedAnswers
@@ -811,6 +933,14 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
       return found
         ? success('检查点已读取', found)
         : { code: ErrorCodes.invalidRequest, msg: '夹具里没有这个检查点' }
-    }
+    },
+    subscribeProgress(request, publish) {
+      adopt(request)
+      stopProgress()
+      if (current !== 'progressEvents' || !progressStarted) return () => undefined
+      progressEvent(identity, publish)
+      return stopProgress
+    },
+    stopProgress
   }
 }

@@ -1,14 +1,13 @@
 import { z } from 'zod'
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
-import { assetCategoryOfPurpose } from '@domain/scenes/models/SceneAssetReference'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 
 /**
- * 当前执行文档版本。版本 7 以 step 取代 phase，旧 phase 由迁移映射为 step 或省略；版本 6 增加失败分类与下一步动作；
- * 版本 4 缺少问题组；版本 1 保留旧输入快照，版本 2、3 缺少记录时间。
- * repairContext 是版本 6 内的纯可选增量，旧记录缺字段保持缺失，不升版本。
- * 缺失素材诊断字段（reference/line/nearest*）同样是版本 7 内的纯可选增量，旧记录缺字段保持缺失。
+ * 当前执行文档版本。当前产品只读写版本 7；旧信封版本、旧输入字段与阶段映射
+ * 只由执行记录迁移模块读取，不在这里提供回退解析。
+ * repairContext 是版本 6 内的纯可选增量，缺字段保持缺失，不升版本。
+ * 缺失素材诊断字段（reference/line/nearest*）同样是版本 7 内的纯可选增量，缺字段保持缺失。
  */
 export const SCENE_GENERATION_EXECUTION_DOCUMENT_VERSION = 7
 
@@ -209,64 +208,21 @@ const operationStep = z.enum([
   'rollingBack'
 ])
 
-/** 旧输入快照仍要保留的操作身份。不补当前输入字段。 */
-export const legacyOperationFactSchema = z.object({
-  projectId: text,
-  sceneId: text,
-  operationId: text,
-  threadId: text,
-  branchId: text,
-  fingerprint: text,
-  state: operationState
-})
-export type LegacyOperationFact = z.infer<typeof legacyOperationFactSchema>
-
 const assetCategory = z.enum(['image', 'audio', 'video'])
-/** 版本 6 之前的执行记录只写用途；读取时换算为类别，写回不再保留。 */
-const legacyAssetPurpose = z.enum([
-  'background',
-  'cg',
-  'characterImage',
-  'avatar',
-  'music',
-  'soundEffect',
-  'voice',
-  'video'
-])
 
 export const inputsSchema = z.object({
   canvasId: text,
   arrangementVersion: text,
   assets: z.array(
-    z
-      .object({
-        assetId: text,
-        sourceId: text,
-        name: text,
-        relativePath: text,
-        category: assetCategory.optional(),
-        purpose: legacyAssetPurpose.optional(),
-        description: z.string(),
-        usage
-      })
-      .transform((asset, ctx) => {
-        const category =
-          asset.category ??
-          (asset.purpose === undefined ? undefined : assetCategoryOfPurpose(asset.purpose))
-        if (category === undefined) {
-          ctx.addIssue({ code: 'custom', message: '生成输入素材缺少类别', path: ['category'] })
-          return z.NEVER
-        }
-        return {
-          assetId: asset.assetId,
-          sourceId: asset.sourceId,
-          name: asset.name,
-          relativePath: asset.relativePath,
-          category,
-          description: asset.description,
-          usage: asset.usage
-        }
-      })
+    z.object({
+      assetId: text,
+      sourceId: text,
+      name: text,
+      relativePath: text,
+      category: assetCategory,
+      description: z.string(),
+      usage
+    })
   ),
   documents: z.array(
     z.object({
@@ -534,9 +490,14 @@ export const executionDocumentSchema = z.object({
 })
 export type SceneGenerationExecutionDocument = z.infer<typeof executionDocumentSchema>
 
-/** 在持久化信任边界校验并仅保留约定字段，排除凭据和运行对象。 */
+/** 在持久化信任边界只按当前格式校验并保留约定字段，排除凭据和运行对象。 */
 export function executionFromDocument(value: unknown): SceneGenerationExecution {
-  const parsed = executionDocumentSchema.safeParse(migrateExecutionDocument(value))
+  if (hasLegacyExecutionFields(value))
+    throw new AppException({
+      code: ErrorCodes.invalidRequest,
+      msg: '场景生成执行事实格式不兼容或不完整'
+    })
+  const parsed = executionDocumentSchema.safeParse(value)
   if (!parsed.success)
     throw new AppException({
       code: ErrorCodes.invalidRequest,
@@ -547,66 +508,43 @@ export function executionFromDocument(value: unknown): SceneGenerationExecution 
 }
 
 /**
- * 给旧格式补可追溯的记录时间和关键时间线。
- * 没有持久时间事实时不估算，并保持旧记录不可按当前格式继续。
+ * 当前读取边界拒绝旧执行内容：旧 phase、素材用途和提示词引用角色只能由
+ * 迁移模块转换，不能在检查点读取时静默丢失。
  */
-export function migrateExecutionDocument(value: unknown): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
-  const { phase: legacyPhase, ...record } = value as Record<string, unknown>
-  const createdAt = typeof record.createdAt === 'string' ? record.createdAt : undefined
-  const updatedAt = typeof record.updatedAt === 'string' ? record.updatedAt : createdAt
-  const timeline = Array.isArray(record.timeline) ? record.timeline : []
-  const step = typeof record.step === 'string' ? record.step : migratedStep(legacyPhase)
-  const migratedTimeline =
-    timeline.length > 0 || updatedAt === undefined
-      ? record.timeline
-      : [
-          {
-            entryId: `${String(record.operationId)}:migrated`,
-            sequence: typeof record.sequence === 'number' ? record.sequence : 0,
-            createdAt: updatedAt,
-            kind: record.failure || record.interruptReason ? 'failure' : 'stage',
-            stage: migratedStage(record.state),
-            message: '已恢复此前保存的生成记录'
-          }
-        ]
-  return {
-    ...record,
-    ...(step === undefined ? {} : { step }),
-    ...(createdAt ? { createdAt } : {}),
-    ...(updatedAt ? { updatedAt } : {}),
-    ...(migratedTimeline === undefined ? {} : { timeline: migratedTimeline })
-  }
-}
-
-/** 旧记录的 phase 只用于迁移：业务步骤一一对应，终态或等待阶段不携带业务 step。 */
-function migratedStep(phase: unknown): string | undefined {
-  if (typeof phase !== 'string') return undefined
+function hasLegacyExecutionFields(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  if (Object.hasOwn(record, 'phase')) return true
+  const inputsValue = record.inputSnapshot
+  if (inputsValue === null || typeof inputsValue !== 'object' || Array.isArray(inputsValue))
+    return false
+  const inputs = inputsValue as Record<string, unknown>
   if (
-    phase === 'waiting' ||
-    phase === 'completed' ||
-    phase === 'failed' ||
-    phase === 'cancelled'
+    Array.isArray(inputs.assets) &&
+    inputs.assets.some(
+      (asset) =>
+        asset !== null &&
+        typeof asset === 'object' &&
+        !Array.isArray(asset) &&
+        Object.hasOwn(asset, 'purpose')
+    )
   )
-    return undefined
-  return phase === 'preparing' ||
-    phase === 'generating' ||
-    phase === 'reading' ||
-    phase === 'validating' ||
-    phase === 'correcting' ||
-    phase === 'converting' ||
-    phase === 'committing' ||
-    phase === 'rollingBack'
-    ? phase
-    : undefined
-}
-
-function migratedStage(state: unknown): string {
-  if (state === 'succeeded') return 'completed'
-  if (state === 'failed') return 'failed'
-  if (state === 'cancelled') return 'cancelled'
-  if (state === 'interrupted') return 'paused'
-  if (state === 'waiting') return 'waitingReview'
-  if (state === 'committing') return 'committing'
-  return 'generating'
+    return true
+  return (
+    Array.isArray(inputs.prompts) &&
+    inputs.prompts.some((prompt) => {
+      if (prompt === null || typeof prompt !== 'object' || Array.isArray(prompt)) return false
+      const references = (prompt as Record<string, unknown>).references
+      return (
+        Array.isArray(references) &&
+        references.some(
+          (reference) =>
+            reference !== null &&
+            typeof reference === 'object' &&
+            !Array.isArray(reference) &&
+            Object.hasOwn(reference, 'role')
+        )
+      )
+    })
+  )
 }

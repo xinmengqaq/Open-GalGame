@@ -23,10 +23,22 @@ export type MediaAcquire = {
   release: () => void
 }
 
+export type MediaAcquireOptions = {
+  /** 重试代数；与 sourceId 一起决定缓存分区，空串等价于默认分区。 */
+  generation?: string
+  /** 读取完成时接收通知；随 release 解绑。 */
+  onChange?: () => void
+}
+
+export type MediaPeekOptions = {
+  /** 重试代数；需与 acquire 使用的分区一致。 */
+  generation?: string
+}
+
 export type ProjectMediaCache = {
-  acquire(sourceId: string, generation?: string, onChange?: () => void): MediaAcquire
+  acquire(sourceId: string, options?: MediaAcquireOptions): MediaAcquire
   /** 当前来源的稳定快照；尚未读取时为 loading，没有缓存项时为 null。 */
-  peek(sourceId: string, generation?: string): MediaCacheSnapshot | null
+  peek(sourceId: string, options?: MediaPeekOptions): MediaCacheSnapshot | null
 }
 
 type CacheEntry = {
@@ -117,7 +129,9 @@ export function createProjectMediaCache(deps: ProjectMediaCacheDeps): ProjectMed
     return settle(key, entry, view)
   }
 
-  function acquire(sourceId: string, generation = '', onChange?: () => void): MediaAcquire {
+  function acquire(sourceId: string, options: MediaAcquireOptions = {}): MediaAcquire {
+    const generation = options.generation ?? ''
+    const onChange = options.onChange
     const key = keyOf(sourceId, generation)
     let entry = entries.get(key)
     if (!entry) {
@@ -166,8 +180,8 @@ export function createProjectMediaCache(deps: ProjectMediaCacheDeps): ProjectMed
     }
   }
 
-  function peek(sourceId: string, generation = ''): MediaCacheSnapshot | null {
-    return entries.get(keyOf(sourceId, generation))?.snapshot ?? null
+  function peek(sourceId: string, options: MediaPeekOptions = {}): MediaCacheSnapshot | null {
+    return entries.get(keyOf(sourceId, options.generation))?.snapshot ?? null
   }
 
   return { acquire, peek }

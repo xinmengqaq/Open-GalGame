@@ -205,7 +205,6 @@ for (const viewport of [
       await openProjects(page)
       const card = page.getByTestId('project-card').filter({ hasText: '信封待重建' })
       await expect(card).toBeVisible()
-      await waitForSettled(page, '[data-testid="project-card"]')
       await page.screenshot({
         path: path.join(evidenceRoot, `10-create-closed-list-${size}.png`)
       })

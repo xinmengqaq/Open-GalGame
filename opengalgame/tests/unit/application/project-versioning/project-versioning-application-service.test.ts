@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
 import type {
   CommitVersionOperationDTO,
@@ -87,7 +87,8 @@ class MemoryVersionPorts {
       } finally {
         this.boundaryOpen = false
       }
-    }
+    },
+    recoverProject: async () => undefined
   }
 
   readonly recordGateway: VersionOperationRecordGateway = {
@@ -300,7 +301,7 @@ function createService(): {
 } {
   const ports = new MemoryVersionPorts()
   let sequence = 0
-  const service = new ProjectVersioningApplicationServiceImpl({
+  const service = new ManageProjectVersioning({
     transactions: ports.transactionGateway,
     records: ports.recordGateway,
     content: ports.contentGateway,

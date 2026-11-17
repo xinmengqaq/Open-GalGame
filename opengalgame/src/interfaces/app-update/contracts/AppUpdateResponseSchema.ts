@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { UpdateCheckVO, UpdateStatusVO } from '@application/app-update/vo/AppUpdateVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { failureResultSchema } from '../../contracts/FailureResultSchema'
 
 const appVersion = z.string().regex(/^\d+\.\d+\.\d+$/u)
 const releaseSummary = z.strictObject({
@@ -76,10 +77,8 @@ const updateCheck = z.discriminatedUnion('phase', [
   })
 ])
 
-const failedResult = z.strictObject({
-  code: z.number().refine((code) => code !== ErrorCodes.success),
-  msg: z.string().max(200)
-})
+/** 本域旧失败信封一直限制 msg≤200；共享失败模式其余不变。 */
+const boundedFailureResultSchema = failureResultSchema.extend({ msg: z.string().max(200) })
 
 /**
  * @returns 合法的更新状态；阶段与附带事实不一致时为 null。
@@ -100,7 +99,7 @@ export function parseUpdateStatusResult(value: unknown): AjaxResult<UpdateStatus
         msg: z.string().max(200),
         data: updateStatus
       }),
-      failedResult
+      boundedFailureResultSchema
     ])
     .safeParse(value)
   return parsed.success ? parsed.data : null
@@ -117,7 +116,7 @@ export function parseUpdateCheckResult(value: unknown): AjaxResult<UpdateCheckVO
         msg: z.string().max(200),
         data: updateCheck
       }),
-      failedResult
+      boundedFailureResultSchema
     ])
     .safeParse(value)
   return parsed.success ? parsed.data : null
@@ -134,7 +133,7 @@ export function parseInstallUpdateResult(value: unknown): AjaxResult<null> | nul
         msg: z.string().max(200),
         data: z.null()
       }),
-      failedResult
+      boundedFailureResultSchema
     ])
     .safeParse(value)
   return parsed.success ? parsed.data : null

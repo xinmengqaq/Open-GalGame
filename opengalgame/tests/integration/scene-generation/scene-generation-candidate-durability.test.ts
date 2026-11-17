@@ -4,20 +4,17 @@ import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, expect, it } from 'vitest'
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { afterEach, expect, it, vi } from 'vitest'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import type { GenerateSceneDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
-import { AppException } from '@common/errors/AppException'
-import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { CompletionContractViolation } from '@infrastructure/ai/execution/executionErrors'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
-import {
-  arrangementPath,
-  sourceDescriptorPath
-} from '@infrastructure/project-files/projectFilePaths'
+import { sourceDescriptorPath } from '@infrastructure/project-files/projectFilePaths'
+import { arrangementPath } from '@infrastructure/scene-canvas/sceneCanvasPaths'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 import { readCommitFiles, resolveRefIfExists } from '@infrastructure/git/objects/gitTree'
+import type { DurableEffectRecord } from '@infrastructure/workflow/DurableEffectRecord'
 import { readDurableEffects } from '@infrastructure/workflow/execution/durableEffect'
 import { createSceneGeneration } from '../../../../harness/acceptance/support/sceneGenerationEntry'
 import { streamingFetch } from '../ai/streamingFetch'
@@ -82,6 +79,74 @@ it('摘要缺失但合法入口进入审阅，不再调用模型', async () => {
   expect(candidate.preview.validationReport.issues).toEqual([])
   expect(JSON.stringify(status)).not.toContain('test-secret')
 })
+
+it('候选副作用按已开始、智能体、保存修订、记录修订、完成记录推进', async () => {
+  const fixtureState: { current?: DurabilityFixture } = {}
+  let agentObserved = false
+  const observed: Array<{ stage: string; effects: DurableEffectRecord[] }> = []
+  const f = await fixture(async (body) => {
+    if (wroteEntry(body)) {
+      if (!fixtureState.current) throw new Error('夹具尚未建立')
+      if (!agentObserved) {
+        agentObserved = true
+        const active = fixtureState.current
+        const execution = await executionOf(active)
+        observed.push({
+          stage: 'agent',
+          effects: await readDurableEffects(join(active.config.userStateRoot, 'ai'), execution)
+        })
+      }
+      return structuredResult(body)
+    }
+    return skillOrWrite(body)
+  })
+  fixtureState.current = f
+  const root = join(f.config.userStateRoot, 'ai')
+  const save = f.app.ports.artifacts.saveCandidateRevision.bind(f.app.ports.artifacts)
+  vi.spyOn(f.app.ports.artifacts, 'saveCandidateRevision').mockImplementation(async (execution) => {
+    observed.push({ stage: 'saveRevision', effects: await readDurableEffects(root, execution) })
+    return save(execution)
+  })
+  const write = f.app.ports.executions.writeExecution.bind(f.app.ports.executions)
+  let recorded = false
+  vi.spyOn(f.app.ports.executions, 'writeExecution').mockImplementation(async (execution) => {
+    const result = await write(execution)
+    if (!recorded && execution.candidateSnapshotId) {
+      recorded = true
+      observed.push({
+        stage: 'recordCandidateRevision',
+        effects: await readDurableEffects(root, execution)
+      })
+    }
+    return result
+  })
+
+  await start(f)
+
+  const execution = await executionOf(f)
+  expect(observed.map((item) => item.stage)).toEqual([
+    'agent',
+    'saveRevision',
+    'recordCandidateRevision'
+  ])
+  for (const item of observed) {
+    expect(item.effects).toHaveLength(1)
+    expect(item.effects[0]).toMatchObject({
+      stepId: 'generate-0-initial',
+      status: 'started'
+    })
+  }
+  const finalEffects = await readDurableEffects(root, execution)
+  expect(finalEffects).toHaveLength(1)
+  expect(finalEffects[0]).toMatchObject({
+    stepId: 'generate-0-initial',
+    status: 'completed',
+    candidateRevision: execution.candidateSnapshotId,
+    resultDigest: execution.candidateSnapshotId
+  })
+  expect(execution.candidateSnapshotId).toMatch(/^[0-9a-f]{40}$/u)
+})
+
 it('截断后的无效入口保留修订并进入审阅', async () => {
   const f = await fixture((body) =>
     wroteEntry(body) ? truncated(body) : skillOrWrite(body, 'changeBg:missing.svg;\nend;')
@@ -297,7 +362,7 @@ async function fixture(
     publishProgress: (event: { phase: string; candidateSnapshotId?: string }) => {
       progress.push(event)
     },
-    versioning: new ProjectVersioningApplicationServiceImpl({
+    versioning: new ManageProjectVersioning({
       ...createProjectVersioningGateways(join(root, 'state')),
       nextId: () => randomUUID()
     }),
@@ -467,14 +532,6 @@ function summaryResponse(): Response {
     ],
     usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
   })
-}
-
-async function until(ready: () => boolean): Promise<void> {
-  const started = Date.now()
-  while (!ready()) {
-    if (Date.now() - started > 5000) throw new Error('等待条件没有出现')
-    await Promise.resolve()
-  }
 }
 
 async function writeProject(projectRoot: string): Promise<void> {

@@ -1,43 +1,32 @@
 const { test, expect } = require('@playwright/test')
 const path = require('node:path')
 
-const importOk = path.join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'prototypes',
-  'home',
-  'e2e',
-  'fixtures',
-  'import-ok'
-)
-const importFail = path.join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'prototypes',
-  'home',
-  'e2e',
-  'fixtures',
-  'import-fail'
-)
-const createOk = path.join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'prototypes',
-  'home',
-  'e2e',
-  'fixtures',
-  'import-ok'
-)
+const fixtures = path.join(__dirname, 'fixtures')
+const importOk = path.join(fixtures, 'import-ok')
+const importFail = path.join(fixtures, 'import-fail')
+const createOk = path.join(fixtures, 'import-ok')
 
 async function openHome(page) {
   await page.goto('/')
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 10000 })
+}
+
+async function homeLayout(page) {
+  return page.evaluate(() => {
+    const home = document.querySelector('section[aria-label="首页"]')
+    const rectOf = (node) => {
+      const { x, y, width, height } = node.getBoundingClientRect()
+      return { x, y, width, height }
+    }
+    return {
+      home: rectOf(home),
+      header: rectOf(home.querySelector('header')),
+      stage: rectOf(home.querySelector('main')),
+      footer: rectOf(home.querySelector('footer')),
+      scrollWidth: document.documentElement.scrollWidth,
+      scrollHeight: document.documentElement.scrollHeight
+    }
+  })
 }
 
 test('入场后入口可点', async ({ page }) => {
@@ -116,42 +105,77 @@ test('连接协议用统一下拉选择', async ({ page }) => {
 test('连接测试失败就地显示且不重复 Toast', async ({ page }) => {
   await openHome(page)
   await page.getByRole('button', { name: '连接设置' }).click()
+  const settings = page.getByRole('dialog', { name: '连接设置' })
   await page.locator('#model-id').fill('fail-timeout')
   await page.getByRole('button', { name: '测试连接' }).click()
-  await expect(page.getByText('连接测试未通过')).toBeVisible()
-  await expect(page.getByText('设置已保存')).toHaveCount(0)
+  await expect(settings.locator('[data-tone="error"]')).toBeVisible()
+  await expect(settings.locator('[data-tone="success"]')).toHaveCount(0)
+  await expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '测试连接' })).toBeEnabled()
 })
 
 test('拉取上游模型列表后用统一下拉填入模型', async ({ page }) => {
   await openHome(page)
   await page.getByRole('button', { name: '连接设置' }).click()
+  const settings = page.getByRole('dialog', { name: '连接设置' })
   await page.locator('#base-url').fill('http://127.0.0.1:8080/v1')
   await page.locator('#api-key').fill('sk-demo')
   await page.getByRole('button', { name: '拉取列表' }).click()
-  await expect(page.getByText('已拉取 2 个模型')).toBeVisible()
+  await expect(settings.locator('[data-tone="success"]')).toBeVisible()
+  await expect(page.locator('#model-id')).toHaveAttribute('role', 'combobox')
   await page.locator('#model-id').click()
-  await page.getByRole('option', { name: 'demo-chat' }).click()
+  const listbox = page.getByRole('listbox')
+  await expect(listbox.getByRole('option')).toHaveCount(2)
+  await listbox.getByRole('option', { name: 'demo-chat', exact: true }).click()
   await expect(page.locator('#model-id')).toHaveText('demo-chat')
 })
 
 test('拉取模型列表失败就地显示', async ({ page }) => {
   await openHome(page)
   await page.getByRole('button', { name: '连接设置' }).click()
+  const settings = page.getByRole('dialog', { name: '连接设置' })
   await page.locator('#base-url').fill('http://127.0.0.1:8080/fail')
   await page.locator('#api-key').fill('sk-demo')
   await page.getByRole('button', { name: '拉取列表' }).click()
-  await expect(page.getByText('无法拉取模型列表')).toBeVisible()
+  await expect(settings.locator('[data-tone="error"]')).toBeVisible()
+  await expect(page.locator('#model-id')).toHaveRole('textbox')
+  await expect(page.getByRole('option')).toHaveCount(0)
 })
 
-test('保存成功只在弹窗内提示', async ({ page }) => {
+// 保存成功按 2026-11-13 用户决定：关闭弹窗，只在应用内容区显示一次约 4 秒的
+// 悬浮成功通知，自动消失，不占布局、不持久保留；重开弹窗不要求旧成功提示继续存在。
+test('保存成功关闭弹窗并单次悬浮通知后自动消失', async ({ page }) => {
   await openHome(page)
   await page.getByRole('button', { name: '连接设置' }).click()
+  const settings = page.getByRole('dialog', { name: '连接设置' })
   await page.locator('#base-url').fill('http://127.0.0.1:8080/v1')
   await page.locator('#model-id').fill('demo')
   await page.locator('#api-key').fill('sk-demo')
-  await page.getByRole('button', { name: '保存' }).click()
-  await expect(page.getByText('设置已保存')).toBeVisible()
-  await expect(page.locator('[aria-live="polite"]')).not.toContainText('设置已保存')
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(settings).toBeHidden()
+
+  const notifications = page.getByRole('region', { name: /Notifications/ })
+  const successToasts = notifications.locator('[data-sonner-toast][data-type="success"]')
+  await expect(successToasts).toHaveCount(1)
+  await expect(successToasts).toBeVisible()
+  await expect(page.locator('[data-sonner-toaster]')).toHaveCSS('position', 'fixed')
+
+  const layoutWithToast = await homeLayout(page)
+  // 不悬停也不聚焦通知，让既有 4 秒计时自然走完。
+  await page.mouse.move(0, 0)
+  const toastHasFocus = await page.evaluate(() => {
+    const toast = document.querySelector('[data-sonner-toast]')
+    return toast !== null && toast.contains(document.activeElement)
+  })
+  expect(toastHasFocus).toBe(false)
+  await expect(successToasts).toHaveCount(0)
+  expect(await homeLayout(page)).toEqual(layoutWithToast)
+
+  await page.getByRole('button', { name: '连接设置' }).click()
+  await expect(settings).toBeVisible()
+  await expect(page.locator('#base-url')).toBeVisible()
+  await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled()
+  await expect(notifications.locator('[data-sonner-toast]')).toHaveCount(0)
 })
 
 test('1280 入口不被裁切', async ({ page }) => {

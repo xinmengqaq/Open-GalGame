@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
 import type { SceneGenerationHistoryReader } from '@application/scene-generation/ports/SceneGenerationHistoryReader'
-import { SceneGenerationHistoryQueryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationHistoryQueryServiceImpl'
+import { QuerySceneGenerationHistory } from '@application/scene-generation/services/impl/QuerySceneGenerationHistory'
 import type { SceneGenerationStateVO } from '@application/scene-generation/vo/SceneGenerationVO'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 
@@ -22,7 +22,7 @@ const stored: SceneGenerationExecution[] = [
 const appendOrder = stored.map((execution) => execution.operationId)
 
 it('场景历史按记录时间倒序向更早分页，同时间以后追加的操作优先', async () => {
-  const service = new SceneGenerationHistoryQueryServiceImpl(unreadHistory, {
+  const service = new QuerySceneGenerationHistory(unreadHistory, {
     listSceneExecutions: async () => stored
   })
   const scope = { projectId: 'project-1', sceneId: 'scene-1' }

@@ -159,9 +159,7 @@ describe('渲染状态严格响应', () => {
       )
     ).toBeNull()
     expect(
-      parseSceneGenerationStatusResult(
-        success(status({ knownIssues: [{ ...enhanced, line: 0 }] }))
-      )
+      parseSceneGenerationStatusResult(success(status({ knownIssues: [{ ...enhanced, line: 0 }] })))
     ).toBeNull()
   })
 
@@ -181,7 +179,13 @@ describe('渲染状态严格响应', () => {
   })
 
   it('接受 1 到 4 题和已回答事实，拒绝 5 题、未知字段和内部记录', () => {
-    const question = (index: number) => ({
+    const question = (
+      index: number
+    ): {
+      questionId: string
+      prompt: string
+      options: Array<{ id: string; label: string; description: string }>
+    } => ({
       questionId: `q${index}`,
       prompt: `问题 ${index}`,
       options: [1, 2, 3].map((option) => ({
@@ -270,7 +274,7 @@ describe('渲染状态严格响应', () => {
     ).toBe(false)
   })
 
-  it('保留安全失败分类和动作，拒绝分类、状态和原因名', () => {
+  it('保留安全失败分类和动作，拒绝分类、状态、原因名和旧标记', () => {
     const parsed = parseSceneGenerationStatusResult(
       success(
         status({
@@ -281,8 +285,7 @@ describe('渲染状态严格响应', () => {
             failureClass: 'modelAuth',
             nextActions: ['checkConnection', 'viewInputSummary'],
             reference: '0123456789ab',
-            unverified: true,
-            legacy: false
+            unverified: true
           }
         })
       )
@@ -294,9 +297,21 @@ describe('渲染状态严格响应', () => {
       failureClass: 'modelAuth',
       nextActions: ['checkConnection', 'viewInputSummary'],
       reference: '0123456789ab',
-      unverified: true,
-      legacy: false
+      unverified: true
     })
+    expect(
+      parseSceneGenerationStatusResult(
+        success(
+          status({
+            failure: {
+              code: 4102,
+              message: '模型鉴权失败',
+              legacy: true
+            } as never
+          })
+        )
+      )
+    ).toBeNull()
     expect(
       parseSceneGenerationStatusResult(
         success(
@@ -341,7 +356,9 @@ describe('渲染状态严格响应', () => {
   })
 
   it('接受最近 6 条安全进度，拒绝超过 6 条和内部字段', () => {
-    const progress = (sequence: number) => ({
+    const progress = (
+      sequence: number
+    ): { sequence: number; createdAt: string; stage: string; message: string } => ({
       sequence,
       createdAt: '2026-10-31T12:34:56.789Z',
       stage: 'generating',
@@ -374,7 +391,7 @@ describe('渲染状态严格响应', () => {
     ).toBeNull()
   })
 
-  it('历史摘要接受安全失败原因和旧记录标记，拒绝额外内部字段', () => {
+  it('历史摘要接受安全失败原因，拒绝旧记录标记和额外内部字段', () => {
     const summary = {
       projectId: 'project-1',
       sceneId: 'scene-1',
@@ -386,8 +403,7 @@ describe('渲染状态严格响应', () => {
       stage: 'failed',
       message: '本次生成未完成',
       createdAt: '2026-11-04T12:34:56.789Z',
-      failureReason: 'modelFailure',
-      legacy: true
+      failureReason: 'modelFailure'
     }
     const parsed = parseSceneGenerationHistoryResult({
       code: ErrorCodes.success,
@@ -395,9 +411,15 @@ describe('渲染状态严格响应', () => {
       data: [summary]
     })
     expect(parsed?.data?.[0]).toMatchObject({
-      failureReason: 'modelFailure',
-      legacy: true
+      failureReason: 'modelFailure'
     })
+    expect(
+      parseSceneGenerationHistoryResult({
+        code: ErrorCodes.success,
+        msg: '场景历史已读取',
+        data: [{ ...summary, legacy: true }]
+      })
+    ).toBeNull()
     expect(
       parseSceneGenerationHistoryResult({
         code: ErrorCodes.success,

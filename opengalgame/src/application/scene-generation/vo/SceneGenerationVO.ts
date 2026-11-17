@@ -1,5 +1,5 @@
 import type { SceneGenerationReplyDTO } from '../dto/SceneGenerationDTO'
-import type { SceneGenerationPublicFailure } from '../services/impl/SceneGenerationFailureFacts'
+import type { SceneGenerationPublicFailure } from './SceneGenerationFailureVO'
 
 export type SceneGenerationStateVO =
   | 'pending'
@@ -11,6 +11,20 @@ export type SceneGenerationStateVO =
   | 'succeeded'
   | 'failed'
   | 'cancelled'
+
+export type SceneGenerationRunMode = 'generate' | 'repair' | 'validate'
+
+/**
+ * 非中断修复重跑的来源身份。只保留稳定身份，不保存路径或检查点内部。
+ * 旧记录没有该事实时保持缺失。
+ */
+export interface SceneGenerationRepairSource {
+  readonly operationId: string
+  readonly threadId: string
+  readonly branchId: string
+  readonly checkpointId: string
+  readonly candidateSnapshotId: string
+}
 
 /**
  * 非终态的业务步骤。`state` 是唯一权威运行状态，

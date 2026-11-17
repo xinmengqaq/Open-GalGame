@@ -7,6 +7,7 @@ import type {
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { failureResultSchema } from '../../contracts/FailureResultSchema'
 
 const identity = z.string().min(1).max(128)
 const stateSchema = z.enum([
@@ -31,10 +32,6 @@ const stageSchema = z.enum([
   'cancelled',
   'paused'
 ])
-const failedResultSchema = z.strictObject({
-  code: z.number().refine((code) => code !== ErrorCodes.success),
-  msg: z.string()
-})
 const renderStatusSchema = z.strictObject({
   projectId: identity,
   sceneId: identity,
@@ -270,7 +267,6 @@ const renderStatusSchema = z.strictObject({
         .regex(/^[0-9a-f]{12}$/)
         .optional(),
       unverified: z.boolean().optional(),
-      legacy: z.boolean().optional(),
       candidateSnapshotId: identity.optional(),
       previewAuthorization: z.enum(['readOnly', 'unavailable']).optional()
     })
@@ -311,8 +307,7 @@ const historySummarySchema = z.strictObject({
       'contextOverflow',
       'correctionsExhausted'
     ])
-    .optional(),
-  legacy: z.boolean().optional()
+    .optional()
 })
 const previewSchema = z.strictObject({
   previewSessionId: identity,
@@ -324,7 +319,7 @@ const previewSchema = z.strictObject({
 function success<T extends z.ZodType>(data: T): z.ZodType<AjaxResult<z.output<T>>> {
   return z.union([
     z.strictObject({ code: z.literal(ErrorCodes.success), msg: z.string(), data }),
-    failedResultSchema
+    failureResultSchema
   ])
 }
 

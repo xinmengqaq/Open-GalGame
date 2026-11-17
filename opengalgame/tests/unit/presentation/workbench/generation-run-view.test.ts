@@ -73,7 +73,6 @@ describe('generationRunViewOf', () => {
       activity: { kind: 'tool', lastActivityAt: '2026-11-04T12:00:07.000Z' },
       interaction: null,
       canCancel: true,
-      legacy: false,
       resume: { canResume: false, reason: null }
     })
     expect(view?.progress).toBe(recentProgress)
@@ -102,9 +101,7 @@ describe('generationRunViewOf', () => {
         nearestAssetName: '教室'
       }
     ] as const
-    const view = generationRunViewOf(
-      status({ knownIssues, previewAvailable: false })
-    )
+    const view = generationRunViewOf(status({ knownIssues, previewAvailable: false }))
     expect(view?.validation.knownIssues).toBe(knownIssues)
     expect(view?.validation.knownIssues[0]?.message).toBe('候选引用的素材不存在')
     expect(view?.validation.ok).toBe(false)
@@ -118,7 +115,7 @@ describe('generationRunViewOf', () => {
     expect(view?.progress).toBe(progress)
   })
 
-  it('旧失败记录保持缺失分类和动作，只标旧记录', () => {
+  it('失败记录缺分类和动作时保持缺失，不补造', () => {
     const view = generationRunViewOf(
       status({
         state: 'failed',
@@ -129,8 +126,7 @@ describe('generationRunViewOf', () => {
         failure: {
           code: 4101,
           message: '模型连接中断，本次生成未完成。',
-          unverified: false,
-          legacy: true
+          unverified: false
         }
       })
     )
@@ -140,10 +136,8 @@ describe('generationRunViewOf', () => {
       message: '模型连接中断，本次生成未完成。',
       failureClass: null,
       nextActions: [],
-      legacy: true,
       canRetryRepair: false
     })
-    expect(view?.legacy).toBe(true)
     expect(view?.failureClass).toBeNull()
     expect(view?.nextActions).toEqual([])
     expect(generationRunActionsOf(view!)).toEqual(['regenerate', 'reload', 'open-summary'])
@@ -168,15 +162,13 @@ describe('generationRunViewOf', () => {
           failureClass: 'modelTransient',
           nextActions: ['retryOperation', 'viewCandidate'],
           reference: '0123456789ab',
-          unverified: false,
-          legacy: false
+          unverified: false
         }
       })
     )
     expect(view?.failure).toMatchObject({
       failureClass: 'modelTransient',
-      nextActions: ['retryOperation', 'viewCandidate'],
-      legacy: false
+      nextActions: ['retryOperation', 'viewCandidate']
     })
     expect(view?.failureClass).toBe('modelTransient')
     expect(view?.nextActions).toEqual(['retryOperation', 'viewCandidate'])
@@ -194,7 +186,7 @@ describe('generationRunViewOf', () => {
     expect(actions.join('|')).not.toContain('checkConnection')
   })
 
-  it('旧记录缺失败分类时按失败原因桥接分类和下一步动作', () => {
+  it('缺失败分类时按失败原因桥接分类和下一步动作', () => {
     const view = generationRunViewOf(
       status({
         state: 'failed',
@@ -206,8 +198,7 @@ describe('generationRunViewOf', () => {
           code: 4101,
           message: '模型调用失败，本次生成未完成',
           reason: 'modelFailure',
-          unverified: false,
-          legacy: true
+          unverified: false
         }
       })
     )
@@ -215,7 +206,6 @@ describe('generationRunViewOf', () => {
     expect(view?.failureClass).toBe('modelTransient')
     expect(view?.nextActions).toEqual(['retryOperation', 'viewCandidate'])
     expect(view?.failure?.title).toBe('模型暂时不可用')
-    expect(view?.legacy).toBe(true)
   })
 
   it('失败候选缺检查点时不能打开或查看，并说明真实原因', () => {
@@ -235,8 +225,7 @@ describe('generationRunViewOf', () => {
           reason: 'modelFailure',
           failureClass: 'modelTransient',
           nextActions: ['viewCandidate'],
-          unverified: false,
-          legacy: false
+          unverified: false
         }
       })
     )
@@ -276,8 +265,7 @@ describe('generationRunViewOf', () => {
           reason: 'modelFailure',
           failureClass: 'modelTransient',
           nextActions: ['retryOperation', 'viewCandidate'],
-          unverified: false,
-          legacy: false
+          unverified: false
         }
       })
     )
@@ -308,8 +296,7 @@ describe('generationRunViewOf', () => {
             message: '输入或要求不能继续生成',
             failureClass,
             nextActions,
-            unverified: false,
-            legacy: false
+            unverified: false
           }
         })
       )
@@ -342,8 +329,7 @@ describe('generationRunViewOf', () => {
           failureClass: 'modelTransient',
           nextActions: ['retryOperation', 'viewCandidate'],
           reference: '0123456789ab',
-          unverified: true,
-          legacy: false
+          unverified: true
         }
       })
     )

@@ -43,6 +43,10 @@ import type {
   InputCardNode
 } from './sceneCanvas.types'
 
+/** 画布提示显示时长；拒绝高亮只保留到下一次尝试。 */
+const NOTICE_CLEAR_MS = 3400
+const REJECT_CLEAR_MS = 900
+
 function editActionOfCard(card: SessionCard): string | null {
   if (card.kind === 'prompt') return null
   if (card.kind === 'animation' || card.kind === 'effect') return '选择预设'
@@ -130,6 +134,12 @@ export function useSceneCanvas(
   const isConnecting = connectingFromCardId !== null
   const rejectedRelationId = reject?.relationId ?? null
 
+  // 关系从 store 消失时在渲染期收起弹窗：同一组件的条件 setState 会立即重渲染，
+  // 关闭落定后撤销/重做再装回同一 relationId 也不会重开（不能让存在性派生把它复活）。
+  if (relationId !== null && !relations.some((relation) => relation.relationId === relationId)) {
+    setRelationId(null)
+  }
+
   useEffect(() => {
     if (interacting.current) return
     setNodes((current) => {
@@ -190,7 +200,7 @@ export function useSceneCanvas(
     const currentKey = notice.key
     const timer = window.setTimeout(() => {
       setNotice((value) => (value && value.key === currentKey ? null : value))
-    }, 3400)
+    }, NOTICE_CLEAR_MS)
     return () => window.clearTimeout(timer)
   }, [notice])
 
@@ -199,7 +209,7 @@ export function useSceneCanvas(
     const currentKey = reject.key
     const timer = window.setTimeout(() => {
       setReject((value) => (value && value.key === currentKey ? null : value))
-    }, 900)
+    }, REJECT_CLEAR_MS)
     return () => window.clearTimeout(timer)
   }, [reject])
 
@@ -209,12 +219,6 @@ export function useSceneCanvas(
   }, [])
 
   useConnectionPreviewMotion(viewportRef, isConnecting)
-
-  useEffect(() => {
-    if (!relationId) return
-    if (relations.some((relation) => relation.relationId === relationId)) return
-    setRelationId(null)
-  }, [relationId, relations])
 
   const finishConnection = useCallback(() => {
     flowStore.getState().cancelConnection()

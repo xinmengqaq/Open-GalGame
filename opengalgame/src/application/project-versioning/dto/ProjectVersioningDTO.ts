@@ -1,4 +1,4 @@
-import type { VersionTarget } from '../models/VersionTarget'
+import type { VersionTarget } from './VersionTarget'
 
 /** 用户主动保存，或周期、生成前等系统保存。 */
 export type VersionSaveMode = 'manual' | 'system'
@@ -13,6 +13,11 @@ export type InitializeWorkBaselineDTO = {
 }
 
 /** 在已有基线上固定本次操作的范围。 */
+/** 同一写队列内认领已有 caller 身份或创建新 prepared 身份。 */
+export type PrepareCallerVersionOperationDTO = PrepareVersionOperationDTO & {
+  callerOperationId: string
+}
+
 export type PrepareVersionOperationDTO = {
   projectId: string
   sourceModule: string
@@ -49,6 +54,7 @@ export type FindCallerVersionOperationDTO = {
 export type CommitVersionOperationDTO = {
   projectId: string
   operationId: string
+  callerOperationId?: string
   baselineRef: string
   input: FileChangesInputDTO | ImmutableCandidateInputDTO
   saveMode: VersionSaveMode

@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
 
 import type { ProjectFileDialogGateway } from '@application/projects/ports/ProjectFileDialogGateway'
 import type { ProjectWorkspaceService } from '@application/projects/services/ProjectWorkspaceService'
-import { ProjectFilesApplicationServiceImpl } from '@application/project-files/services/impl/ProjectFilesApplicationServiceImpl'
-import { ProjectApplicationServiceImpl } from '@application/projects/services/impl/ProjectApplicationServiceImpl'
-import { ProjectCommitServiceImpl } from '@application/projects/services/impl/ProjectCommitServiceImpl'
-import { ProjectWorkspaceServiceImpl } from '@application/projects/services/impl/ProjectWorkspaceServiceImpl'
-import { ProjectRecoveryApplicationServiceImpl } from '@application/projects/services/impl/ProjectRecoveryApplicationServiceImpl'
+import { ManageProjectFiles } from '@application/project-files/services/impl/ManageProjectFiles'
+import { ManageProjects } from '@application/projects/services/impl/ManageProjects'
+import { CommitProject } from '@application/projects/services/impl/CommitProject'
+import { ManageProjectWorkspace } from '@application/projects/services/impl/ManageProjectWorkspace'
+import { RecoverProjectOperations } from '@application/projects/services/impl/RecoverProjectOperations'
 import type { LoggerGateway } from '@common/logging/LoggerGateway'
 import type { ProjectDomainService } from '@domain/projects/services/ProjectDomainService'
 import { ProjectDomainServiceImpl } from '@domain/projects/services/impl/ProjectDomainServiceImpl'
@@ -15,19 +16,20 @@ import { LocalProjectListQueryGatewayImpl } from '@infrastructure/projects/Local
 import { LocalProjectNotificationGatewayImpl } from '@infrastructure/projects/LocalProjectNotificationGatewayImpl'
 import { LocalProjectOperationJournalGatewayImpl } from '@infrastructure/projects/LocalProjectOperationJournalGatewayImpl'
 import { LocalProjectRegistrationGatewayImpl } from '@infrastructure/projects/LocalProjectRegistrationGatewayImpl'
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
 import { LocalDesktopFileOpenGatewayImpl } from '@infrastructure/project-files/LocalDesktopFileOpenGatewayImpl'
 import { LocalProjectFileOperationGatewayImpl } from '@infrastructure/project-files/LocalProjectFileOperationGatewayImpl'
 import { LocalProjectInputSourceReaderGatewayImpl } from '@infrastructure/project-files/LocalProjectInputSourceReaderGatewayImpl'
 import { LocalProjectWorkVersionGatewayImpl } from '@infrastructure/project-files/LocalProjectWorkVersionGatewayImpl'
 import { LocalSceneCanvasArrangementInspectionGatewayImpl } from '@infrastructure/scene-canvas/LocalSceneCanvasArrangementInspectionGatewayImpl'
-import { SceneCanvasApplicationServiceImpl } from '@application/scene-canvas/services/impl/SceneCanvasApplicationServiceImpl'
+import { EditSceneCanvas } from '@application/scene-canvas/services/impl/EditSceneCanvas'
 import {
   LocalSceneCanvasArrangementPersistenceGatewayImpl,
   type SceneCanvasProjectLocation
 } from '@infrastructure/scene-canvas/LocalSceneCanvasArrangementPersistenceGatewayImpl'
 import { LocalSceneCanvasWorkVersionGatewayImpl } from '@infrastructure/scene-canvas/LocalSceneCanvasWorkVersionGatewayImpl'
+import { CanvasArrangementMigration } from '@infrastructure/scene-canvas/migration/CanvasArrangementMigration'
 import { Project } from '@domain/projects/models/Project'
 import { LocalProjectStorageGatewayImpl } from '@infrastructure/projects/LocalProjectStorageGatewayImpl'
 import { LocalProjectBaselineGatewayImpl } from '@infrastructure/projects/LocalProjectBaselineGatewayImpl'
@@ -42,11 +44,11 @@ export function createProjectServices(options: {
   openPath?: (absolutePath: string) => Promise<string>
   workspace?: ProjectWorkspaceService
 }): {
-  projects: ProjectApplicationServiceImpl
-  projectFiles: ProjectFilesApplicationServiceImpl
-  recovery: ProjectRecoveryApplicationServiceImpl
-  sceneCanvas: SceneCanvasApplicationServiceImpl
-  versioning: ProjectVersioningApplicationServiceImpl
+  projects: ManageProjects
+  projectFiles: ManageProjectFiles
+  recovery: RecoverProjectOperations
+  sceneCanvas: EditSceneCanvas
+  versioning: ManageProjectVersioning
   canvasVersions: LocalSceneCanvasWorkVersionGatewayImpl
   journal: LocalProjectOperationJournalGatewayImpl
   registration: LocalProjectRegistrationGatewayImpl
@@ -63,12 +65,12 @@ export function createProjectServices(options: {
   const versionGateways = createProjectVersioningGateways(userDirectory)
   const workspace =
     options.workspace ??
-    new ProjectWorkspaceServiceImpl({
+    new ManageProjectWorkspace({
       identity: new LocalProjectSceneIdentityGatewayImpl(userDirectory),
       seeds: new LocalProjectSceneSeedGatewayImpl(userDirectory),
       baseline: new LocalProjectBaselineGatewayImpl(versionGateways.transactions)
     })
-  const commit = new ProjectCommitServiceImpl({
+  const commit = new CommitProject({
     domain,
     storage,
     registration,
@@ -78,27 +80,12 @@ export function createProjectServices(options: {
     workspace
   })
   const listQuery = new LocalProjectListQueryGatewayImpl(userDirectory)
-  const projects = new ProjectApplicationServiceImpl({
-    dialogs: options.dialogs,
-    storage,
-    journal,
-    execution,
-    identities: new LocalProjectIdentityRepositoryImpl(userDirectory),
-    domain,
-    commit,
-    nextId: randomUUID,
-    notifications,
-    listQuery,
-    registration,
-    logger,
-    workspace
-  })
   const sources = new LocalProjectInputSourceReaderGatewayImpl()
-  const versioning = new ProjectVersioningApplicationServiceImpl({
+  const versioning = new ManageProjectVersioning({
     ...versionGateways,
     nextId: randomUUID
   })
-  const projectFiles = new ProjectFilesApplicationServiceImpl({
+  const projectFiles = new ManageProjectFiles({
     listQuery,
     domain,
     storage,
@@ -111,10 +98,25 @@ export function createProjectServices(options: {
     desktopOpen: new LocalDesktopFileOpenGatewayImpl(options.openPath),
     createSourceId: randomUUID,
     createFolderId: randomUUID,
-    createFileId: randomUUID,
-    createOperationId: randomUUID
+    createFileId: randomUUID
   })
-  const recovery = new ProjectRecoveryApplicationServiceImpl({ journal, execution, commit, logger })
+  const projects = new ManageProjects({
+    dialogs: options.dialogs,
+    storage,
+    journal,
+    execution,
+    identities: new LocalProjectIdentityRepositoryImpl(userDirectory),
+    domain,
+    commit,
+    nextId: randomUUID,
+    notifications,
+    listQuery,
+    registration,
+    logger,
+    workspace,
+    recoverProjectFiles: (projectId) => projectFiles.recoverProjectFiles(projectId)
+  })
+  const recovery = new RecoverProjectOperations({ journal, execution, commit, logger })
   const locateCanvasProject = async (projectId: string): Promise<SceneCanvasProjectLocation> => {
     const registration = await listQuery.findRegistration(projectId)
     domain.requireRegistered(registration)
@@ -125,10 +127,16 @@ export function createProjectServices(options: {
     })
     return { projectId: project.id, directory: registration.directory }
   }
+  const canvasMigration = new CanvasArrangementMigration({
+    backupRoot: join(userDirectory, 'migrations', 'scene-canvas')
+  })
   const canvasVersions = new LocalSceneCanvasWorkVersionGatewayImpl(versioning, locateCanvasProject)
-  const sceneCanvas = new SceneCanvasApplicationServiceImpl({
+  const sceneCanvas = new EditSceneCanvas({
     sources: projectFiles,
-    persistence: new LocalSceneCanvasArrangementPersistenceGatewayImpl(locateCanvasProject),
+    persistence: new LocalSceneCanvasArrangementPersistenceGatewayImpl(
+      locateCanvasProject,
+      canvasMigration
+    ),
     versions: canvasVersions,
     workspace: projects,
     nextId: randomUUID

@@ -124,9 +124,9 @@ export class SceneGenerationProgressPublisher {
       this.publishing = false
       if (this.stopped || this.options.signal?.aborted) {
         this.dispose()
-        return
+      } else if (this.dirty) {
+        this.queue(this.publishIntervalMs)
       }
-      if (this.dirty) this.queue(this.publishIntervalMs)
     }
   }
 }

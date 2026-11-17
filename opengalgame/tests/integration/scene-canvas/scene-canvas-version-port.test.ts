@@ -6,17 +6,18 @@ import { afterEach, describe, expect, it } from 'vitest'
 import * as git from 'isomorphic-git'
 
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
-import { ProjectVersioningApplicationServiceImpl } from '@application/project-versioning/services/impl/ProjectVersioningApplicationServiceImpl'
+import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
-import { SceneCanvasApplicationServiceImpl } from '@application/scene-canvas/services/impl/SceneCanvasApplicationServiceImpl'
+import { EditSceneCanvas } from '@application/scene-canvas/services/impl/EditSceneCanvas'
 import { AppException } from '@common/errors/AppException'
 import { ProjectErrorCodes } from '@domain/projects/errors/ProjectErrorCodes'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
-import { arrangementPath } from '@infrastructure/project-files/projectFilePaths'
+import { arrangementPath } from '@infrastructure/scene-canvas/sceneCanvasPaths'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 import { LocalSceneCanvasArrangementPersistenceGatewayImpl } from '@infrastructure/scene-canvas/LocalSceneCanvasArrangementPersistenceGatewayImpl'
 import { LocalSceneCanvasWorkVersionGatewayImpl } from '@infrastructure/scene-canvas/LocalSceneCanvasWorkVersionGatewayImpl'
+import { CanvasArrangementMigration } from '@infrastructure/scene-canvas/migration/CanvasArrangementMigration'
 
 const directories: string[] = []
 
@@ -39,7 +40,7 @@ describe('场景画布版本窄端口', () => {
     await versioning.initializeBaseline({ projectId: 'project-1', initialPaths: ['keep.txt'] })
     const head = await headOf(world.projectRoot)
     const store = persistence(world.projectRoot)
-    await store.writeArrangement(arrangement())
+    await store.writeArrangement(arrangement(), null)
     const relativePath = arrangementPath('scene-1', 'canvas-1')
     const before = await readFile(join(world.projectRoot, relativePath))
     const versions = canvasVersions(versioning, world.projectRoot)
@@ -81,7 +82,7 @@ describe('场景画布版本窄端口', () => {
       'hist-kept-2'
     ])
     const store = persistence(world.projectRoot)
-    await store.writeArrangement(arrangement())
+    await store.writeArrangement(arrangement(), null)
     await versioning.initializeBaseline({
       projectId: 'project-1',
       initialPaths: [arrangementPath('scene-1', 'canvas-1')]
@@ -108,7 +109,7 @@ describe('场景画布版本窄端口', () => {
     const world = await registeredProject()
     const versioning = versioningFor(world.userDirectory, ['op-missing', 'op-missing-save'])
     const store = persistence(world.projectRoot)
-    await store.writeArrangement(arrangement())
+    await store.writeArrangement(arrangement(), null)
     const versions = canvasVersions(versioning, world.projectRoot)
 
     await expect(
@@ -134,7 +135,7 @@ describe('场景画布版本窄端口', () => {
     const world = await registeredProject()
     const versioning = versioningFor(world.userDirectory, ['op-pre', 'hist-pre'])
     const store = persistence(world.projectRoot)
-    await store.writeArrangement(arrangement())
+    await store.writeArrangement(arrangement(), null)
     const relativePath = arrangementPath('scene-1', 'canvas-1')
     await versioning.initializeBaseline({
       projectId: 'project-1',
@@ -197,7 +198,7 @@ describe('场景画布版本窄端口', () => {
     const versioning = versioningFor(world.userDirectory, ['op-canvas-bind', 'hist-canvas-bind'])
     await versioning.initializeBaseline({ projectId: 'project-1', initialPaths: ['keep.txt'] })
     const store = persistence(world.projectRoot)
-    await store.writeArrangement(arrangement())
+    await store.writeArrangement(arrangement(), null)
     const versions = canvasVersions(versioning, world.projectRoot)
     await expect(versions.keepArrangement(keepRequest('caller-canvas', 'manual'))).resolves.toEqual(
       { state: 'kept' }
@@ -284,10 +285,15 @@ function saveRequest(reason: 'manual' | 'beforeGeneration'): {
 }
 
 function persistence(projectRoot: string): LocalSceneCanvasArrangementPersistenceGatewayImpl {
-  return new LocalSceneCanvasArrangementPersistenceGatewayImpl(async (projectId) => ({
-    projectId,
-    directory: projectRoot
-  }))
+  const backupRoot = `${projectRoot}-migration`
+  directories.push(backupRoot)
+  return new LocalSceneCanvasArrangementPersistenceGatewayImpl(
+    async (projectId) => ({
+      projectId,
+      directory: projectRoot
+    }),
+    new CanvasArrangementMigration({ backupRoot })
+  )
 }
 
 function canvasVersions(
@@ -305,8 +311,8 @@ function canvasService(
   versions: LocalSceneCanvasWorkVersionGatewayImpl,
   operationId: string,
   ready = true
-): SceneCanvasApplicationServiceImpl {
-  return new SceneCanvasApplicationServiceImpl({
+): EditSceneCanvas {
+  return new EditSceneCanvas({
     sources: {
       readProjectInputSources: () => Promise.reject(new Error('保存不应读取来源'))
     },
@@ -344,9 +350,9 @@ async function registeredProject(): Promise<{ userDirectory: string; projectRoot
 function versioningFor(
   userDirectory: string,
   ids: readonly string[]
-): ProjectVersioningApplicationServiceImpl {
+): ManageProjectVersioning {
   const remaining = [...ids]
-  return new ProjectVersioningApplicationServiceImpl({
+  return new ManageProjectVersioning({
     ...createProjectVersioningGateways(userDirectory),
     nextId: () => {
       const next = remaining.shift()

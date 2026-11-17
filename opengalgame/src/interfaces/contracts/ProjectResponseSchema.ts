@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { failureResultSchema } from './FailureResultSchema'
 
 const projectSummaryShape = {
   id: z.string(),
@@ -26,10 +27,7 @@ const projectListResultSchema = z.union([
       limit: z.number()
     })
   }),
-  z.strictObject({
-    code: z.number().refine((code) => code !== ErrorCodes.success),
-    msg: z.string()
-  })
+  failureResultSchema
 ])
 
 /** 判断未知值是不是项目列表分页响应。只判定形状，不复制取值。 */

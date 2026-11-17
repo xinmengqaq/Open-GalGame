@@ -4,14 +4,12 @@ import type { SceneGenerationWorkflowControl } from '@application/scene-generati
 import type {
   SceneGenerationRuntime,
   SceneGenerationExecution,
-  SceneGenerationCandidate,
   SceneGenerationWorkflowProgress,
   SceneGenerationWorkflowOutcome
 } from '@application/scene-generation/models/SceneGenerationExecution'
-import type {
-  ForkSceneGenerationDTO,
-  ReplySceneGenerationInteractionDTO
-} from '@application/scene-generation/dto/SceneGenerationDTO'
+import type { ForkSceneGenerationDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
+import type { SceneGenerationFailureFactBuilder } from '@application/scene-generation/models/SceneGenerationFailureFacts'
+import { SceneGenerationRunFailed } from '@application/scene-generation/models/SceneGenerationRunOutcome'
 import type { Agent } from '@infrastructure/ai/agents/Agent'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import type { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
@@ -33,25 +31,21 @@ import {
 } from './createWebGalGenerationGraph'
 import {
   generationInputDigest,
-  webGalGenerationCompatibility,
   readWebGalGenerationCheckpoint
 } from '../history/WebGalGenerationCheckpoint'
 import type { WebGalGenerationStateValue } from './WebGalGenerationState'
-import {
-  nextActionsOf,
-  SceneGenerationRunFailed,
-  type FailureClass
-} from '@application/scene-generation/models/SceneGenerationRunOutcome'
-import { classifyRunError, failureCodeOf, type RunErrorClassification } from './runFailureRouting'
-import {
-  safeFailure,
-  type SceneGenerationFailureFact
-} from '@application/scene-generation/services/impl/SceneGenerationFailureFacts'
+import { classifyRunError, failureCodeOf } from './runFailureRouting'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-import { normalizeAgentError } from '@infrastructure/ai/middleware/retryPolicy'
 import { WorkflowError } from '@infrastructure/workflow/WorkflowError'
 import { SceneGenerationProgressPublisher } from './SceneGenerationProgressPublisher'
+import { persistedBudget } from './WebGalWorkflowBudget'
+import { terminalFailureOf } from './WebGalWorkflowFailureMapping'
+import {
+  createInitialRunState,
+  WebGalWorkflowPauseRequests,
+  type WebGalWorkflowEntry
+} from './WebGalWorkflowRunState'
 
 /** 工作流图的技术步数上限。不由修正次数或活跃秒数换算。 */
 const workflowGraphStepCeiling = 256
@@ -59,7 +53,7 @@ const workflowGraphStepCeiling = 256
 export class WebGalSceneGenerationWorkflowImpl
   implements SceneGenerationWorkflow, SceneGenerationWorkflowControl
 {
-  private readonly pauseRequested: Record<string, true> = {}
+  private readonly pauseRequests = new WebGalWorkflowPauseRequests()
   /**
    * 使用共用执行器、文件检查点和持久副作用，不实现另一套重试或循环。
    * 智能体按运行创建并读取当次连接设置；未配置时只让本次生成失败。
@@ -69,11 +63,12 @@ export class WebGalSceneGenerationWorkflowImpl
     private readonly files: AiProjectFileSystemImpl,
     private readonly createAgent: () => Promise<
       Agent<WebGalSceneAgentInput, WebGalSceneAgentOutput>
-    >
+    >,
+    private readonly buildFailure: SceneGenerationFailureFactBuilder
   ) {}
 
   async requestPauseAtSafeCheckpoint(execution: SceneGenerationExecution): Promise<void> {
-    if (execution.pauseRequested === true) this.pauseRequested[execution.operationId] = true
+    this.pauseRequests.request(execution)
   }
 
   /** 新操作读取当前输入，分支安全摘要继续沿用。 */
@@ -154,7 +149,7 @@ export class WebGalSceneGenerationWorkflowImpl
   /** 运行上下文通过闭包绑定，同步落检查点后才发布对应安全进度。 */
   private async run(
     runtime: SceneGenerationRuntime,
-    entry: 'generate' | 'resume' | 'reply' | 'fork' | 'forkRepair'
+    entry: WebGalWorkflowEntry
   ): Promise<SceneGenerationWorkflowOutcome> {
     const execution = runtime.execution
     const budget = new ExecutionBudget(
@@ -209,8 +204,7 @@ export class WebGalSceneGenerationWorkflowImpl
           }
         },
         pauseRequested: () =>
-          this.pauseRequested[execution.operationId] === true ||
-          currentExecution.pauseRequested === true
+          this.pauseRequests.isRequested(execution.operationId, currentExecution)
       })
       publisher.start()
       const config = {
@@ -243,7 +237,7 @@ export class WebGalSceneGenerationWorkflowImpl
             >({ resume: execution.pendingReply!.replyId })
           : resume
             ? null
-            : this.initialRunState(execution, entry, previousState, candidate)
+            : createInitialRunState(execution, entry, previousState, candidate)
       let result: Awaited<ReturnType<typeof runWorkflow>>
       try {
         result = await runWorkflow(graph, input, {
@@ -277,7 +271,7 @@ export class WebGalSceneGenerationWorkflowImpl
           terminalState === 'failed' ? classifyRunError(failureSource, undefined) : undefined
         const failure =
           terminalState === 'failed'
-            ? terminalFailureOf(failureSource, classified, currentExecution)
+            ? terminalFailureOf(failureSource, classified, currentExecution, this.buildFailure)
             : undefined
         let recordError: unknown
         try {
@@ -343,7 +337,7 @@ export class WebGalSceneGenerationWorkflowImpl
         budget: consumed,
         live: undefined
       })
-      delete this.pauseRequested[execution.operationId]
+      this.pauseRequests.clear(execution.operationId)
       if (state.status === 'paused')
         return {
           state: 'interrupted',
@@ -374,102 +368,6 @@ export class WebGalSceneGenerationWorkflowImpl
       publisher.dispose()
     }
   }
-
-  /**
-   * 非 resume 入口只延续已确认上下文；本次运行事实从零开始，不继承旧检查点。
-   * @param candidate - 当前操作保留的候选修订；只有它决定权威写入集合。
-   */
-  private initialRunState(
-    execution: SceneGenerationExecution,
-    entry: 'generate' | 'resume' | 'reply' | 'fork' | 'forkRepair',
-    previousState: Partial<WebGalGenerationStateValue>,
-    candidate: SceneGenerationCandidate | undefined
-  ): Partial<WebGalGenerationStateValue> {
-    const repairSource = execution.repairSource !== undefined
-    const decisionChanged = (execution.forkRequest?.decisionChanges?.length ?? 0) > 0
-    return {
-      execution,
-      mode:
-        execution.mode === 'repair' ||
-        entry === 'forkRepair' ||
-        execution.pendingReply?.reply.kind === 'revise'
-          ? ('repair' as const)
-          : execution.mode === 'validate'
-            ? ('validate' as const)
-            : candidate
-              ? ('validate' as const)
-              : ('generate' as const),
-      candidate,
-      summary: repairSource || decisionChanged ? '' : (previousState.summary ?? ''),
-      unresolvedIssues: repairSource ? [] : (previousState.unresolvedIssues ?? []),
-      memoryMessages: repairSource || decisionChanged ? [] : (previousState.memoryMessages ?? []),
-      confirmedReplies: confirmedRepliesForRun(
-        repairSource ? [] : (previousState.confirmedReplies ?? []),
-        execution
-      ),
-      // D2：候选存在时旧题组失效，不再作为本次决定边界。
-      questions: execution.candidateSnapshotId ? [] : (previousState.questions ?? []),
-      status: 'working' as const,
-      needsDecision: false,
-      outcome: undefined,
-      retryCount: 0,
-      finalizeCount: 0,
-      repairRequested: false,
-      blockedReason: undefined,
-      failureClass: undefined,
-      failureReason: undefined,
-      failureMessage: undefined,
-      writtenFiles: initialWrittenFiles(execution, candidate),
-      correctableIssueKey: undefined,
-      summaryDegraded: undefined,
-      compatibility: webGalGenerationCompatibility()
-    }
-  }
-}
-
-/**
- * 从原始错误生成持久化事实和公开错误。公开错误只带窄原因，
- * 分类、原因名和诊断编号由原错误链在 safeFailure 中保留。
- */
-function terminalFailureOf(
-  source: unknown,
-  classified: RunErrorClassification | undefined,
-  execution: SceneGenerationExecution
-): {
-  fact: SceneGenerationFailureFact
-  publicError: SceneGenerationRunFailed
-} {
-  const diagnostic = source instanceof AppException ? source : normalizeAgentError(source)
-  const candidate = execution.candidateSnapshotId
-    ? {
-        candidateSnapshotId: execution.candidateSnapshotId,
-        previewAuthorization: 'readOnly' as const
-      }
-    : undefined
-  const base = safeFailure(diagnostic, candidate)
-  const failureClass: FailureClass =
-    classified?.failureClass ??
-    (source instanceof SceneGenerationRunFailed ? source.failureClass : 'internal')
-  const reason = classified?.reason ?? base.reason
-  const code = failureCodeOf(failureClass)
-  const fact: SceneGenerationFailureFact = {
-    ...base,
-    code,
-    failureClass,
-    nextActions: nextActionsOf(failureClass),
-    ...(reason ? { reason } : {})
-  }
-  const publicError =
-    source instanceof SceneGenerationRunFailed
-      ? source
-      : new SceneGenerationRunFailed({
-          failureClass,
-          ...(classified?.reason ? { reason: classified.reason } : {}),
-          message: base.message,
-          code,
-          cause: diagnostic
-        })
-  return { fact, publicError }
 }
 
 /**
@@ -481,78 +379,4 @@ export function terminalPhase(runtime: SceneGenerationRuntime): 'cancelled' | 'f
   if (runtime.activeTimeoutSignal.aborted && !runtime.userAbortSignal.aborted) return 'failed'
   if (runtime.userAbortSignal.aborted) return 'cancelled'
   return 'failed'
-}
-function persistedBudget(
-  previous: SceneGenerationExecution['budget'],
-  budget: ExecutionBudget
-): SceneGenerationExecution['budget'] {
-  const usage = budget.usage
-  return {
-    ...previous,
-    modelCallsUsed: usage.modelAttempts,
-    toolCallsUsed: usage.toolCalls,
-    activeElapsedMs: usage.activeMs,
-    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
-    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
-    totalTokens: usage.tokens,
-    tokenLimit: budget.limits.tokens ?? previous.tokenLimit ?? null
-  }
-}
-
-/**
- * 候选修订的可写文件只有场景入口；既有候选存在时以该入口作为权威集合。
- * 不从旧运行继承写入路径，也不把候选快照中的其他文件当成本次写入。
- */
-function initialWrittenFiles(
-  execution: SceneGenerationExecution,
-  candidate: SceneGenerationCandidate | undefined
-): readonly string[] {
-  if (!candidate?.artifact.hasEntry) return []
-  return [`${execution.source.sceneDirectory}/${execution.source.entryFile}`]
-}
-
-function confirmedRepliesForRun(
-  previous: readonly ReplySceneGenerationInteractionDTO[],
-  execution: SceneGenerationRuntime['execution']
-): ReplySceneGenerationInteractionDTO[] {
-  const replacements = replacementReplies(execution)
-  const replaced = new Set(replacements.map((reply) => reply.interactionId))
-  return [
-    ...previous.filter(
-      (reply) =>
-        !replaced.has(reply.interactionId) &&
-        !execution.replies.some(
-          (current) =>
-            current.replyId === reply.replyId && current.operationId === reply.operationId
-        )
-    ),
-    ...execution.replies,
-    ...replacements
-  ]
-}
-
-/**
- * 同一交互只保留最后一次替换。
- * @returns 新的已确认回复；没有替换时为空。
- */
-function replacementReplies(
-  execution: SceneGenerationRuntime['execution']
-): ReplySceneGenerationInteractionDTO[] {
-  const changes = execution.forkRequest?.decisionChanges ?? []
-  const byInteraction = new Map<string, ReplySceneGenerationInteractionDTO>()
-  changes.forEach((change, index) => {
-    byInteraction.set(change.interactionId, {
-      projectId: execution.projectId,
-      sceneId: execution.sceneId,
-      operationId: execution.operationId,
-      threadId: execution.threadId,
-      branchId: execution.branchId,
-      interactionId: change.interactionId,
-      checkpointId: execution.forkRequest!.checkpointId,
-      candidateSnapshotId: execution.candidateSnapshotId,
-      replyId: `fork-decision-${index}`,
-      reply: change.reply
-    })
-  })
-  return [...byInteraction.values()]
 }

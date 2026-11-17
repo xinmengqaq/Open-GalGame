@@ -7,7 +7,8 @@ import { afterEach, expect, it, vi } from 'vitest'
 import * as git from 'isomorphic-git'
 
 import { browserDevFilesPlugin } from '@bootstrap/browser/devFilePlugin'
-import { createDevFileBackend, loadDevFileBackend } from '@bootstrap/browser/devFileBackend'
+import { createBrowserDesktopBridge } from '@bootstrap/browser/BrowserDesktopBridge'
+import { createDevFileBackend } from '@bootstrap/browser/devFileBackend'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileErrorCodes'
@@ -71,6 +72,7 @@ it('浏览器开发后端在真实工程里新建文件夹并保存正文，再�
 
     const created = await backend.call('createProjectFolder', {
       projectId: 'project-1',
+      operationId: 'browser-folder-1',
       expectedCatalogVersion: version,
       parentFolderId: null,
       name: '临时目录'
@@ -86,6 +88,7 @@ it('浏览器开发后端在真实工程里新建文件夹并保存正文，再�
 
     const createdText = await backend.call('createProjectTextFile', {
       projectId: 'project-1',
+      operationId: 'browser-text-1',
       expectedCatalogVersion: (again.data as { catalogVersion: string }).catalogVersion,
       parentFolderId: null,
       fileName: '正文.md',
@@ -102,6 +105,7 @@ it('浏览器开发后端在真实工程里新建文件夹并保存正文，再�
 
     const updated = await backend.call('updateProjectTextFileBody', {
       projectId: 'project-1',
+      operationId: 'browser-update-1',
       sourceId,
       expectedSourceVersion: initialVersion,
       content: { textKind: 'document', body: '# 二稿' }
@@ -116,6 +120,7 @@ it('浏览器开发后端在真实工程里新建文件夹并保存正文，再�
 
     const stale = await backend.call('updateProjectTextFileBody', {
       projectId: 'project-1',
+      operationId: 'browser-update-stale',
       sourceId,
       expectedSourceVersion: initialVersion,
       content: { textKind: 'document', body: '# 过期写入' }
@@ -429,5 +434,67 @@ it('开发文件插件保留用户目录配置错误 5101', async () => {
     const { promise: closed, resolve: done, reject: failed } = Promise.withResolvers<void>()
     server.close((error) => (error ? failed(error) : done()))
     await closed
+  }
+})
+
+it('浏览器桥在夹具模式对系统打开目录返回固定不支持，候选事件注销后不再投递', async () => {
+  class FakeEventSource {
+    static instances: FakeEventSource[] = []
+    onmessage: ((event: { data: string }) => void) | null = null
+    constructor(readonly url: string) {
+      FakeEventSource.instances.push(this)
+    }
+    close = vi.fn()
+    emit(value: unknown): void {
+      this.onmessage?.({ data: JSON.stringify(value) })
+    }
+  }
+  vi.stubGlobal('window', { location: { search: '' } })
+  vi.stubGlobal('document', {
+    createElement: () => ({ setAttribute: () => undefined, hidden: false }),
+    body: { append: () => undefined }
+  })
+  try {
+    vi.stubEnv('VITE_OPENGALGAME_BROWSER_FILES', 'fixture')
+    const fixtureBridge = createBrowserDesktopBridge()
+    await expect(fixtureBridge.openDirectory({ path: 'D:/games/demo' })).resolves.toEqual({
+      code: ErrorCodes.forbidden,
+      msg: '当前环境不能打开本机目录'
+    })
+
+    vi.stubEnv('VITE_OPENGALGAME_BROWSER_FILES', 'real')
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const bridge = createBrowserDesktopBridge()
+    const ready: unknown[] = []
+    const failed: unknown[] = []
+    const stopReady = bridge.onCandidatePreviewReady((value) => ready.push(value))
+    const stopFailed = bridge.onCandidatePreviewStageFailed((value) => failed.push(value))
+    const source = FakeEventSource.instances.at(-1)
+    expect(source?.url).toBe('/__opengalgame/dev/scene-preview-candidate')
+
+    source?.emit({ type: 'ready', sequence: 1 })
+    source?.emit({ type: 'stageFailed', sequence: 2 })
+    expect(ready).toEqual([{ type: 'ready', sequence: 1 }])
+    expect(failed).toEqual([{ type: 'stageFailed', sequence: 2 }])
+
+    stopReady()
+    stopReady()
+    source?.emit({ type: 'ready', sequence: 3 })
+    source?.emit({ type: 'stageFailed', sequence: 3 })
+    expect(ready).toEqual([{ type: 'ready', sequence: 1 }])
+    expect(failed).toEqual([
+      { type: 'stageFailed', sequence: 2 },
+      { type: 'stageFailed', sequence: 3 }
+    ])
+
+    stopFailed()
+    source?.emit({ type: 'stageFailed', sequence: 4 })
+    expect(failed).toEqual([
+      { type: 'stageFailed', sequence: 2 },
+      { type: 'stageFailed', sequence: 3 }
+    ])
+  } finally {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
   }
 })

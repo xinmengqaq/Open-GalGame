@@ -59,14 +59,3 @@ export function relationLabelOf(
   }
   return { text: '关系还没写', kind: 'empty' }
 }
-
-/** 关联的记录卡（文档或提示词）。 */
-export function relationRecordCardOf(
-  state: { cards: readonly SessionCard[] },
-  relation: SessionRelation
-) {
-  if (!relation.recordCardId) return null
-  const card = state.cards.find((item) => item.cardId === relation.recordCardId)
-  if (!card) return null
-  return card.kind === 'document' || card.kind === 'prompt' ? card : null
-}

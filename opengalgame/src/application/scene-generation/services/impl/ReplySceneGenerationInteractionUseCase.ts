@@ -3,7 +3,6 @@ import type { SceneGenerationExecution } from '../../models/SceneGenerationExecu
 import type { SceneGenerationReplyReceiptVO } from '../../vo/SceneGenerationVO'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { replyFingerprint, threadKey } from '../../policies/SceneGenerationIdempotency'
 import { toReplyReceipt } from '../../mapping/SceneGenerationViewMapper'
 import { isAnswerGroup } from './SceneGenerationRequestGuards'
@@ -42,7 +41,7 @@ export class ReplySceneGenerationInteractionUseCase {
             checkpointId: current.checkpointId
           })
         : undefined
-      const domainService = this.context.deps.domain ?? new SceneGenerationDomainServiceImpl()
+      const domainService = this.context.deps.domain
       const confirmed = domainService.validateReply(
         current,
         snapshot,

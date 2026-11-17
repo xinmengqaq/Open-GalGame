@@ -10,7 +10,7 @@ import { createSceneExport } from './sceneExport'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { errorFacts } from '@common/errors/errorFacts'
-import { AppUpdateApplicationServiceImpl } from '@application/app-update/services/impl/AppUpdateApplicationServiceImpl'
+import { ManageAppUpdate } from '@application/app-update/services/impl/ManageAppUpdate'
 import { didInstallAttemptFail } from '@domain/app-update/models/InstallAttempt'
 import { ElectronUpdaterGatewayImpl } from '@infrastructure/app-update/ElectronUpdaterGatewayImpl'
 import { UserDataInstallAttemptGatewayImpl } from '@infrastructure/app-update/UserDataInstallAttemptGatewayImpl'
@@ -22,7 +22,7 @@ import {
   recordedFailureOf
 } from '@application/scene-generation/services/impl/SceneGenerationFailureFacts'
 import { assertUserDirectory } from './userDirectory'
-import { ConnectionSettingsApplicationServiceImpl } from '@application/connections/services/impl/ConnectionSettingsApplicationServiceImpl'
+import { ManageConnectionSettings } from '@application/connections/services/impl/ManageConnectionSettings'
 import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { EncryptedConnectionSettingsGatewayImpl } from '@infrastructure/connections/EncryptedConnectionSettingsGatewayImpl'
 import { PinoLoggerGatewayImpl } from '@infrastructure/logging/PinoLoggerGatewayImpl'
@@ -37,6 +37,7 @@ import { registerProcessExceptionHandler } from '@infrastructure/runtime/Process
 import { ElectronSecretCipherImpl } from '@infrastructure/security/ElectronSecretCipherImpl'
 import { ConnectionSettingsController } from '@interfaces/ipc/controllers/ConnectionSettingsController'
 import { ProjectController } from '@interfaces/ipc/controllers/ProjectController'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { registerHomeIpc } from '@interfaces/ipc/registerHomeIpc'
 import { ProjectFilesController } from '@interfaces/project-files/ipc/ProjectFilesController'
@@ -46,18 +47,12 @@ import { registerProjectVersioningIpc } from '@interfaces/project-versioning/ipc
 import { SceneCanvasController } from '@interfaces/scene-canvas/ipc/SceneCanvasController'
 import { registerSceneCanvasIpc } from '@interfaces/scene-canvas/ipc/registerSceneCanvasIpc'
 import { SceneGenerationController } from '@interfaces/scene-generation/ipc/SceneGenerationController'
-import {
-  registerSceneGenerationIpc,
-  releaseSceneGenerationSubscriptions
-} from '@interfaces/scene-generation/ipc/registerSceneGenerationIpc'
+import { registerSceneGenerationIpc } from '@interfaces/scene-generation/ipc/registerSceneGenerationIpc'
 import { ScenePreviewController } from '@interfaces/scene-preview/ipc/ScenePreviewController'
-import {
-  registerScenePreviewIpc,
-  releaseScenePreviewSubscriptions
-} from '@interfaces/scene-preview/ipc/registerScenePreviewIpc'
+import { registerScenePreviewIpc } from '@interfaces/scene-preview/ipc/registerScenePreviewIpc'
 import { SceneExportController } from '@interfaces/scene-export/ipc/SceneExportController'
 import { registerSceneExportIpc } from '@interfaces/scene-export/ipc/registerSceneExportIpc'
-import { OpenDirectoryApplicationServiceImpl } from '@application/system-path/services/impl/OpenDirectoryApplicationServiceImpl'
+import { OpenDirectory } from '@application/system-path/services/impl/OpenDirectory'
 import { LocalDirectoryOpenGateway } from '@infrastructure/system-path/LocalDirectoryOpenGateway'
 import { SystemPathController } from '@interfaces/system-path/ipc/SystemPathController'
 import { registerSystemPathIpc } from '@interfaces/system-path/ipc/registerSystemPathIpc'
@@ -89,7 +84,7 @@ export async function createHomeBackend(options: {
     userDirectory,
     new ElectronSecretCipherImpl()
   )
-  const connections = new ConnectionSettingsApplicationServiceImpl({
+  const connections = new ManageConnectionSettings({
     settings: settingsGateway,
     model: new LangChainModelConnectionGatewayImpl(config.requestTimeoutMs)
   })
@@ -148,7 +143,7 @@ export async function createHomeBackend(options: {
       preview
     }
   })
-  const exceptions = new IpcExceptionHandler(logger)
+  const exceptions = new IpcExceptionHandler(logger, new IpcErrorMapper())
   const appUpdateRelease = new ElectronUpdaterGatewayImpl(logger)
   const appUpdateInstallAttempts = new UserDataInstallAttemptGatewayImpl(
     join(app.getPath('userData'), 'app-update', 'install-attempt.json')
@@ -188,7 +183,7 @@ export async function createHomeBackend(options: {
       })
     }
   }
-  const appUpdate = new AppUpdateApplicationServiceImpl({
+  const appUpdate = new ManageAppUpdate({
     release: appUpdateRelease,
     installAttempts: appUpdateInstallAttempts,
     logger,
@@ -214,15 +209,16 @@ export async function createHomeBackend(options: {
   const detachScenePreviewIpc = registerScenePreviewIpc({
     getWindow: options.getWindow,
     rendererUrl: options.rendererUrl,
-    candidatePreview: preview,
     scenePreview: new ScenePreviewController(
       scenePreview.currentScenePreview,
       scenePreview.candidatePreview,
-      exceptions
+      exceptions,
+      preview
     )
   })
   const sceneExport = createSceneExport({
     userDirectory,
+    logger,
     versioning: projects.versioning,
     sources: scenePreview.currentScene.sources
   })
@@ -239,7 +235,7 @@ export async function createHomeBackend(options: {
     getWindow: options.getWindow,
     rendererUrl: options.rendererUrl,
     systemPath: new SystemPathController(
-      new OpenDirectoryApplicationServiceImpl({
+      new OpenDirectory({
         directories: new LocalDirectoryOpenGateway((absolutePath) => shell.openPath(absolutePath))
       }),
       exceptions
@@ -300,9 +296,7 @@ export async function createHomeBackend(options: {
     detachSceneExportIpc()
     detachSystemPathIpc()
     detachScenePreviewIpc()
-    releaseScenePreviewSubscriptions()
     detachSceneGenerationIpc()
-    releaseSceneGenerationSubscriptions()
     detachSceneCanvasIpc()
     detachProjectFilesIpc()
     detachVersioningIpc()

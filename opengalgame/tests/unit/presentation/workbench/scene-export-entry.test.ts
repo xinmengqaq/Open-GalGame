@@ -165,4 +165,70 @@ describe('sceneExportEntryOf', () => {
       sceneExportEntryOf(entryState({ savedSceneVersion: savedVersion, workspaceBlocked: true }))
     ).toEqual({ canRun: false, hint: '导出已保存的当前场景为 Windows WebGAL 游戏' })
   })
+
+  it('多个阻断同时成立时按固定顺序给出唯一原因', () => {
+    expect(
+      sceneExportEntryOf(
+        entryState({
+          savedSceneVersion: null,
+          exporting: true,
+          pageBlocked: true,
+          generationActive: true,
+          viewStale: true
+        })
+      )
+    ).toEqual({ canRun: false, hint: '正在导出当前场景…' })
+
+    expect(
+      sceneExportEntryOf(
+        entryState({
+          savedSceneVersion: null,
+          generationActive: true,
+          viewStale: true,
+          saveState: 'saving'
+        })
+      )
+    ).toEqual({
+      canRun: false,
+      hint: '还没有保存成功的场景内容；先在试玩预览里保存一次'
+    })
+
+    expect(
+      sceneExportEntryOf(
+        entryState({
+          savedSceneVersion: savedVersion,
+          generationActive: true,
+          viewStale: true,
+          saveState: 'saving'
+        })
+      )
+    ).toEqual({ canRun: false, hint: '工作台正在恢复历史视图，暂不导出' })
+
+    expect(
+      sceneExportEntryOf(
+        entryState({
+          savedSceneVersion: savedVersion,
+          generationActive: true,
+          saveState: 'saving'
+        })
+      )
+    ).toEqual({ canRun: false, hint: '生成进行中，暂不导出' })
+
+    expect(
+      sceneExportEntryOf(
+        entryState({
+          savedSceneVersion: savedVersion,
+          saveState: 'failed',
+          saveLabel: '保存失败'
+        })
+      )
+    ).toEqual({
+      canRun: false,
+      hint: '工作台保存状态是“保存失败”，先处理后再导出'
+    })
+
+    expect(
+      sceneExportEntryOf(entryState({ savedSceneVersion: savedVersion, saveState: 'dirty' }))
+    ).toEqual({ canRun: true, hint: '先保存工作台改动，再导出已保存的当前场景' })
+  })
 })

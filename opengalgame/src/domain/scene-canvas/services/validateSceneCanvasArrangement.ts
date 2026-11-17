@@ -1,20 +1,35 @@
 import { AppException } from '@common/errors/AppException'
-import { SceneCanvasErrorCodes } from '../errors/SceneCanvasErrorCodes'
+import { FailureReasons } from '@common/errors/FailureReasons'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import type {
   SceneCanvasArrangement,
   SceneCanvasAudioRole,
   SceneCanvasCard,
+  SceneCanvasDefaultRelation,
   SceneCanvasImageRole,
   SceneCanvasRelation,
+  SceneCanvasUsage,
   SceneCanvasWebgalPreset
 } from '../models/SceneCanvasArrangement'
+
+export type SceneCanvasArrangementValidationOptions = {
+  /**
+   * 为 false 时不校验提示词引用的卡片身份与跨卡关系。
+   * 生成输入读取沿用 assembleInputs.promptReferences 的既有引用错误语义。
+   */
+  promptReferences?: boolean
+}
 
 /**
  * 校验整份编排的身份、卡片、关联和布局。
  * 不推断关系，不因来源缺失删除卡片。
  * @throws {AppException} 身份冲突、引用缺失、字段无效或记录不合法。
  */
-export function validateSceneCanvasArrangement(arrangement: SceneCanvasArrangement): void {
+export function validateSceneCanvasArrangement(
+  arrangement: SceneCanvasArrangement,
+  options: SceneCanvasArrangementValidationOptions = {}
+): void {
+  const checkPromptReferences = options.promptReferences !== false
   requireIdentity(arrangement.projectId, '工程身份不能为空')
   requireIdentity(arrangement.sceneId, '场景身份不能为空')
   requireIdentity(arrangement.canvasId, '画布身份不能为空')
@@ -24,7 +39,7 @@ export function validateSceneCanvasArrangement(arrangement: SceneCanvasArrangeme
   }
   const cards = new Map<string, SceneCanvasCard>()
   for (const card of arrangement.cards) {
-    validateCard(card)
+    validateCard(card, checkPromptReferences)
     if (cards.has(card.cardId)) {
       throw new AppException({
         code: SceneCanvasErrorCodes.identityConflict,
@@ -33,21 +48,22 @@ export function validateSceneCanvasArrangement(arrangement: SceneCanvasArrangeme
     }
     cards.set(card.cardId, card)
   }
-  validatePromptReferences(cards)
+  if (checkPromptReferences) validatePromptReferences(cards)
   validateRelations(cards, arrangement.relations)
 }
 
-function validateCard(card: SceneCanvasCard): void {
+function validateCard(card: SceneCanvasCard, checkPromptReferenceIdentities: boolean): void {
   requireIdentity(card.cardId, '卡片身份不能为空')
   requireLayout(card.layout)
+  requireTitle(card.title)
+  requireText(card.summary, '卡片简介无效')
+  validateUsage(card.usage)
   if (
     card.kind === 'document' ||
     card.kind === 'image' ||
     card.kind === 'audio' ||
     card.kind === 'video'
   ) {
-    requireTitle(card.title)
-    requireText(card.summary, '卡片简介无效')
     requireIdentity(card.sourceId, '卡片来源身份不能为空')
     if (card.kind === 'audio') requireAudioRole(card.role)
     if (card.kind === 'image') requireImageRole(card.role)
@@ -61,6 +77,7 @@ function validateCard(card: SceneCanvasCard): void {
       if (reference === null || typeof reference !== 'object' || Array.isArray(reference)) {
         throw invalidField('提示词引用无效')
       }
+      if (!checkPromptReferenceIdentities) continue
       requireIdentity(reference.cardId, '提示词引用身份不能为空')
     }
     return
@@ -110,6 +127,7 @@ function validateRelations(
       })
     }
     seenPairs.add(pair)
+    requireDefaultRelation(relation.defaultRelation)
     requireText(relation.specificName, '特殊关系名称无效')
     if (relation.recordCardId === null) continue
     const record = cards.get(relation.recordCardId)
@@ -145,6 +163,7 @@ function validatePromptReferences(cards: ReadonlyMap<string, SceneCanvasCard>): 
       if (seen.has(reference.cardId)) {
         throw new AppException({
           code: SceneCanvasErrorCodes.identityConflict,
+          reason: FailureReasons.promptReferenceDuplicate,
           msg: '同一提示词不能重复引用同一卡片'
         })
       }
@@ -153,6 +172,7 @@ function validatePromptReferences(cards: ReadonlyMap<string, SceneCanvasCard>): 
       if (!target || target.cardId === card.cardId || target.kind === 'prompt') {
         throw new AppException({
           code: SceneCanvasErrorCodes.targetMissing,
+          reason: FailureReasons.promptReferenceTargetMissing,
           msg: '提示词引用必须是当前画布中的其他卡片'
         })
       }
@@ -196,6 +216,39 @@ function requirePreset(preset: SceneCanvasWebgalPreset | null): void {
   if (typeof preset !== 'object') throw invalidField('字段绑定无效')
   requireTitle(preset.command)
   requireTitle(preset.name)
+}
+
+function validateUsage(usage: SceneCanvasUsage): void {
+  if (usage === null || typeof usage !== 'object' || Array.isArray(usage)) {
+    throw invalidField('使用设置无效')
+  }
+  if (!Array.isArray(usage.targetIds)) throw invalidField('使用设置无效')
+  requireOptionalText(usage.characterId)
+  requireOptionalText(usage.locationId)
+  requireOptionalText(usage.spokenLine)
+  for (const targetId of usage.targetIds) {
+    if (typeof targetId !== 'string' || targetId.trim() === '') throw invalidField('使用设置无效')
+  }
+}
+
+function requireOptionalText(value: string | undefined): void {
+  if (value !== undefined && (typeof value !== 'string' || value.trim() === '')) {
+    throw invalidField('使用设置无效')
+  }
+}
+
+const defaultRelations: Record<SceneCanvasDefaultRelation, true> = {
+  actsOn: true,
+  accompanies: true,
+  voices: true,
+  depicts: true,
+  constrains: true,
+  sameSubject: true,
+  associated: true
+}
+
+function requireDefaultRelation(relation: SceneCanvasDefaultRelation): void {
+  if (!defaultRelations[relation]) throw invalidField('默认关系无效')
 }
 
 const imageRoles: Record<SceneCanvasImageRole, true> = {

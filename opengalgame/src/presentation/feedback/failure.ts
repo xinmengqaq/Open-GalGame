@@ -5,6 +5,8 @@ import { ErrorCodes, errorMessages } from '@common/errors/ErrorCodes'
 export interface FailureState {
   code: number
   msg: string
+  /** 失败专属的结构化原因；同码业务需要区分时才有，旧失败没有它。 */
+  reason?: string
 }
 
 /**
@@ -14,16 +16,24 @@ export interface FailureState {
  */
 export function requireSuccess<TData>(result: AjaxResult<TData>): TData {
   if (result.code !== ErrorCodes.success || result.data === undefined)
-    throw new AppException({ code: result.code, msg: result.msg })
+    throw new AppException({
+      code: result.code,
+      msg: result.msg,
+      ...(result.reason === undefined ? {} : { reason: result.reason })
+    })
   return result.data
 }
 
 /**
- * 取异常携带的失败码与安全消息。
+ * 取异常携带的失败码、安全消息与可选的结构化原因。
  * @returns 可展示的失败；不是本应用异常时给出系统失败码，不回落成空提示。
  */
 export function failureOf(error: unknown): FailureState {
   return error instanceof AppException
-    ? { code: error.code, msg: error.message }
+    ? {
+        code: error.code,
+        msg: error.message,
+        ...(error.reason === undefined ? {} : { reason: error.reason })
+      }
     : { code: ErrorCodes.internalError, msg: errorMessages[ErrorCodes.internalError] }
 }

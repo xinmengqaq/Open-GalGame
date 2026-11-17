@@ -1,8 +1,8 @@
 import type {
   SceneGenerationExecution,
-  SceneGenerationRepairSource,
   SceneGenerationWorkspace
 } from '../models/SceneGenerationExecution'
+import type { SceneGenerationRepairSource } from '../vo/SceneGenerationVO'
 
 export interface SceneGenerationWorkspaceGateway {
   /**

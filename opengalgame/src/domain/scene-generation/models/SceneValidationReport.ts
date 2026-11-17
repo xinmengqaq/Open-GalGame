@@ -21,6 +21,22 @@ export type SceneValidationIssueCode =
   | 'baseline-changed'
   | 'baseline-unknown'
 
+/** 锁定或基线不允许覆盖，应用层按版本冲突而不是普通候选问题处理。 */
+export const SCENE_VERSION_CONFLICT_ISSUE_CODES = [
+  'scene-locked',
+  'lock-unknown',
+  'baseline-changed',
+  'baseline-unknown'
+] as const satisfies readonly SceneValidationIssueCode[]
+
+export type SceneVersionConflictIssueCode = (typeof SCENE_VERSION_CONFLICT_ISSUE_CODES)[number]
+
+export function isVersionConflictIssueCode(
+  code: SceneValidationIssueCode
+): code is SceneVersionConflictIssueCode {
+  return (SCENE_VERSION_CONFLICT_ISSUE_CODES as readonly SceneValidationIssueCode[]).includes(code)
+}
+
 export interface SceneValidationIssue {
   readonly code: SceneValidationIssueCode
   readonly message: string

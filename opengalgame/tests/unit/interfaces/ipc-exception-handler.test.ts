@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -69,7 +69,7 @@ describe('IpcErrorMapper', () => {
 describe('IpcExceptionHandler', () => {
   it('直接返回的取消和业务失败都不改写、不记失败', async () => {
     const { logger, calls } = createLogger()
-    const handler = new IpcExceptionHandler(logger)
+    const handler = new IpcExceptionHandler(logger, new IpcErrorMapper())
     const context = { requestId: 'req-1', operationId: 'op-1' }
 
     const cancelled = await handler.handle(context, () => ({
@@ -93,7 +93,7 @@ describe('IpcExceptionHandler', () => {
 
   it('抛出的异常只记录一次，且日志不含消息正文', async () => {
     const { logger, calls } = createLogger()
-    const handler = new IpcExceptionHandler(logger)
+    const handler = new IpcExceptionHandler(logger, new IpcErrorMapper())
 
     const result = await handler.handle({ requestId: 'req-1', operationId: 'op-1' }, async () => {
       throw new AppException({ code: 1101, msg: '项目名称不能为空' })
@@ -112,7 +112,7 @@ describe('IpcExceptionHandler', () => {
 
   it('没有 operationId 时日志不补这个字段', async () => {
     const { logger, calls } = createLogger()
-    const handler = new IpcExceptionHandler(logger)
+    const handler = new IpcExceptionHandler(logger, new IpcErrorMapper())
 
     await handler.handle({ requestId: 'req-2' }, () => {
       throw new AppException({ code: ErrorCodes.invalidRequest, msg: '请求参数格式不正确' })
@@ -125,7 +125,7 @@ describe('IpcExceptionHandler', () => {
     const codes = [1101, 1306, 4201, 4301, ErrorCodes.invalidRequest, ErrorCodes.internalError]
     for (const code of codes) {
       const { logger, calls } = createLogger()
-      const handler = new IpcExceptionHandler(logger)
+      const handler = new IpcExceptionHandler(logger, new IpcErrorMapper())
       await handler.handle({ requestId: `req-${code}` }, () => {
         throw new AppException({ code, msg: '安全消息' })
       })
@@ -155,7 +155,7 @@ describe('IpcExceptionHandler', () => {
         throw new Error('log failed')
       }
     }
-    const handler = new IpcExceptionHandler(logger)
+    const handler = new IpcExceptionHandler(logger, new IpcErrorMapper())
 
     const result = await handler.handle({ requestId: 'req-3' }, () => {
       throw new AppException({
@@ -167,6 +167,69 @@ describe('IpcExceptionHandler', () => {
     expect(result).toEqual({
       code: 5101,
       msg: '应用配置无效'
+    })
+  })
+
+  it('带 reason 的异常只映射一次且映射结果原样交回', async () => {
+    const { logger, calls } = createLogger()
+    const mapper = new IpcErrorMapper()
+    const map = vi.spyOn(mapper, 'map')
+    const handler = new IpcExceptionHandler(logger, mapper)
+
+    const result = await handler.handle({ requestId: 'req-4' }, () => {
+      throw new AppException({
+        code: ErrorCodes.invalidConfig,
+        msg: '应用配置无效',
+        reason: 'r19-baseline-reason'
+      })
+    })
+
+    expect(map).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      code: 5101,
+      msg: '应用配置无效',
+      reason: 'r19-baseline-reason'
+    })
+    expect(calls).toEqual([
+      {
+        level: 'error',
+        event: '请求执行失败',
+        context: { requestId: 'req-4', errorCode: 5101 }
+      }
+    ])
+    expect(JSON.stringify(calls)).not.toContain('r19-baseline-reason')
+    map.mockRestore()
+  })
+
+  it('日志出口抛错时带 reason 的异常仍原样返回失败结果', async () => {
+    const logger: LoggerGateway = {
+      debug() {
+        return undefined
+      },
+      info() {
+        return undefined
+      },
+      warn() {
+        return undefined
+      },
+      error() {
+        throw new Error('log failed')
+      }
+    }
+    const handler = new IpcExceptionHandler(logger, new IpcErrorMapper())
+
+    const result = await handler.handle({ requestId: 'req-5' }, () => {
+      throw new AppException({
+        code: 4402,
+        msg: '提示词引用必须是当前画布中的其他卡片',
+        reason: 'promptReferenceTargetMissing'
+      })
+    })
+
+    expect(result).toEqual({
+      code: 4402,
+      msg: '提示词引用必须是当前画布中的其他卡片',
+      reason: 'promptReferenceTargetMissing'
     })
   })
 })

@@ -1,3 +1,5 @@
+import { WEBGAL_AUDITED_VERSION } from '@common/config/WebgalVersion'
+
 /**
  * 宿主侧「自制引擎扩展」：在 WebGAL 引擎页面内包装资源管理器，让 `/figure/` 立绘纹理常驻，
  * 避免 sync-scene 重放时被预取回收销毁；不修改 node_modules、不改预览协议。
@@ -11,14 +13,10 @@ export const ENGINE_EXTENSION_SCRIPT_VERSION = '1'
 export const ENGINE_EXTENSION_SCRIPT_PATH = '/__opengalgame/engine-extension.js'
 
 /** 已人工核对、允许安装扩展的引擎版本。 */
-export const DEFAULT_SUPPORTED_ENGINE_VERSIONS: readonly string[] = ['4.6.5']
+export const DEFAULT_SUPPORTED_ENGINE_VERSIONS: readonly string[] = [WEBGAL_AUDITED_VERSION]
 
 /** 扩展状态对象在页面里的全局键。 */
 export const ENGINE_EXTENSION_STATE_KEY = '__OPENGALGAME_ENGINE_EXT__'
-
-/** 扩展在页面内的安装状态。 */
-export type EngineExtensionStatus =
-  'waiting' | 'active' | 'active-unsupported-version' | 'feature-missing' | 'failed' | 'disabled'
 
 /** 宿主启用扩展的开关与版本白名单。 */
 export interface EngineExtensionOptions {

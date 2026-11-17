@@ -7,8 +7,12 @@ import type {
   SceneCanvasPromptCardVO
 } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
+import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { FailureReasons } from '@common/errors/FailureReasons'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import type { SceneCanvasClient } from '@interfaces/scene-canvas/client/SceneCanvasClient'
+import { failureOf } from '@presentation/feedback/failure'
 import {
   createWorkbenchCommands,
   type WorkbenchCommands
@@ -26,6 +30,7 @@ import {
   promptReferenceChipViews,
   promptReferenceFailureOf,
   promptReferenceIssueSummary,
+  type PromptReferenceFailureView,
   removePromptMentionText,
   removePromptReferenceIds
 } from '@presentation/features/workbench-session/promptReferences'
@@ -145,7 +150,19 @@ function ok<T>(data: T): AjaxResult<T> {
   return { code: ErrorCodes.success, msg: 'ok', data }
 }
 
-function createFakeClient(options?: { saveCode?: number; promptCode?: number }): {
+function promptFailureOf(code: number, reason?: string): PromptReferenceFailureView | null {
+  return promptReferenceFailureOf({
+    code,
+    ...(reason === undefined ? {} : { reason })
+  })
+}
+
+function createFakeClient(options?: {
+  saveCode?: number
+  saveReason?: string
+  promptCode?: number
+  promptReason?: string
+}): {
   client: SceneCanvasClient
   calls: { editPromptBody: number; save: SaveSceneCanvasArrangementDTO[] }
 } {
@@ -161,7 +178,8 @@ function createFakeClient(options?: { saveCode?: number; promptCode?: number }):
         return {
           code: options.promptCode,
           msg: '同一提示词不能重复引用同一卡片',
-          data: undefined
+          data: undefined,
+          ...(options.promptReason === undefined ? {} : { reason: options.promptReason })
         }
       }
       const next = structuredClone(request.arrangement)
@@ -177,7 +195,8 @@ function createFakeClient(options?: { saveCode?: number; promptCode?: number }):
       if (options?.saveCode !== undefined) {
         return {
           code: options.saveCode,
-          msg: '提示词引用必须是当前画布中的其他卡片'
+          msg: '提示词引用必须是当前画布中的其他卡片',
+          ...(options.saveReason === undefined ? {} : { reason: options.saveReason })
         }
       }
       return ok(null)
@@ -457,41 +476,39 @@ describe('提示词 @ 卡片引用', () => {
   })
 
   describe('错误码与旧记录', () => {
-    it('4401、4402、4101 只做内部判别，可见文案不透出数值码', () => {
-      const duplicate = promptReferenceFailureOf({
-        code: 4401,
-        message: '内部 4401：重复引用'
-      })
+    it('4401、4402、4101 只按结构化 reason 判别，可见文案不透出内部码', () => {
+      const duplicate = promptFailureOf(4401, FailureReasons.promptReferenceDuplicate)
       expect(duplicate).toEqual({
         text: '同一提示词不能重复引用同一卡片。'
       })
       expect(duplicate?.text).not.toMatch(/4401|4402|4101/)
       expect(
-        promptReferenceFailureOf({
-          code: 4402,
-          message: '提示词引用必须是当前画布中的其他卡片'
-        })?.text
+        promptFailureOf(4402, FailureReasons.promptReferenceTargetMissing)?.text
       ).toBe('提示词引用必须是当前画布中的其他卡片。')
-      expect(
-        promptReferenceFailureOf({
-          code: 4401,
-          message: '同一编排不能重复登记同一卡片'
-        })
-      ).toBeNull()
-      expect(
-        promptReferenceFailureOf({
-          code: 4101,
-          message: '提示词引用的卡片不在当前画布或无法读取'
-        })?.text
-      ).toBe('提示词引用的卡片不在当前画布或无法读取。')
-      expect(
-        promptReferenceFailureOf({
-          code: 4101,
-          message: '同一提示词不能重复引用同一卡片'
-        })?.text
-      ).toBe('同一提示词不能重复引用同一卡片。')
-      expect(promptReferenceFailureOf({ code: 4101, message: '请求参数无效' })).toBeNull()
-      expect(promptReferenceFailureOf({ code: 9999, message: '其他失败' })).toBeNull()
+      expect(promptFailureOf(4401)).toBeNull()
+      expect(promptFailureOf(4101, FailureReasons.promptReferenceTargetMissing)?.text).toBe(
+        '提示词引用的卡片不在当前画布或无法读取。'
+      )
+      expect(promptFailureOf(4101, FailureReasons.promptReferenceDuplicate)?.text).toBe(
+        '同一提示词不能重复引用同一卡片。'
+      )
+      expect(promptFailureOf(4101)).toBeNull()
+      expect(promptFailureOf(9999)).toBeNull()
+    })
+
+    it('非引用 4401/4402 的 FailureState 不误标提示词卡', () => {
+      const duplicateCard = failureOf(
+        new AppException({ code: 4401, msg: '同一编排不能重复登记同一卡片' })
+      )
+      const missingRelation = failureOf(
+        new AppException({ code: 4402, msg: '关联两端必须是当前编排中的卡片' })
+      )
+      expect(promptReferenceFailureOf(duplicateCard)).toBeNull()
+      expect(promptReferenceFailureOf(missingRelation)).toBeNull()
+    })
+
+    it('素材真实类型错误没有 reason 时不误标提示词卡', () => {
+      expect(promptFailureOf(4101)).toBeNull()
     })
 
     it('旧提示词没有 references 时归一为空数组，保存请求仍可构造', () => {
@@ -546,7 +563,10 @@ describe('提示词 @ 卡片引用', () => {
     })
 
     it('保存返回 4402 时在会话里留下引用提示，不只 Toast', async () => {
-      const { client } = createFakeClient({ saveCode: 4402 })
+      const { client } = createFakeClient({
+        saveCode: 4402,
+        saveReason: FailureReasons.promptReferenceTargetMissing
+      })
       commands = createWorkbenchCommands(client)
 
       commands.addPromptReference('prompt', 'sky')
@@ -555,13 +575,19 @@ describe('提示词 @ 卡片引用', () => {
           message: '提示词引用必须是当前画布中的其他卡片。'
         })
       )
-      expect(useWorkbenchSessionStore.getState().saveError).toMatchObject({ code: 4402 })
+      expect(useWorkbenchSessionStore.getState().saveError).toMatchObject({
+        code: 4402,
+        reason: FailureReasons.promptReferenceTargetMissing
+      })
       expect(toast).toHaveBeenCalled()
     })
 
     it('正文局部保存返回 4401 时把提示归到对应提示词卡', async () => {
       useWorkbenchSessionStore.getState().setPromptReferences('prompt', ['sky'])
-      const { client } = createFakeClient({ promptCode: 4401 })
+      const { client } = createFakeClient({
+        promptCode: 4401,
+        promptReason: FailureReasons.promptReferenceDuplicate
+      })
       commands = createWorkbenchCommands(client)
 
       commands.editPromptBody('prompt', '新正文')
@@ -583,5 +609,21 @@ describe('提示词 @ 卡片引用', () => {
         { cardId: 'sky' }
       ])
     })
+  })
+})
+
+describe('R18 提示词引用失败码冻结', () => {
+  it('4401/4402 数值与唯一权威一致', () => {
+    expect(SceneCanvasErrorCodes.identityConflict).toBe(4401)
+    expect(SceneCanvasErrorCodes.targetMissing).toBe(4402)
+  })
+
+  it('没有引用语义的 4401/4402 不归类为提示词引用问题', () => {
+    for (const code of [
+      SceneCanvasErrorCodes.identityConflict,
+      SceneCanvasErrorCodes.targetMissing
+    ]) {
+      expect(promptFailureOf(code)).toBeNull()
+    }
   })
 })

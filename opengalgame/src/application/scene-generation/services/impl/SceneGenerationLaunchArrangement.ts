@@ -1,7 +1,7 @@
 import type { StartSceneGenerationDTO } from '../../dto/SceneGenerationDTO'
 import { AppException } from '@common/errors/AppException'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import { ProjectErrorCodes } from '@domain/projects/errors/ProjectErrorCodes'
-import { SceneCanvasErrorCodes } from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
 import type { SceneGenerationDependencies } from './SceneGenerationCoordinator'
 import type { SceneGenerationRenderDependencies } from './SceneGenerationRenderDependencies'
 

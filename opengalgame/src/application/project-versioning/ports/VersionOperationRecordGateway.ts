@@ -1,5 +1,5 @@
 import type { VersionContentSource, VersionSaveMode } from '../dto/ProjectVersioningDTO'
-import type { VersionTarget } from '../models/VersionTarget'
+import type { VersionTarget } from '../dto/VersionTarget'
 import type { VersionBoundRetention } from './VersionContentGateway'
 
 /**
@@ -46,6 +46,12 @@ export interface VersionOperationRecordGateway {
    * 同一调用方、工程、来源、目标和声明范围重复绑定必须返回原版本身份。
    * @throws {AppException} 绑定不能持久化，或同一调用方身份改绑工程、来源、目标或范围。
    */
+  /** 同一队列内按 caller 认领现有 prepared 身份，或创建新 version intent + link。 */
+  prepareOrClaimCaller(
+    record: VersionPreparedRecord,
+    callerOperationId: string
+  ): Promise<VersionOperationRecord>
+
   bindCallerOperation(binding: VersionCallerOperationBinding): Promise<void>
 
   /**
@@ -66,9 +72,16 @@ export interface VersionOperationRecordGateway {
     sourceModule: string,
     callerOperationId: string
   ): Promise<VersionCallerOperationLink | null>
+
 }
 
 /** 尚未绑定提交意图的准备记录。 */
+export type VersionCallerOperationState =
+  | 'pending'
+  | 'notStarted'
+  | 'committed'
+  | 'notCommitted'
+
 export type VersionPreparedRecord = {
   readonly projectId: string
   readonly operationId: string
@@ -94,6 +107,8 @@ export type VersionCommitIntent = {
 /** 准备事实。提交意图为空表示还没有进入发布。 */
 export type VersionOperationRecord = VersionPreparedRecord & {
   readonly commitIntent: VersionCommitIntent | null
+  /** 持久调用方身份；用于 caller link 缺失时仍能准确关联。 */
+  readonly callerOperationId?: string
 }
 
 /** 调用方操作身份与版本身份的持久关联。 */
@@ -113,4 +128,5 @@ export type VersionCallerOperationLink = {
   readonly sourceModule: string
   readonly callerOperationId: string
   readonly operationId: string
+  readonly state: VersionCallerOperationState
 }

@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import { AppException } from '@common/errors/AppException'
 
+import type {
+  FailureClass,
+  NextAction
+} from '@application/scene-generation/vo/SceneGenerationFailureVO'
 import {
   NEXT_ACTIONS,
   SceneGenerationRunFailed,
   failureClassOfLegacyReason,
-  nextActionsOf,
-  type FailureClass,
-  type NextAction
+  nextActionsOf
 } from '@application/scene-generation/models/SceneGenerationRunOutcome'
 
 const EXPECTED_NEXT_ACTIONS: Record<FailureClass, readonly NextAction[]> = {

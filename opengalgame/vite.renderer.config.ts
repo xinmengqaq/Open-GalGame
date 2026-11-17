@@ -59,7 +59,7 @@ export const rendererConfig: UserConfig = {
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
-    open: true
+    open: false
   }
 }
 

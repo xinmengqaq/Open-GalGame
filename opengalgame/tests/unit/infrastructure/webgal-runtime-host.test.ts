@@ -5,7 +5,6 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { WebgalRuntimeHostImpl } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
 import {
-  buildEngineExtensionScriptUrl,
   ENGINE_EXTENSION_SCRIPT_PATH,
   ENGINE_EXTENSION_STATE_KEY
 } from '@infrastructure/webgal/runtime/engineExtension'
@@ -101,16 +100,19 @@ describe('真实 WebGAL 运行时承载', () => {
       const style = await fetch(`${handle.baseUrl}/game/userStyleSheet.css`)
       expect(style.status).toBe(200)
       expect(style.headers.get('content-type')).toBe('text/css; charset=utf-8')
+      expect(style.headers.get('cache-control')).toBe('no-store')
       expect(await style.text()).toBe('html,body{background:#000}\n')
 
       const template = await fetch(`${handle.baseUrl}/game/template/template.json`)
       expect(template.status).toBe(200)
       expect(template.headers.get('content-type')).toBe('application/json; charset=utf-8')
+      expect(template.headers.get('cache-control')).toBe('no-store')
       expect(await template.text()).toBe('{}')
 
       const animationTable = await fetch(`${handle.baseUrl}/game/animation/animationTable.json`)
       expect(animationTable.status).toBe(200)
       expect(animationTable.headers.get('content-type')).toBe('application/json; charset=utf-8')
+      expect(animationTable.headers.get('cache-control')).toBe('no-store')
       expect(await animationTable.text()).toBe('[]')
       const animationTableHead = await fetch(
         `${handle.baseUrl}/game/animation/animationTable.json`,
@@ -128,6 +130,16 @@ describe('真实 WebGAL 运行时承载', () => {
       const nearMiss = await fetch(`${handle.baseUrl}/game/template/other.json`)
       expect(nearMiss.status).toBe(404)
       expect(await nearMiss.text()).toBe('运行时文件不存在')
+      for (const nearMissPath of [
+        'game/Config.txt',
+        'game/template/template.json.bak',
+        'game/animation/animationTable.JSON',
+        'game/userStyleSheet.css/extra'
+      ]) {
+        const response = await fetch(`${handle.baseUrl}/${nearMissPath}`)
+        expect(response.status).toBe(404)
+        expect(await response.text()).toBe('运行时文件不存在')
+      }
 
       expect(requests).toEqual(
         expect.arrayContaining([
@@ -362,23 +374,31 @@ describe('真实 WebGAL 运行时承载', () => {
       expect(html).toContain('engine=')
       expect(html).toContain('supported=')
       expect(html.indexOf(ENGINE_EXTENSION_SCRIPT_PATH)).toBeLessThan(html.lastIndexOf('</body>'))
+      const tagStart = html.indexOf(`<script src="${ENGINE_EXTENSION_SCRIPT_PATH}?`)
+      if (tagStart < 0) throw new Error('入口没有注入扩展脚本')
+      const srcStart = tagStart + '<script src="'.length
+      const srcEnd = html.indexOf('"', srcStart)
+      if (srcEnd < 0) throw new Error('扩展脚本地址没有结束')
+      const injectedScriptUrl = html.slice(srcStart, srcEnd)
+      const injectedQuery = new URL(injectedScriptUrl, handle.baseUrl).searchParams
+      expect(injectedQuery.get('engine')).toBe('4.6.5')
+      expect(injectedQuery.get('supported')).toBe('4.6.5')
+      expect(handle.build.packageVersion).toBe('4.6.5')
+      expect(handle.build.engineVersion).toBe('4.6.5')
       const rootIndex = await fetch(`${handle.baseUrl}/`)
       expect(await rootIndex.text()).toContain(ENGINE_EXTENSION_SCRIPT_PATH)
 
-      const scriptUrl = buildEngineExtensionScriptUrl({
-        engineVersion: handle.build.engineVersion
-      })
-      const script = await fetch(`${handle.baseUrl}${scriptUrl}`)
+      const script = await fetch(`${handle.baseUrl}${injectedScriptUrl}`)
       expect(script.status).toBe(200)
       expect(script.headers.get('content-type')).toBe('text/javascript; charset=utf-8')
       expect(script.headers.get('cache-control')).toBe('no-store')
       expect(await script.text()).toContain(ENGINE_EXTENSION_STATE_KEY)
 
-      const head = await fetch(`${handle.baseUrl}${scriptUrl}`, { method: 'HEAD' })
+      const head = await fetch(`${handle.baseUrl}${injectedScriptUrl}`, { method: 'HEAD' })
       expect(head.status).toBe(200)
       expect(head.headers.get('content-length')).toBe(script.headers.get('content-length'))
 
-      const post = await fetch(`${handle.baseUrl}${scriptUrl}`, { method: 'POST' })
+      const post = await fetch(`${handle.baseUrl}${injectedScriptUrl}`, { method: 'POST' })
       expect(post.status).toBe(405)
 
       expect(requests).toEqual(

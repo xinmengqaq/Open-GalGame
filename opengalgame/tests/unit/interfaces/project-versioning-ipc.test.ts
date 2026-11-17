@@ -9,6 +9,7 @@ import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { LoggerGateway } from '@common/logging/LoggerGateway'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { ProjectVersioningClientImpl } from '@interfaces/project-versioning/client/ProjectVersioningClientImpl'
 import { ProjectVersioningController } from '@interfaces/project-versioning/ipc/ProjectVersioningController'
@@ -67,7 +68,7 @@ function createController(service: Partial<ProjectVersioningApplicationService>)
     calls,
     controller: new ProjectVersioningController(
       service as ProjectVersioningApplicationService,
-      new IpcExceptionHandler(logger)
+      new IpcExceptionHandler(logger, new IpcErrorMapper())
     )
   }
 }

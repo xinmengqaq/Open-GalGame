@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { AppException } from '@common/errors/AppException'
 import type { ExportSavedSceneDTO } from '@application/scene-export/dto/ExportSavedSceneDTO'
+import type { SceneExportContentBasis } from '@application/scene-export/vo/SceneExportContentBasis'
 import type {
   SavedSceneExportSource,
   SavedSceneReferencedAsset,
@@ -70,6 +71,11 @@ export class LocalSceneExportSourceGateway implements SceneExportSourceGateway {
     ) {
       throw exportError(SceneExportErrorCodes.savedContentMismatch)
     }
+    const contentBasis: SceneExportContentBasis = {
+      digest: record.contentDigest,
+      parserVersion: record.parserVersion,
+      engineVersion: record.engineVersion
+    }
     const entryRelativePath = `${preview.location.sceneDirectory}/${preview.location.entryFile}`
     if (entryRelativePath !== record.relativePath || entryRelativePath.split('/').includes('..')) {
       throw exportError(SceneExportErrorCodes.savedContentMismatch)
@@ -81,7 +87,7 @@ export class LocalSceneExportSourceGateway implements SceneExportSourceGateway {
     const assets = referencedAssets(preview.references)
     return {
       scene: { projectId: request.projectId, sceneId: request.sceneId },
-      contentBasis: request.contentBasis,
+      contentBasis,
       versionReference: request.versionReference,
       entryRelativePath,
       sceneText: bytes.toString('utf8'),

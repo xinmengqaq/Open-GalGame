@@ -1,14 +1,22 @@
 import * as fs from 'node:fs'
 import * as git from 'isomorphic-git'
 
-import { restoreForwardFiles } from './CommitCompensation'
+import {
+  restoreForwardFiles,
+  restoreRecordedFilesWithBackup,
+  verifyCompensationBackup
+} from './CommitCompensation'
 import { resolveContained } from '../containedPath'
 import { decodeBytes, digestBytes } from '../objects/gitContent'
 import { asGitException } from '../gitErrors'
 import type { GitEffects } from '../gitEffects'
 import { applyTreeEdits, readCommitFile } from '../objects/gitTree'
 import { readOperationRecord, type OperationRecord } from './OperationRecord'
-import { assessOperation } from './OperationQuery'
+import {
+  assessOperation,
+  findPublishedRollback,
+  proveRollbackCommit
+} from './OperationQuery'
 import { readHead } from '../repository/repositoryGuard'
 import { readStageOids, readWorkBaseline, readWorktreeBytes } from '../repository/WorkBaseline'
 import { AppException } from '@common/errors/AppException'
@@ -23,7 +31,8 @@ import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/P
 export async function rollbackLimited(
   projectRoot: string,
   operationId: string,
-  effects: GitEffects
+  effects: GitEffects,
+  options?: { readonly backupBeforeRestore?: boolean }
 ): Promise<{ rollbackCommitId: string }> {
   const state = await assessOperation(projectRoot, operationId)
   if (state.state === 'rolledBack') return { rollbackCommitId: state.rollbackCommitId }
@@ -46,9 +55,11 @@ export async function rollbackLimited(
       msg: '作品提交结果尚未查明，已保留证据'
     })
   }
-  const resumed = await finishPublishedRollback(projectRoot, read.record, effects)
+  let record = read.record
+  const resumed = await finishPublishedRollback(projectRoot, record, effects)
   if (resumed) return resumed
-  await assertNoLaterEdits(projectRoot, read.record)
+  const backupBeforeRestore = options?.backupBeforeRestore === true
+  if (!backupBeforeRestore) await assertNoLaterEdits(projectRoot, record)
   const head = await readHead(projectRoot)
   if (!head.branch) {
     throw new AppException({
@@ -57,18 +68,44 @@ export async function rollbackLimited(
     })
   }
   const branchRef = `refs/heads/${head.branch}`
-  const paths = read.record.paths.map((path) => path.relativePath)
+  const paths = record.paths.map((path) => path.relativePath)
   const stageBefore = await readStageOids(projectRoot, paths)
-  let record = await mark(projectRoot, read.record, { phase: 'rollback-required' }, effects)
   const appliedStageOids = new Map<string, string | null>()
   try {
-    const written = await restoreWorktree(
-      projectRoot,
-      record,
-      head.commitId,
-      effects,
-      appliedStageOids
-    )
+    let written: { treeOid: string }
+    if (backupBeforeRestore) {
+      if (record.rollbackBackupId) {
+        await verifyCompensationBackup(projectRoot, record, record.rollbackBackupId)
+      }
+      await restoreRecordedFilesWithBackup(projectRoot, record, effects, {
+        mode: 'rollback',
+        restoreStage: false
+      })
+      const refreshed = await readOperationRecord(projectRoot, operationId)
+      if (refreshed.kind !== 'ok') {
+        throw new AppException({
+          code: ProjectVersioningErrorCodes.gitQueryFailed,
+          msg: '回退恢复记录无法读取'
+        })
+      }
+      record = refreshed.record
+      written = await buildRollbackTree(
+        projectRoot,
+        record,
+        head.commitId,
+        effects,
+        appliedStageOids
+      )
+    } else {
+      record = await mark(projectRoot, record, { phase: 'rollback-required' }, effects)
+      written = await restoreWorktree(
+        projectRoot,
+        record,
+        head.commitId,
+        effects,
+        appliedStageOids
+      )
+    }
     const author = {
       name: 'opengalgame',
       email: 'opengalgame@localhost',
@@ -87,15 +124,17 @@ export async function rollbackLimited(
     await mark(projectRoot, record, { phase: 'rolled-back' }, effects)
     return { rollbackCommitId }
   } catch (error) {
-    await compensateRollback(
-      projectRoot,
-      record,
-      head.commitId,
-      stageBefore,
-      appliedStageOids,
-      effects,
-      error
-    )
+    if (!backupBeforeRestore) {
+      await compensateRollback(
+        projectRoot,
+        record,
+        head.commitId,
+        stageBefore,
+        appliedStageOids,
+        effects,
+        error
+      )
+    }
     throw asGitException(error, ProjectVersioningErrorCodes.gitUnavailable, '作品回退失败')
   }
 }
@@ -143,11 +182,6 @@ async function restoreWorktree(
   effects: GitEffects,
   appliedStageOids: Map<string, string | null>
 ): Promise<{ treeOid: string }> {
-  const edits: Array<{
-    relativePath: string
-    action: 'upsert' | 'delete'
-    bytes?: Uint8Array
-  }> = []
   for (const path of record.paths) {
     const absolute = await resolveContained(projectRoot, path.relativePath)
     const original =
@@ -158,13 +192,39 @@ async function restoreWorktree(
         msg: '提交前的原始字节无法还原'
       })
     }
-    if (original === null) {
-      await effects.removeFile(absolute)
-      edits.push({ relativePath: path.relativePath, action: 'delete' })
-      continue
+    if (original === null) await effects.removeFile(absolute)
+    else await effects.writeBytes(absolute, original)
+  }
+  return buildRollbackTree(projectRoot, record, headOid, effects, appliedStageOids)
+}
+
+/** 工作区已由备份门槛恢复到原始内容后，只构建并暂存回退树。 */
+async function buildRollbackTree(
+  projectRoot: string,
+  record: OperationRecord,
+  headOid: string,
+  effects: GitEffects,
+  appliedStageOids: Map<string, string | null>
+): Promise<{ treeOid: string }> {
+  const edits: Array<{
+    relativePath: string
+    action: 'upsert' | 'delete'
+    bytes?: Uint8Array
+  }> = []
+  for (const path of record.paths) {
+    const original =
+      path.originalBytesBase64 === null ? null : decodeBytes(path.originalBytesBase64)
+    if (path.originalBytesBase64 !== null && !original) {
+      throw new AppException({
+        code: ProjectVersioningErrorCodes.gitQueryFailed,
+        msg: '提交前的原始字节无法还原'
+      })
     }
-    await effects.writeBytes(absolute, original)
-    edits.push({ relativePath: path.relativePath, action: 'upsert', bytes: original })
+    edits.push(
+      original === null
+        ? { relativePath: path.relativePath, action: 'delete' }
+        : { relativePath: path.relativePath, action: 'upsert', bytes: original }
+    )
   }
   const written = await applyTreeEdits(
     { dir: projectRoot },
@@ -190,11 +250,31 @@ async function finishPublishedRollback(
   record: OperationRecord,
   effects: GitEffects
 ): Promise<{ rollbackCommitId: string } | null> {
-  if (record.phase !== 'rollback-required' || !record.rollbackCommitId) return null
-  const head = await readHead(projectRoot)
-  if (head.commitId !== record.rollbackCommitId) return null
-  await mark(projectRoot, record, { phase: 'rolled-back' }, effects)
-  return { rollbackCommitId: record.rollbackCommitId }
+  const forwardCommitId = record.forwardCommitId
+  if (!forwardCommitId) return null
+  let rollbackCommitId = record.rollbackCommitId
+  if (rollbackCommitId) {
+    const proof = await proveRollbackCommit(projectRoot, record, rollbackCommitId)
+    if (proof.state === 'conflict') {
+      throw new AppException({
+        code: ProjectVersioningErrorCodes.gitQueryFailed,
+        msg: proof.detail
+      })
+    }
+    if (proof.state === 'unpublished') return null
+  } else {
+    rollbackCommitId = await findPublishedRollback(projectRoot, record)
+    if (!rollbackCommitId) return null
+  }
+  if (record.phase !== 'rolled-back' || record.rollbackCommitId !== rollbackCommitId) {
+    record = await mark(
+      projectRoot,
+      record,
+      { phase: 'rolled-back', rollbackCommitId },
+      effects
+    )
+  }
+  return { rollbackCommitId }
 }
 
 async function compensateRollback(

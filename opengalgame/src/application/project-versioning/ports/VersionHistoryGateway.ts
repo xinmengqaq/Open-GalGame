@@ -1,5 +1,5 @@
 import type { VersionContentSource, VersionSaveMode } from '../dto/ProjectVersioningDTO'
-import type { VersionTarget } from '../models/VersionTarget'
+import type { VersionTarget } from '../dto/VersionTarget'
 
 /**
  * 用户历史投影和清理标记。

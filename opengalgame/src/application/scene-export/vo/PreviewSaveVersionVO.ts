@@ -1,4 +1,4 @@
-import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
+import type { SceneExportContentBasis } from './SceneExportContentBasis'
 
 /**
  * 最近一次已结算的预览保存版本引用。
@@ -7,5 +7,5 @@ import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePre
 export type PreviewSaveVersionVO = {
   readonly requestId: string
   readonly revisionDigest: string
-  readonly contentBasis: SceneContentBasisVO
+  readonly contentBasis: SceneExportContentBasis
 }

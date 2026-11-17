@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useState, type DragEvent, type RefObject } from 'react'
 import { toast } from 'sonner'
 
 import type {
@@ -31,11 +31,12 @@ import {
   deleteSourceFile,
   endCatalogWrite,
   importDroppedFiles,
+  isUncertainCatalogWrite,
   loadFolderDeletionPlan,
   openSourceFile,
   placeSourceOnCanvas,
-  catalogWriteBlockedFor,
-  settleUnresolvedCatalogWrite,
+  resolveCatalogWrite,
+  settleCatalogProjectAfterOpen,
   submitCatalogName
 } from './catalogWrites'
 import type {
@@ -62,15 +63,16 @@ export { importDroppedFiles } from './catalogWrites'
 const emptyFolders: readonly ProjectFolderVO[] = []
 const emptySources: readonly ProjectInputSourceSummaryVO[] = []
 
-export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
+export function useInputCatalog(
+  client: ProjectFilesClient,
+  panelRef: RefObject<HTMLElement | null>
+): UseInputCatalog {
   const projectId = useWorkbenchSessionStore((state) => state.projectId)
   const queryClient = useQueryClient()
-  const panelRef = useRef<HTMLElement | null>(null)
   const [query, setQuery] = useState('')
   const [group, setGroup] = useState<CatalogGroup>('all')
   const [type, setType] = useState<CatalogTypeFilter>('all')
   const [busy, setBusy] = useState(false)
-  const seenProjectId = useRef<string | null>(null)
   const [folderTrail, setFolderTrail] = useState<string[]>([])
   const [menu, setMenu] = useState<CatalogMenuState>(null)
   const [nameDialog, setNameDialog] = useState<CatalogNameDialog>(null)
@@ -95,17 +97,11 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
   const currentFolderId = folderTrail[folderTrail.length - 1] ?? null
   const clipboardApi = useCatalogClipboard(projectId, folders, sources)
 
-  useEffect(() => {
-    setFolderTrail((trail) => pruneFolderTrail(folders, trail))
-  }, [folders])
-
-  useEffect(() => {
-    if (seenProjectId.current !== null && seenProjectId.current !== projectId) {
-      setEmptyDocument(null)
-    }
-    seenProjectId.current = projectId
-    setBusy(catalogWriteBlockedFor(projectId))
-    void settleUnresolvedCatalogWrite(client, projectId, setBusy)
+  // 切换工程时在渲染期重置本区状态并恢复该工程的门闩；渲染期只改本组件 state，不做 toast 等外部副作用。
+  const [renderedProjectId, setRenderedProjectId] = useState(projectId)
+  if (renderedProjectId !== projectId) {
+    setRenderedProjectId(projectId)
+    setBusy(false)
     setQuery('')
     setGroup('all')
     setType('all')
@@ -113,9 +109,24 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
     setMenu(null)
     setNameDialog(null)
     setCreateChooser(false)
+    setEmptyDocument(null)
     setDeleteTarget(null)
     setFolderDeletionPlan(null)
-  }, [projectId])
+  }
+
+  // 目录刷新后立即从 state 裁掉失效尾部，文件夹稍后复活也不会自动重新进入。
+  const trailTail = folderTrail[folderTrail.length - 1]
+  if (
+    renderedProjectId === projectId &&
+    trailTail !== undefined &&
+    !folders.some((folder) => folder.folderId === trailTail)
+  ) {
+    setFolderTrail(pruneFolderTrail(folders, folderTrail))
+  }
+
+  useEffect(() => {
+    void settleCatalogProjectAfterOpen(client, projectId)
+  }, [client, projectId])
 
   const searching = query.trim().length > 0
   const typedSources = useMemo(
@@ -187,7 +198,9 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
         clipboardApi.cutFile(menu.sourceId)
         setMenu(null)
       } else if (action === 'paste-current') {
-        void clipboardApi.pasteInto(client, queryClient, currentFolderId, busy, setBusy)
+        void clipboardApi
+          .pasteInto(client, queryClient, currentFolderId, busy, setBusy)
+          .catch(() => undefined)
         setMenu(null)
       }
     }
@@ -204,11 +217,11 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
     folderDeletionPlan,
     menu,
     nameDialog,
+    panelRef,
     queryClient
   ])
 
   return {
-    panelRef,
     query,
     group,
     type,
@@ -262,7 +275,9 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
     },
     closeMenu: () => setMenu(null),
     importFiles: () =>
-      chooseAndImport(client, queryClient, projectId, currentFolderId, busy, setBusy),
+      chooseAndImport(client, queryClient, projectId, currentFolderId, busy, setBusy).catch(
+        () => undefined
+      ),
     allowExternalDrop: (event) => {
       if (isInternalSourceDrag(event) || !hasFilePayload(event) || busy) return
       event.preventDefault()
@@ -279,7 +294,7 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
         event.dataTransfer.files,
         busy,
         setBusy
-      )
+      ).catch(() => undefined)
     },
     useOnCanvas: (sourceId) => {
       setMenu(null)
@@ -300,7 +315,9 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
     },
     pasteHere: (targetFolderId) => {
       setMenu(null)
-      return clipboardApi.pasteInto(client, queryClient, targetFolderId, busy, setBusy)
+      return clipboardApi
+        .pasteInto(client, queryClient, targetFolderId, busy, setBusy)
+        .catch(() => undefined)
     },
     beginCreateFolder: (parentFolderId) => {
       setMenu(null)
@@ -320,22 +337,36 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
     saveEmptyDocument: async (draft) => {
       if (!emptyDocument) return
       if (!beginCatalogWrite(projectId, busy, setBusy)) return
+      const operationId = crypto.randomUUID()
+      const applySuccess = (): void => {
+        if (!stillCurrentProject(projectId)) return
+        toast(workbenchFeedback.documentCreated)
+        setEmptyDocument(null)
+      }
       try {
         requireSuccess(
           await client.createProjectTextFile({
             projectId,
+            operationId,
             parentFolderId: emptyDocument.parentFolderId,
             expectedCatalogVersion: catalogVersion(queryClient, projectId),
             fileName: draft.fileName,
             content: draft.content
           })
         )
-        if (!stillCurrentProject(projectId)) return
-        toast(workbenchFeedback.documentCreated)
-        setEmptyDocument(null)
+        applySuccess()
       } catch (error) {
-        if (!stillCurrentProject(projectId)) return
-        toast(failureOf(error).msg)
+        const failure = failureOf(error)
+        if (isUncertainCatalogWrite(failure)) {
+          try {
+            await resolveCatalogWrite(client, projectId, operationId)
+            applySuccess()
+          } catch (verifyError) {
+            if (stillCurrentProject(projectId)) toast(failureOf(verifyError).msg)
+          }
+        } else if (stillCurrentProject(projectId)) {
+          toast(failure.msg)
+        }
       } finally {
         if (stillCurrentProject(projectId)) {
           await reloadCatalog(client, queryClient, projectId)
@@ -353,7 +384,9 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
     chooseCreateMedia: () => {
       const parent = createChooser === false ? currentFolderId : createChooser
       setCreateChooser(false)
-      void chooseAndImport(client, queryClient, projectId, parent, busy, setBusy)
+      void chooseAndImport(client, queryClient, projectId, parent, busy, setBusy).catch(
+        () => undefined
+      )
     },
     beginRenameFile: (sourceId) => {
       const source = sources.find((item) => item.sourceId === sourceId)
@@ -371,7 +404,15 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
       setNameDialog((current) => (current ? { ...current, name, error: null } : current))
     },
     submitName: () =>
-      submitCatalogName(client, queryClient, projectId, nameDialog, busy, setBusy, setNameDialog),
+      submitCatalogName(
+        client,
+        queryClient,
+        projectId,
+        nameDialog,
+        busy,
+        setBusy,
+        setNameDialog
+      ).catch(() => undefined),
     closeNameDialog: () => {
       if (!busy) setNameDialog(null)
     },
@@ -390,7 +431,7 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
         busy,
         setBusy,
         setDeleteTarget
-      ),
+      ).catch(() => undefined),
     closeDeleteFile: () => {
       if (!busy) setDeleteTarget(null)
     },
@@ -407,7 +448,7 @@ export function useInputCatalog(client: ProjectFilesClient): UseInputCatalog {
         busy,
         setBusy,
         setFolderDeletionPlan
-      ),
+      ).catch(() => undefined),
     closeDeleteFolder: () => {
       if (!busy) setFolderDeletionPlan(null)
     }

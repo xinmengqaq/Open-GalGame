@@ -1,23 +1,61 @@
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { chromium } from '@playwright/test'
-import { expect, it } from 'vitest'
+import { chromium, type Page } from '@playwright/test'
+import SceneParser, { ADD_NEXT_ARG_LIST, SCRIPT_CONFIG } from 'webgal-parser'
+import { expect, it, vi } from 'vitest'
 import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
-import { createSceneGeneration } from '@bootstrap/sceneGeneration'
+import { createSceneGeneration, type SceneGenerationServices } from '@bootstrap/sceneGeneration'
+import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
+import type { SceneGenerationStatusVO } from '@application/scene-generation/vo/SceneGenerationVO'
 import { WebgalRuntimeHostImpl } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
 import {
   generationFixture,
-  request
+  request,
+  type GenerationFixture
 } from '../../../../harness/acceptance/support/generationFixture'
 import { FileSceneGenerationExecutionRepositoryImpl } from '@infrastructure/scene-generation/execution/FileSceneGenerationExecutionRepositoryImpl'
 
 const root = process.env.OPENGALGAME_SCENE_ACCEPTANCE_DIR
 
+type P1CaptureResult = {
+  text: string
+  termination: 'eof' | 'aborted' | 'consumer-cancel' | 'error'
+  sawDone: boolean
+  payloadCount: number
+  parseErrorCount: number
+  errorName: string | null
+}
+type P1Captured = {
+  tools: readonly string[]
+  capture: Promise<P1CaptureResult>
+  http: { status: number; ok: boolean; contentType: string | null }
+}
+interface P1SafeContext {
+  finalState: string | null
+  initialInteractionKind: string | null
+  candidateSnapshotId: string | null
+  commitId: string | null
+  validationCount: number | null
+  failureClass: string | null
+  failureReason: string | null
+  failureCode: number | null
+  httpStatus: number | null
+  sdkException: Record<string, unknown> | null
+  degradedNoticeSeen: boolean
+  reviseCount: number
+}
+
+// 用户裁决：长生成不测时限；只关闭当前文件的 runner deadline，不影响其他文件。
+vi.setConfig({ testTimeout: 0 })
+
 it.runIf(process.env.OPENGALGAME_RUN_EXISTING_SCENE_ENGINE === '1')(
   '在已生成的替身和真实模型成品上补验引擎，不重复模型调用',
   async () => {
     if (!root) throw new Error('缺少已有成品目录')
-    for (const mode of ['stub', 'real']) {
+    const acceptedRealDirectory =
+      existsSync(join(resolve(root), 'p1-real', 'state')) ? 'p1-real' : 'real'
+    for (const mode of ['stub', acceptedRealDirectory]) {
       const artifactRoot = join(resolve(root), mode)
       const execution = (await new FileSceneGenerationExecutionRepositoryImpl(
         join(artifactRoot, 'state')
@@ -32,7 +70,8 @@ it.runIf(process.env.OPENGALGAME_RUN_EXISTING_SCENE_ENGINE === '1')(
         join(artifactRoot, 'acceptance-report.json'),
         JSON.stringify(
           {
-            modelMode: mode,
+            modelMode: mode === 'stub' ? 'stub' : 'real',
+            artifactMode: mode,
             projectRoot: execution.source.projectRoot,
             inputs: execution.inputSnapshot,
             entryFile: join(execution.source.projectRoot, 'game/scene/start.txt'),
@@ -47,24 +86,21 @@ it.runIf(process.env.OPENGALGAME_RUN_EXISTING_SCENE_ENGINE === '1')(
         ) + '\n'
       )
     }
-  },
-  180000
+  }
 )
 
 it.runIf(process.env.OPENGALGAME_RUN_SCENE_ACCEPTANCE === '1')(
   '保留替身模型验收工程、修订、提交和真实引擎烟测证据',
   async () => {
     await acceptance('stub')
-  },
-  180000
+  }
 )
 
 it.runIf(process.env.OPENGALGAME_RUN_REAL_MODEL === '1')(
   '真实模型通过文件工具生成可提交的真实成品',
   async () => {
     await acceptance('real')
-  },
-  360000
+  }
 )
 
 it.runIf(process.env.OPENGALGAME_RUN_REAL_MODEL === '1')(
@@ -73,93 +109,294 @@ it.runIf(process.env.OPENGALGAME_RUN_REAL_MODEL === '1')(
     const f = await generationFixture({
       keep: root ? join(resolve(root), 'p1-real') : undefined
     })
-    const captured: Array<{ tools: readonly string[]; responseText: Promise<string> }> = []
-    /** 透传真实请求，同时留存每次工具集与原始响应，供终态动作与技能读取取证。 */
-    const capturingFetch: typeof fetch = async (input, init) => {
-      const tools = toolNamesOf(init?.body)
-      const response = await fetch(input, init)
-      captured.push({ tools, responseText: response.clone().text() })
-      return response
+    const captured: P1Captured[] = []
+    const safeContext: P1SafeContext = {
+      finalState: null,
+      initialInteractionKind: null,
+      candidateSnapshotId: null,
+      commitId: null,
+      validationCount: null,
+      failureClass: null,
+      failureReason: null,
+      failureCode: null,
+      httpStatus: null,
+      sdkException: null,
+      degradedNoticeSeen: false,
+      reviseCount: 0
     }
-    const app = await createSceneGeneration({
-      ...f.config,
-      loadSettings: p1AcceptanceSettings,
-      fetcher: capturingFetch
-    })
-    await app.generation.generateScene({
-      ...request,
-      reviewCandidate: true,
-      policy: { maxCorrections: 2 }
-    })
-    await f.run()
+    let app: SceneGenerationServices | undefined
+    let sdkException: unknown
+    try {
+      /** 透传请求并先记录每个 chunk；不 clone、不生成会拒绝的取证 promise。 */
+      const capturingFetch: typeof fetch = async (input, init) => {
+        const tools = toolNamesOf(init?.body)
+        const response = await fetch(input, init)
+        const http = {
+          status: response.status,
+          ok: response.ok,
+          contentType: response.headers.get('content-type')
+        }
+        if (!response.body) {
+          captured.push({
+            tools,
+            http,
+            capture: Promise.resolve({
+              text: '',
+              termination: 'eof',
+              sawDone: false,
+              payloadCount: 0,
+              parseErrorCount: 0,
+              errorName: null
+            })
+          })
+          return response
+        }
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let text = ''
+        let settled = false
+        const { promise: capture, resolve: resolveCapture } =
+          Promise.withResolvers<P1CaptureResult>()
+        const finish = (
+          termination: P1CaptureResult['termination'],
+          error?: unknown
+        ): void => {
+          if (settled) return
+          settled = true
+          text += decoder.decode()
+          const counts = inspectResponseCounts(text)
+          resolveCapture({
+            text,
+            termination,
+            sawDone: text.includes('[DONE]'),
+            payloadCount: counts.payloadCount,
+            parseErrorCount: counts.parseErrorCount,
+            errorName: error instanceof Error ? error.name : null
+          })
+        }
+        const body = new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            try {
+              const { done, value } = await reader.read()
+              if (settled) return
+              if (done) {
+                finish('eof')
+                controller.close()
+                return
+              }
+              text += decoder.decode(value, { stream: true })
+              controller.enqueue(value)
+            } catch (error) {
+              if (settled) return
+              finish(init?.signal?.aborted ? 'aborted' : 'error', error)
+              controller.error(error)
+            }
+          },
+          cancel(reason) {
+            finish(init?.signal?.aborted ? 'aborted' : 'consumer-cancel')
+            void reader.cancel(reason).catch(() => undefined)
+          }
+        })
+        captured.push({ tools, http, capture })
+        return new Response(body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers
+        })
+      }
+      const appInstance = await createSceneGeneration({
+        ...f.config,
+        loadSettings: p1AcceptanceSettings,
+        fetcher: capturingFetch
+      })
+      app = appInstance
+      await appInstance.generation.generateScene({
+        ...request,
+        reviewCandidate: true,
+        policy: { maxCorrections: 2 }
+      })
+      await f.run()
 
-    const responses = await Promise.all(captured.map((item) => item.responseText))
-    const status = await app.status.getSceneGenerationStatus(request)
-    const execution = (await app.ports.executions.readExecution(request))!
+      const status = await appInstance.status.getSceneGenerationStatus(request)
+      const execution = (await appInstance.ports.executions.readExecution(request))!
+      safeContext.finalState = status.state
+      safeContext.initialInteractionKind = status.interaction?.kind ?? null
+      if (status.interaction?.message.includes('完成摘要未生成'))
+        safeContext.degradedNoticeSeen = true
+      safeContext.candidateSnapshotId =
+        status.candidateSnapshotId ?? execution.candidateSnapshotId ?? null
+      safeContext.validationCount = status.result?.preview.validationReport.issues.length ?? null
+      expect(['waiting', 'succeeded']).toContain(status.state)
+      if (status.state === 'waiting') {
+        expect(['review', 'correction']).toContain(status.interaction?.kind)
+        expect(status.candidateSnapshotId).toBeTruthy()
+      } else expect(status.result?.commitId).toBeTruthy()
 
-    expect(captured.length).toBeGreaterThan(0)
-    const requestToolSets = captured.map((item) => item.tools).filter((tools) => tools.length > 0)
-    expect(requestToolSets.length).toBeGreaterThan(0)
-    expect(requestToolSets.every((tools) => !tools.includes('read_file'))).toBe(true)
-    const finalResponse = responses.at(-1) ?? ''
-    const actionEvidence = responseActions(finalResponse)
-    expect(actionEvidence).not.toEqual([])
-    expect(actionEvidence.some(isTerminalAction)).toBe(true)
-    expect(['waiting', 'succeeded']).toContain(status.state)
-    if (status.state === 'waiting') {
-      expect(status.interaction?.kind).toBe('review')
-      expect(status.candidateSnapshotId).toBeTruthy()
-    } else expect(status.result?.commitId).toBeTruthy()
-    const candidateSnapshotId = status.candidateSnapshotId ?? execution.candidateSnapshotId
-    expect(candidateSnapshotId).toBeTruthy()
-    const candidate = await app.ports.artifacts.readCandidate(execution, candidateSnapshotId!)
-    expect(candidate.candidateSnapshotId).toBe(candidateSnapshotId)
+      let currentStatus = status
+      let currentExecution = execution
+      let revised = 0
+      while (
+        currentStatus.state === 'waiting' &&
+        currentStatus.interaction?.kind === 'correction' &&
+        revised < 2
+      ) {
+        const interaction = currentStatus.interaction
+        const receipt = await appInstance.generation.replySceneGenerationInteraction({
+          projectId: currentStatus.projectId,
+          sceneId: currentStatus.sceneId,
+          operationId: currentStatus.operationId,
+          threadId: currentStatus.threadId,
+          branchId: currentStatus.branchId,
+          interactionId: interaction.interactionId,
+          checkpointId: interaction.checkpointId,
+          candidateSnapshotId: interaction.candidateSnapshotId,
+          replyId: `p1-revise-${revised + 1}`,
+          reply: { kind: 'revise', body: '请按当前校验提示修正可修正项，保留现有剧情。' }
+        })
+        expect(receipt.accepted).toBe(true)
+        await f.run()
+        currentStatus = await appInstance.status.getSceneGenerationStatus(request)
+        currentExecution = (await appInstance.ports.executions.readExecution(request))!
+        revised += 1
+        safeContext.reviseCount = revised
+        if (currentStatus.interaction?.message.includes('完成摘要未生成'))
+          safeContext.degradedNoticeSeen = true
+        safeContext.finalState = currentStatus.state
+        safeContext.candidateSnapshotId =
+          currentStatus.candidateSnapshotId ?? currentExecution.candidateSnapshotId ?? null
+        const revisedCandidateId =
+          currentStatus.candidateSnapshotId ?? currentExecution.candidateSnapshotId
+        expect(revisedCandidateId).toBeTruthy()
+        const revisedCandidate = await appInstance.ports.artifacts.readCandidate(
+          currentExecution,
+          revisedCandidateId!
+        )
+        expect(revisedCandidate.candidateSnapshotId).toBe(revisedCandidateId)
+      }
+      while (
+        currentStatus.state === 'waiting' &&
+        currentStatus.interaction?.kind === 'review' &&
+        currentStatus.interaction.message.includes('完成摘要未生成') &&
+        revised < 2
+      ) {
+        const interaction = currentStatus.interaction
+        const receipt = await appInstance.generation.replySceneGenerationInteraction({
+          projectId: currentStatus.projectId,
+          sceneId: currentStatus.sceneId,
+          operationId: currentStatus.operationId,
+          threadId: currentStatus.threadId,
+          branchId: currentStatus.branchId,
+          interactionId: interaction.interactionId,
+          checkpointId: interaction.checkpointId,
+          candidateSnapshotId: interaction.candidateSnapshotId,
+          replyId: `p1-revise-${revised + 1}`,
+          reply: { kind: 'revise', body: '请补充本次创作取舍摘要，保留现有剧情后重新提交候选。' }
+        })
+        expect(receipt.accepted).toBe(true)
+        await f.run()
+        currentStatus = await appInstance.status.getSceneGenerationStatus(request)
+        currentExecution = (await appInstance.ports.executions.readExecution(request))!
+        revised += 1
+        safeContext.reviseCount = revised
+        if (currentStatus.interaction?.message.includes('完成摘要未生成'))
+          safeContext.degradedNoticeSeen = true
+        safeContext.finalState = currentStatus.state
+        safeContext.candidateSnapshotId =
+          currentStatus.candidateSnapshotId ?? currentExecution.candidateSnapshotId ?? null
+        const revisedCandidateId =
+          currentStatus.candidateSnapshotId ?? currentExecution.candidateSnapshotId
+        expect(revisedCandidateId).toBeTruthy()
+        const revisedCandidate = await appInstance.ports.artifacts.readCandidate(
+          currentExecution,
+          revisedCandidateId!
+        )
+        expect(revisedCandidate.candidateSnapshotId).toBe(revisedCandidateId)
+      }
+      if (
+        currentStatus.state === 'waiting' &&
+        currentStatus.interaction?.kind === 'review' &&
+        currentStatus.interaction.message.includes('完成摘要未生成')
+      )
+        throw new Error('候选完成摘要仍未生成，验收未通过（模型内容/摘要未达标）')
+      expect(['waiting', 'succeeded']).toContain(currentStatus.state)
+      safeContext.finalState = currentStatus.state
+      if (currentStatus.state === 'waiting') {
+        expect(currentStatus.interaction?.kind).toBe('review')
+      } else {
+        expect(currentStatus.result?.commitId).toBeTruthy()
+        expect(currentStatus.result?.preview.validationReport.issues).toEqual([])
+      }
+      const candidateSnapshotId =
+        currentStatus.candidateSnapshotId ?? currentExecution.candidateSnapshotId
+      expect(candidateSnapshotId).toBeTruthy()
+      safeContext.candidateSnapshotId = candidateSnapshotId ?? null
+      const candidate = await appInstance.ports.artifacts.readCandidate(
+        currentExecution,
+        candidateSnapshotId!
+      )
+      expect(candidate.candidateSnapshotId).toBe(candidateSnapshotId)
 
-    const tools = [...new Set(requestToolSets.flat())].sort()
-    const observedActions = [...new Set(responses.flatMap(responseActions))]
-    const capturedTokenUsage = sumTokenUsage(responses)
-    const report = {
-      scenario: 'p1-real-model-terminal-actions',
-      projectId: status.projectId,
-      sceneId: status.sceneId,
-      operationId: status.operationId,
-      threadId: status.threadId,
-      branchId: status.branchId,
-      state: status.state,
-      interactionKind: status.interaction?.kind ?? null,
-      candidateSnapshotId: candidateSnapshotId ?? null,
-      commitId: status.result?.commitId ?? null,
-      budget: {
-        correctionsUsed: execution.budget.correctionsUsed,
-        modelCallsUsed: execution.budget.modelCallsUsed,
-        toolCallsUsed: execution.budget.toolCallsUsed,
-        activeElapsedMs: execution.budget.activeElapsedMs,
-        inputTokens: execution.budget.inputTokens ?? null,
-        outputTokens: execution.budget.outputTokens ?? null,
-        totalTokens: execution.budget.totalTokens ?? null,
-        tokenLimit: execution.budget.tokenLimit ?? null,
-        capturedTokenUsage
-      },
-      actionEvidence,
-      observedActions,
-      tools,
-      notes: [
-        `策略：maxCorrections 2，reviewCandidate ${String(execution.reviewCandidate)}`,
-        `模型请求 ${captured.length} 次，其中 ${requestToolSets.length} 次声明工具；工具集取自各请求 tools[].function.name，所有声明工具集均不含 read_file`,
-        `终态动作取自最后一次模型响应的结构化事件（工具调用名与正文 action）：${actionEvidence.join('、') || '未捕获'}；全过程出现过的动作：${observedActions.join('、') || '未捕获'}`,
-        capturedTokenUsage === '未采集'
-          ? 'Token 未采集：模型响应未包含 usage 字段'
-          : 'Token 由各次模型响应 usage.prompt_tokens/completion_tokens 求和',
-        `候选修订通过 app.ports.artifacts.readCandidate 读取成功：${candidateSnapshotId}`
-      ]
+      const captures = await Promise.all(captured.map((item) => item.capture))
+      const captureComplete =
+        captures.length === captured.length &&
+        captures.every((item) => item.sawDone || item.termination === 'eof')
+      if (!captureComplete)
+        throw new Error('模型动作取证不完整：SSE 捕获未正常完成，不能据此判断模型未发动作')
+      expect(captured.length).toBeGreaterThan(0)
+      const responses = captures.map((item) => item.text)
+      const requestToolSets = captured
+        .map((item) => item.tools)
+        .filter((tools) => tools.length > 0)
+      expect(requestToolSets.length).toBeGreaterThan(0)
+      expect(requestToolSets.every((tools) => !tools.includes('read_file'))).toBe(true)
+      const observedActions = [...new Set(responses.flatMap(responseActions))]
+      expect(observedActions.some(isTerminalAction)).toBe(true)
+
+      let finalStatus = currentStatus
+      let finalExecution = currentExecution
+      if (currentStatus.state === 'waiting') {
+        const interaction = currentStatus.interaction!
+        const receipt = await appInstance.generation.replySceneGenerationInteraction({
+          projectId: currentStatus.projectId,
+          sceneId: currentStatus.sceneId,
+          operationId: currentStatus.operationId,
+          threadId: currentStatus.threadId,
+          branchId: currentStatus.branchId,
+          interactionId: interaction.interactionId,
+          checkpointId: interaction.checkpointId,
+          candidateSnapshotId: interaction.candidateSnapshotId,
+          replyId: 'p1-accept-1',
+          reply: { kind: 'accept' }
+        })
+        expect(receipt.accepted).toBe(true)
+        await f.run()
+        finalStatus = await appInstance.status.getSceneGenerationStatus(request)
+        expect(finalStatus.state).toBe('succeeded')
+        expect(finalStatus.result?.commitId).toBeTruthy()
+        expect(finalStatus.result?.preview.validationReport.issues).toEqual([])
+        finalExecution = (await appInstance.ports.executions.readExecution(request))!
+      }
+      safeContext.finalState = finalStatus.state
+      safeContext.commitId = finalStatus.result?.commitId ?? null
+      safeContext.validationCount =
+        finalStatus.result?.preview.validationReport.issues.length ??
+        finalExecution.artifactValidation?.issues.length ??
+        safeContext.validationCount
+      const failure = finalExecution.failure
+      safeContext.failureClass =
+        failure && 'failureClass' in failure ? (failure.failureClass ?? null) : null
+      safeContext.failureReason = failure?.reason ?? null
+      safeContext.failureCode = failure?.code ?? null
+      safeContext.httpStatus =
+        failure && 'httpStatus' in failure ? (failure.httpStatus ?? null) : null
+    } catch (error) {
+      sdkException = error
+      throw error
+    } finally {
+      safeContext.sdkException = safeExceptionFields(sdkException)
+      await writeP1SafeReport({ f, app, captured, context: safeContext })
     }
-    await writeFile(
-      join(f.root, 'p1-acceptance-report.json'),
-      JSON.stringify(report, null, 2) + '\n'
-    )
-    if (root) console.info(`验收证据：${join(f.root, 'p1-acceptance-report.json')}`)
-  },
-  360000
+  }
 )
 
 /** 读取请求体里的工具名；兼容 OpenAI 的 `function.name` 与 Anthropic 的顶层 `name`。解析失败直接抛出，避免空工具集让反向断言空过。 */
@@ -187,6 +424,36 @@ const TERMINAL_ACTIONS = ['submit_scene_result', 'report_blocked'] as const
 
 function isTerminalAction(action: string): action is (typeof TERMINAL_ACTIONS)[number] {
   return (TERMINAL_ACTIONS as readonly string[]).includes(action)
+}
+
+/** 只统计 payload 数量和解析失败数，不输出内容。 */
+function inspectResponseCounts(text: string): {
+  payloadCount: number
+  parseErrorCount: number
+} {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return { payloadCount: 0, parseErrorCount: 0 }
+  if (trimmed.startsWith('{')) {
+    try {
+      JSON.parse(trimmed)
+      return { payloadCount: 1, parseErrorCount: 0 }
+    } catch {
+      return { payloadCount: 0, parseErrorCount: 1 }
+    }
+  }
+  let payloadCount = 0
+  let parseErrorCount = 0
+  for (const line of trimmed.split(/\r?\n/u)) {
+    const match = /^data:\s*(.+)$/u.exec(line)
+    if (!match || match[1].trim() === '[DONE]') continue
+    try {
+      JSON.parse(match[1])
+      payloadCount += 1
+    } catch {
+      parseErrorCount += 1
+    }
+  }
+  return { payloadCount, parseErrorCount }
 }
 
 /** 解析一次响应里的动作名：工具调用名与结构化正文的 action 字段。流式响应按 delta 正文拼接。 */
@@ -349,6 +616,253 @@ async function acceptance(mode: 'stub' | 'real'): Promise<void> {
   if (root) console.info(`验收证据：${join(f.root, 'acceptance-report.json')}`)
 }
 
+/** SDK/HTTP 异常只保留可分类字段，不保留 message、请求或响应原文。 */
+function safeExceptionFields(error: unknown): Record<string, unknown> | null {
+  if (!error || typeof error !== 'object') return null
+  const record = error as Record<string, unknown>
+  const response =
+    record.response && typeof record.response === 'object'
+      ? (record.response as Record<string, unknown>)
+      : null
+  const payload = record.payload ?? response?.payload ?? record.body
+  return {
+    name: typeof record.name === 'string' ? record.name : null,
+    status:
+      typeof record.status === 'number'
+        ? record.status
+        : typeof record.statusCode === 'number'
+          ? record.statusCode
+          : typeof response?.status === 'number'
+            ? response.status
+            : null,
+    ok:
+      typeof record.ok === 'boolean'
+        ? record.ok
+        : typeof response?.ok === 'boolean'
+          ? response.ok
+          : null,
+    code: typeof record.code === 'string' ? record.code : null,
+    payloadType:
+      payload === undefined
+        ? null
+        : Array.isArray(payload)
+          ? 'array'
+          : typeof payload === 'object'
+            ? 'object'
+            : typeof payload,
+    failureClass: typeof record.failureClass === 'string' ? record.failureClass : null,
+    reason: typeof record.reason === 'string' ? record.reason : null,
+    hasMessage: typeof record.message === 'string' && record.message.length > 0
+  }
+}
+
+/** finally 安全证据：失败也写产品状态/动作枚举/validation/HTTP 元数据，不写模型或响应正文。 */
+async function writeP1SafeReport(options: {
+  f: GenerationFixture
+  app: SceneGenerationServices | undefined
+  captured: readonly P1Captured[]
+  context: P1SafeContext
+}): Promise<void> {
+  try {
+    const settled = await Promise.allSettled(
+      options.captured.map((item) => item.capture)
+    )
+    const captures = settled.flatMap((item) =>
+      item.status === 'fulfilled' ? [item.value] : []
+    )
+    const responses = captures.map((item) => item.text)
+    const captureComplete =
+      captures.length === options.captured.length &&
+      captures.every((item) => item.sawDone || item.termination === 'eof')
+    const observedActions = [...new Set(responses.flatMap(responseActions))]
+    let statusSnapshot: SceneGenerationStatusVO | undefined
+    let execution: SceneGenerationExecution | undefined
+    if (options.app) {
+      try {
+        statusSnapshot = await options.app.status.getSceneGenerationStatus(request)
+      } catch {
+        statusSnapshot = undefined
+      }
+      try {
+        execution = await options.app.ports.executions.readExecution(request) ?? undefined
+      } catch {
+        execution = undefined
+      }
+    }
+    const failure = execution?.failure
+    const validationIssues =
+      statusSnapshot?.result?.preview.validationReport.issues ??
+      execution?.artifactValidation?.issues
+    const validation = (validationIssues ?? []).map((issue) => ({
+      code: typeof issue.code === 'string' ? issue.code : null,
+      sequence: typeof issue.sequence === 'number' ? issue.sequence : null,
+      line: typeof issue.line === 'number' ? issue.line : null,
+      correctable: typeof issue.correctable === 'boolean' ? issue.correctable : null,
+      needsDecision:
+        typeof issue.requiresHumanDecision === 'boolean'
+          ? issue.requiresHumanDecision
+          : null
+    }))
+    const budget = execution?.budget
+    const capturedTokenUsage = sumTokenUsage(responses)
+    const report = {
+      scenario: 'p1-real-model-terminal-actions',
+      state: options.context.finalState ?? statusSnapshot?.state ?? null,
+      degradedNoticeSeen: options.context.degradedNoticeSeen,
+      reviseCount: options.context.reviseCount,
+      initialInteractionKind:
+        options.context.initialInteractionKind ?? statusSnapshot?.interaction?.kind ?? null,
+      candidateSnapshotId:
+        options.context.candidateSnapshotId ??
+        execution?.candidateSnapshotId ??
+        statusSnapshot?.candidateSnapshotId ??
+        null,
+      commitId: options.context.commitId ?? statusSnapshot?.result?.commitId ?? null,
+      validationCount:
+        options.context.validationCount ??
+        (Array.isArray(validationIssues) ? validationIssues.length : null),
+      validation,
+      capturedTokenUsage,
+      failureClass:
+        options.context.failureClass ??
+        (failure && 'failureClass' in failure ? (failure.failureClass ?? null) : null),
+      failureReason:
+        options.context.failureReason ??
+        (failure && 'reason' in failure ? (failure.reason ?? null) : null),
+      failureCode:
+        options.context.failureCode ??
+        (failure && 'code' in failure ? (failure.code ?? null) : null),
+      httpStatus:
+        options.context.httpStatus ??
+        (failure && 'httpStatus' in failure ? (failure.httpStatus ?? null) : null),
+      observedActions,
+      terminalActions: observedActions.filter(isTerminalAction),
+      artifactMode: 'p1-real',
+      engineSmoke: '未启用',
+      captureComplete,
+      httpCalls: options.captured.map((item, index) => {
+        const capture = captures[index]
+        return {
+          ...item.http,
+          termination: capture?.termination ?? 'unknown',
+          sawDone: capture?.sawDone ?? false,
+          payloadCount: capture?.payloadCount ?? null,
+          parseErrorCount: capture?.parseErrorCount ?? null,
+          errorName: capture?.errorName ?? null
+        }
+      }),
+      sdkException: options.context.sdkException,
+      budget: budget
+        ? {
+            correctionsUsed: budget.correctionsUsed,
+            modelCallsUsed: budget.modelCallsUsed,
+            toolCallsUsed: budget.toolCallsUsed,
+            activeElapsedMs: budget.activeElapsedMs,
+            inputTokens: budget.inputTokens ?? null,
+            outputTokens: budget.outputTokens ?? null,
+            totalTokens: budget.totalTokens ?? null,
+            tokenLimit: budget.tokenLimit ?? null,
+            capturedTokenUsage
+          }
+        : null
+    }
+    await writeFile(
+      join(options.f.root, 'p1-acceptance-report.json'),
+      JSON.stringify(report, null, 2) + '\n'
+    )
+  } catch (error) {
+    if (options.context.sdkException === null) throw error
+    await writeFile(
+      join(options.f.root, 'p1-evidence-error.json'),
+      JSON.stringify(
+        {
+          primary: options.context.sdkException,
+          evidence: safeExceptionFields(error)
+        },
+        null,
+        2
+      ) + '\n'
+    )
+  }
+}
+
+/** 读取当前真实脚本解析后的第一条可显示 say，不用固定文案。 */
+async function firstVisibleSentence(projectRoot: string): Promise<string> {
+  const raw = await readFile(join(projectRoot, 'game/scene/start.txt'), 'utf8')
+  const parser = new SceneParser(
+    undefined,
+    (fileName) => fileName,
+    ADD_NEXT_ARG_LIST,
+    SCRIPT_CONFIG
+  )
+  const scene = parser.parse(raw, 'start.txt', 'start.txt')
+  const sentence = scene.sentenceList.find(
+    (item) => item.command === 0 && !item.isLineBreakHolder && item.content.trim().length > 0
+  )
+  if (!sentence) throw new Error('生成脚本没有可显示对白')
+  return sentence.content.trim()
+}
+
+/**
+ * 引擎把台词渲染成带外描边/内描边的分层 DOM，每字有三层文本；
+ * 取每个文字元素的直接文本节点拼回台词，Pixi 文本保留作旧引擎回退。
+ */
+async function engineVisibleTexts(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const texts: string[] = []
+    const renderedCharacters: string[] = []
+    for (const element of Array.from(
+      document.querySelectorAll('#textBoxMain [class*="TextBox_textElement"]')
+    )) {
+      const holder = element.querySelector('[class*="_zhanwei_"]') ?? element
+      const direct = Array.from(holder.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent ?? '')
+        .join('')
+      if (direct.trim().length > 0) renderedCharacters.push(direct)
+    }
+    if (renderedCharacters.length > 0) texts.push(renderedCharacters.join(''))
+
+    const seen = new Set<object>()
+    const globalWindow = window as unknown as {
+      PIXIapp?: unknown
+      __PIXI_APP__?: unknown
+    }
+    const roots = [globalWindow.PIXIapp, globalWindow.__PIXI_APP__]
+    const visit = (node: unknown, depth: number): void => {
+      if (!node || typeof node !== 'object' || depth > 12 || seen.has(node)) return
+      seen.add(node)
+      const record = node as {
+        text?: unknown
+        children?: unknown[]
+        parent?: unknown
+        [key: string]: unknown
+      }
+      if (typeof record.text === 'string') texts.push(record.text)
+      if (Array.isArray(record.children)) {
+        for (const child of record.children) visit(child, depth + 1)
+      }
+      for (const key of [
+        'currentApp',
+        'stage',
+        'mainStageContainer',
+        'mainStageObject',
+        'backgroundContainer',
+        'backgroundEffectsContainer',
+        'figureContainer',
+        'foregroundEffectsContainer',
+        'pixiStage',
+        'stageManager',
+        'text'
+      ]) {
+        visit(record[key], depth + 1)
+      }
+    }
+    for (const root of roots) visit(root, 0)
+    return texts
+  })
+}
+
 /** 加载既有引擎并执行生成入口，证明真实脚本与素材请求可达；不新增播放器。 */
 async function engineSmoke(
   projectRoot: string,
@@ -373,6 +887,9 @@ async function engineSmoke(
     })
     await page.goto(handle.baseUrl, { waitUntil: 'networkidle' })
     await page.screenshot({ path: join(artifactRoot, 'engine-loading.png') })
+    const expectedSentence = (await firstVisibleSentence(projectRoot))
+      .replace(/\s+/gu, ' ')
+      .trim()
     await page.getByText('PRESS THE SCREEN TO START', { exact: true }).click({ timeout: 20000 })
     await page
       .getByText('简体中文', { exact: true })
@@ -406,8 +923,13 @@ async function engineSmoke(
     await expect
       .poll(
         async () => {
-          const text = await page.locator('body').innerText()
-          if (text.includes('林') || text.includes('车站')) return true
+          const rendered = await engineVisibleTexts(page)
+          const bodyText = await page.locator('body').innerText()
+          const visible =
+            [...rendered, bodyText]
+              .map((text) => text.replace(/\s+/gu, ' ').trim())
+              .some((text) => text.includes(expectedSentence)) ?? false
+          if (visible) return true
           await page.locator('#FullScreenClick').click({ position: { x: 640, y: 540 } })
           return false
         },

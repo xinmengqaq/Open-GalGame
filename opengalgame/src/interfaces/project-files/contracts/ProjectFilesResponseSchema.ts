@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
-import type { ProjectFileOperationSettlementVO } from '@application/project-files/vo/ProjectFileOperationVO'
+import type {
+  ProjectFileOperationRecoveryVO,
+  ProjectFileOperationSettlementVO
+} from '@application/project-files/vo/ProjectFileOperationVO'
 import type { ProjectFilesInspectionVO } from '@application/project-files/vo/ProjectFilesInspectionVO'
 import type {
   ProjectFolderDeletionPlanVO,
@@ -16,11 +19,7 @@ import type {
 } from '@application/project-files/vo/ProjectInputSourceVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-
-const failedResultSchema = z.strictObject({
-  code: z.number().refine((code) => code !== ErrorCodes.success),
-  msg: z.string()
-})
+import { failureResultSchema } from '../../contracts/FailureResultSchema'
 
 const fileAssetKinds = ['image', 'audio', 'video'] as const
 const summarySchema = z.union([
@@ -95,7 +94,7 @@ const inspectionResultSchema = z.union([
       )
     })
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const summaryResultSchema = z.union([
   z.strictObject({
@@ -103,7 +102,7 @@ const summaryResultSchema = z.union([
     msg: z.string(),
     data: catalogSchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const snapshotResultSchema = z.union([
   z.strictObject({
@@ -115,7 +114,7 @@ const snapshotResultSchema = z.union([
       sources: z.array(sourceSchema)
     })
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const importResultSchema = z.union([
   z.strictObject({
@@ -126,7 +125,7 @@ const importResultSchema = z.union([
       failedFiles: z.array(z.strictObject({ fileName: z.string(), message: z.string() }))
     })
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const chosenFilesResultSchema = z.union([
   z.strictObject({
@@ -134,7 +133,7 @@ const chosenFilesResultSchema = z.union([
     msg: z.string(),
     data: z.array(z.string()).nullable()
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const nullResultSchema = z.union([
   z.strictObject({
@@ -142,7 +141,7 @@ const nullResultSchema = z.union([
     msg: z.string(),
     data: z.null()
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const droppedFilePathResultSchema = z.union([
   z.strictObject({
@@ -150,7 +149,7 @@ const droppedFilePathResultSchema = z.union([
     msg: z.string(),
     data: z.string().min(1)
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const folderResultSchema = z.union([
   z.strictObject({
@@ -158,7 +157,7 @@ const folderResultSchema = z.union([
     msg: z.string(),
     data: folderSchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const deletionPlanResultSchema = z.union([
   z.strictObject({
@@ -166,7 +165,7 @@ const deletionPlanResultSchema = z.union([
     msg: z.string(),
     data: deletionPlanSchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const summaryValueResultSchema = z.union([
   z.strictObject({
@@ -174,7 +173,7 @@ const summaryValueResultSchema = z.union([
     msg: z.string(),
     data: summarySchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const sourceValueResultSchema = z.union([
   z.strictObject({
@@ -182,7 +181,7 @@ const sourceValueResultSchema = z.union([
     msg: z.string(),
     data: sourceSchema
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 const mediaResultSchema = z.union([
   z.strictObject({
@@ -196,7 +195,7 @@ const mediaResultSchema = z.union([
       bytes: z.instanceof(Uint8Array)
     })
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 /**
  * 校验跨进程响应。结构不符时返回 null，不补字段。
@@ -315,10 +314,11 @@ const operationSettlementSchema = z.union([
     msg: z.string(),
     data: z.strictObject({
       operationId: z.string(),
-      settlement: z.enum(['committed', 'notCommitted', 'unsettled'])
+      settlement: z.enum(['committed', 'notCommitted', 'notStarted', 'unsettled']),
+      linked: z.boolean()
     })
   }),
-  failedResultSchema
+  failureResultSchema
 ])
 
 /**
@@ -328,4 +328,24 @@ export function parseProjectFileOperationResult(
   value: unknown
 ): AjaxResult<ProjectFileOperationSettlementVO> | null {
   return parseProjectFilesResult(operationSettlementSchema, value)
+}
+
+const operationRecoverySchema = z.union([
+  z.strictObject({
+    code: z.literal(ErrorCodes.success),
+    msg: z.string(),
+    data: z.array(
+      z.strictObject({
+        operationId: z.string(),
+        state: z.enum(['pending', 'notStarted', 'committed', 'notCommitted'])
+      })
+    )
+  }),
+  failureResultSchema
+])
+
+export function parseProjectFileOperationsRecoveryResult(
+  value: unknown
+): AjaxResult<readonly ProjectFileOperationRecoveryVO[]> | null {
+  return parseProjectFilesResult(operationRecoverySchema, value)
 }

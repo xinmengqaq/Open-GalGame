@@ -99,12 +99,21 @@ describe('外部文件拖入', () => {
     )
 
     expect(toast).toHaveBeenCalledWith('无法转换该文件')
-    expect(importProjectFiles).toHaveBeenCalledWith({
+    const request = importProjectFiles.mock.calls[0]?.[0] as {
+      projectId: string
+      localFilePaths: string[]
+      parentFolderId: string
+      expectedCatalogVersion: string
+      operationIds?: string[]
+    }
+    expect(request).toMatchObject({
       projectId: 'p-01',
       localFilePaths: ['/tmp/ok-a.txt', '/tmp/ok-c.txt'],
       parentFolderId: 'folder-ref',
       expectedCatalogVersion: 'v1'
     })
+    expect(request.operationIds).toHaveLength(2)
+    expect(new Set(request.operationIds).size).toBe(2)
     expect(toast).toHaveBeenCalledWith(workbenchFeedback.importImported(2))
   })
 

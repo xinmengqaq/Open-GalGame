@@ -12,13 +12,17 @@ import type {
   ProjectFileScopeDTO,
   ProjectFolderScopeDTO,
   ReadProjectFileOperationDTO,
+  RecoverProjectFileOperationsDTO,
   ReadProjectInputSourcesDTO,
   ReadProjectMediaDTO,
   RenameProjectFileDTO,
   RenameProjectFolderDTO,
   UpdateProjectTextFileBodyDTO
 } from '@application/project-files/dto/ProjectFilesDTO'
-import type { ProjectFileOperationSettlementVO } from '@application/project-files/vo/ProjectFileOperationVO'
+import type {
+  ProjectFileOperationRecoveryVO,
+  ProjectFileOperationSettlementVO
+} from '@application/project-files/vo/ProjectFileOperationVO'
 import type { ProjectFilesInspectionVO } from '@application/project-files/vo/ProjectFilesInspectionVO'
 import type {
   ProjectFolderDeletionPlanVO,
@@ -42,6 +46,7 @@ import {
   parseProjectFileNullResult,
   parseProjectFilesInspectionResult,
   parseProjectFileOperationResult,
+  parseProjectFileOperationsRecoveryResult,
   parseProjectFolderDeletionPlanResult,
   parseProjectFolderResult,
   parseProjectInputSourceListResult,
@@ -222,6 +227,15 @@ export class ProjectFilesClientImpl implements ProjectFilesClient {
     return readProjectFilesResult(
       () => this.bridge.readProjectFileOperation(request),
       parseProjectFileOperationResult
+    )
+  }
+
+  recoverProjectFileOperations(
+    request: RecoverProjectFileOperationsDTO
+  ): Promise<AjaxResult<readonly ProjectFileOperationRecoveryVO[]>> {
+    return readProjectFilesResult(
+      () => this.bridge.recoverProjectFileOperations(request),
+      parseProjectFileOperationsRecoveryResult
     )
   }
 

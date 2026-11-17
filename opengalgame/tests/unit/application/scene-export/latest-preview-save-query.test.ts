@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
 import type { VersionSettlementVO } from '@application/project-versioning/vo/ProjectVersioningVO'
 import { ReadLatestPreviewSaveUseCase } from '@application/scene-export/services/ReadLatestPreviewSaveUseCase'
+import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { LocalPreviewSaveVersionQueryGateway } from '@infrastructure/scene-export/LocalPreviewSaveVersionQueryGateway'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 import { versionDocumentPath } from '@infrastructure/project-versioning/versionStore'
@@ -16,6 +17,7 @@ import {
   writePreviewSaveRecord,
   type PreviewSaveRecord
 } from '@infrastructure/scene-preview/previewSaveRecord'
+import { parseLatestPreviewSaveResult } from '@interfaces/scene-export/contracts/SceneExportResponseSchema'
 
 const projectId = 'project-1'
 const sceneId = 'scene-1'
@@ -41,7 +43,13 @@ afterEach(async () => {
 function recordOf(
   requestId: string,
   operationId: string,
-  options: { sceneId?: string; contentDigest?: string } = {}
+  options: {
+    sceneId?: string
+    contentDigest?: string
+    parserVersion?: string
+    engineVersion?: string
+    refusal?: PreviewSaveRecord['refusal']
+  } = {}
 ): PreviewSaveRecord {
   const scene = options.sceneId ?? sceneId
   const contentDigest = options.contentDigest ?? digest('b')
@@ -53,13 +61,14 @@ function recordOf(
     callerOperationId: previewCallerOperationId(projectId, scene, requestId),
     operationId,
     baseDigest: 'base-1',
-    parserVersion: '4.6.5',
-    engineVersion: '4.6.5',
+    parserVersion: options.parserVersion ?? '4.6.5',
+    engineVersion: options.engineVersion ?? '4.6.5',
     editsSnapshot: '{"entries":[]}',
     committedEdits: [],
     relativePath: 'game/scene/start.txt',
     revisionDigest: digest('a'),
-    ...(contentDigest === '' ? {} : { contentDigest })
+    ...(contentDigest === '' ? {} : { contentDigest }),
+    ...(options.refusal === undefined ? {} : { refusal: options.refusal })
   }
 }
 
@@ -167,6 +176,67 @@ describe('最近一次已结算的预览保存版本查询', () => {
         digest: valid.contentDigest,
         parserVersion: '4.6.5',
         engineVersion: '4.6.5'
+      }
+    })
+  })
+
+  it('内容依据按落盘记录字段序列化，拒绝或无摘要的记录不产生依据', async () => {
+    const versioned = recordOf('request-versioned', 'operation-versioned', {
+      parserVersion: 'parser-r16-pin',
+      engineVersion: 'engine-r16-pin'
+    })
+    const refused = recordOf('request-refused', 'operation-refused', { refusal: 'contentLocked' })
+    const missing = recordOf('request-missing', 'operation-missing', { contentDigest: '' })
+    await writeSavedRecord(versioned, new Date(Date.now() - 30_000))
+    await writeSavedRecord(refused, new Date(Date.now() - 20_000))
+    await writeSavedRecord(missing, new Date(Date.now() - 10_000))
+
+    const { useCase } = subject({
+      'operation-versioned': committed('operation-versioned'),
+      'operation-refused': committed('operation-refused'),
+      'operation-missing': committed('operation-missing')
+    })
+
+    const latest = await useCase.readLatestPreviewSave({ projectId, sceneId })
+    expect(latest).toEqual({
+      requestId: 'request-versioned',
+      revisionDigest: versioned.revisionDigest,
+      contentBasis: {
+        digest: versioned.contentDigest,
+        parserVersion: 'parser-r16-pin',
+        engineVersion: 'engine-r16-pin'
+      }
+    })
+    expect(Object.keys(latest!.contentBasis).sort()).toEqual([
+      'digest',
+      'engineVersion',
+      'parserVersion'
+    ])
+    expect(JSON.parse(JSON.stringify(latest!.contentBasis))).toEqual({
+      digest: versioned.contentDigest,
+      parserVersion: 'parser-r16-pin',
+      engineVersion: 'engine-r16-pin'
+    })
+    const wire = parseLatestPreviewSaveResult(
+      JSON.parse(
+        JSON.stringify({
+          code: ErrorCodes.success,
+          msg: '读取成功',
+          data: latest
+        })
+      )
+    )
+    expect(wire).toEqual({
+      code: ErrorCodes.success,
+      msg: '读取成功',
+      data: {
+        requestId: 'request-versioned',
+        revisionDigest: versioned.revisionDigest,
+        contentBasis: {
+          digest: versioned.contentDigest,
+          parserVersion: 'parser-r16-pin',
+          engineVersion: 'engine-r16-pin'
+        }
       }
     })
   })

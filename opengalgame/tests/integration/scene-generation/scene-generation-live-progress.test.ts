@@ -13,6 +13,8 @@ import type {
   SceneGenerationRuntime,
   SceneGenerationWorkflowProgress
 } from '@application/scene-generation/models/SceneGenerationExecution'
+import type { WebGalGenerationStateValue } from '@infrastructure/scene-generation/workflow/WebGalGenerationState'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import { webGalGenerationCompatibility } from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
 import { createWebGalGenerationGraph } from '@infrastructure/scene-generation/workflow/createWebGalGenerationGraph'
@@ -133,6 +135,7 @@ it('生成中发布 generating，结束后定时器停止', async () => {
   const graph = createWebGalGenerationGraph({
     stateRoot: root,
     saver: new FileCheckpointSaver(root),
+    domain: new SceneGenerationDomainServiceImpl(),
     budget,
     runtime: {
       execution,
@@ -238,7 +241,7 @@ function executionOf(root: string): SceneGenerationExecution {
   }
 }
 
-function inputOf(execution: SceneGenerationExecution) {
+function inputOf(execution: SceneGenerationExecution): Partial<WebGalGenerationStateValue> {
   return {
     execution,
     mode: 'generate' as const,

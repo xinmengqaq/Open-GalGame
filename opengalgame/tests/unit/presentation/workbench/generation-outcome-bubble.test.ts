@@ -290,8 +290,7 @@ describe('失败气泡诊断', () => {
       status({
         failure: {
           code: 4101,
-          message: '模型调用失败，本次生成未完成。',
-          legacy: true
+          message: '模型调用失败，本次生成未完成。'
         }
       }),
       baseHandlers

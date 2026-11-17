@@ -6,7 +6,7 @@ import {
   type ScenePreviewErrorCode
 } from '@domain/scene-preview/errors/ScenePreviewErrorCodes'
 
-import type { CandidatePreviewSessionResolution } from '../../../scenes/models/CandidatePreviewSession'
+import type { CandidatePreviewSessionResolution } from '@application/scenes/models/CandidatePreviewSession'
 
 const rejectionCodes = {
   missing: ScenePreviewErrorCodes.candidateSessionMissing,

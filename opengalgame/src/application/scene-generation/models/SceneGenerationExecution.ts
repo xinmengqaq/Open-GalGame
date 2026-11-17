@@ -10,7 +10,9 @@ import type {
   SceneGenerationInteractionVO,
   SceneGenerationOperationVO,
   SceneGenerationPreviewVO,
+  SceneGenerationRepairSource,
   SceneGenerationResultVO,
+  SceneGenerationRunMode,
   SceneGenerationStateVO,
   SceneGenerationStepVO
 } from '../vo/SceneGenerationVO'
@@ -22,11 +24,11 @@ import type {
   SceneBaselineState,
   SceneLockState
 } from '@domain/scene-generation/models/SceneGenerationRequest'
-import type { FailureClass } from './SceneGenerationRunOutcome'
 import type {
-  SceneGenerationFailureFact,
+  FailureClass,
   SceneGenerationFailureReason
-} from '../services/impl/SceneGenerationFailureFacts'
+} from '../vo/SceneGenerationFailureVO'
+import type { SceneGenerationFailureFact } from './SceneGenerationFailureFacts'
 
 export interface SceneGenerationBaseline {
   readonly commitId: string
@@ -46,20 +48,6 @@ export interface SceneGenerationWorkspace {
 }
 
 export type SceneGenerationInterruptReason = 'paused' | 'candidateConflict' | 'commitUnknown'
-
-export type SceneGenerationRunMode = 'generate' | 'repair' | 'validate'
-
-/**
- * 非中断修复重跑的来源身份。只保留稳定身份，不保存路径或检查点内部。
- * 旧记录没有该事实时保持缺失。
- */
-export interface SceneGenerationRepairSource {
-  readonly operationId: string
-  readonly threadId: string
-  readonly branchId: string
-  readonly checkpointId: string
-  readonly candidateSnapshotId: string
-}
 
 /**
  * 修复重跑可用的来源上下文。只保存受控读取坐标和源事实，不保存候选正文。

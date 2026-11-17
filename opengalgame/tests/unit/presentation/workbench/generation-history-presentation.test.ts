@@ -21,8 +21,6 @@ import {
   historyFailureReasonLabel,
   historyFullTime,
   historyHasMore,
-  historyLegacyLabel,
-  historyLegacyNote,
   historyPageSize,
   historyPendingVerificationLabel,
   historyPendingVerificationStage,
@@ -157,7 +155,7 @@ describe('AI 历史边界与阶段文案', () => {
   })
 })
 
-describe('AI 历史失败原因与旧记录', () => {
+describe('AI 历史失败原因', () => {
   it('旧失败原因安全码先桥接分类，再映射成用户语言，不显示枚举或错误码', () => {
     const expected: Record<SceneGenerationFailureReasonVO, string> = {
       noInformationGain: '没有进展',
@@ -185,6 +183,25 @@ describe('AI 历史失败原因与旧记录', () => {
     expect(historyFailureReasonLabel(null)).toBeNull()
   })
 
+  it('无法分类的未知旧原因保持 null，详情不补造失败原因', () => {
+    const unknownReason = 'retiredUnknownReason' as unknown as SceneGenerationFailureReasonVO
+    expect(historyFailureReasonLabel(unknownReason)).toBeNull()
+
+    const record = summary({
+      boundary: 'failed',
+      stage: 'failed',
+      message: '本次生成未完成',
+      failureReason: unknownReason
+    })
+    const view = historyDetailViewOf(record)
+    expect(view.failureReason).toBeNull()
+    expect(view).not.toHaveProperty('legacy')
+
+    const html = renderDetail(record)
+    expect(html).not.toContain('失败原因')
+    expect(html).not.toContain('旧记录')
+  })
+
   it('行视图只有时间、状态和摘要，不含阶段、耗时、候选或重试', () => {
     const row = historyRowViewOf(
       summary({ boundary: 'failed', stage: 'failed', message: '本次生成未完成' })
@@ -203,14 +220,13 @@ describe('AI 历史失败原因与旧记录', () => {
     expect(row).not.toHaveProperty('retry')
   })
 
-  it('详情视图带失败原因和旧记录标记，不含耗时、候选或重试', () => {
+  it('详情视图带失败原因，不含耗时、候选或重试', () => {
     const view = historyDetailViewOf(
       summary({
         boundary: 'failed',
         stage: 'failed',
         message: '本次生成未完成',
-        failureReason: 'modelFailure',
-        legacy: true
+        failureReason: 'modelFailure'
       })
     )
 
@@ -222,16 +238,12 @@ describe('AI 历史失败原因与旧记录', () => {
       stage: '生成失败',
       tone: 'danger',
       failureReason: '模型暂时不可用',
-      legacy: true,
-      legacyNote: historyLegacyNote,
       readonlyNote: historyReadonlyNote
     })
     expect(Object.keys(view).sort()).toEqual([
       'boundary',
       'clock',
       'failureReason',
-      'legacy',
-      'legacyNote',
       'readonlyNote',
       'stage',
       'summary',
@@ -243,24 +255,21 @@ describe('AI 历史失败原因与旧记录', () => {
     expect(view).not.toHaveProperty('retry')
   })
 
-  it('旧记录缺失败原因时不补造，只保留旧记录标记', () => {
+  it('缺失败原因时不补造', () => {
     const view = historyDetailViewOf(
-      summary({ boundary: 'failed', stage: 'failed', message: '本次生成未完成', legacy: true })
+      summary({ boundary: 'failed', stage: 'failed', message: '本次生成未完成' })
     )
 
     expect(view.failureReason).toBeNull()
-    expect(view.legacy).toBe(true)
-    expect(view.legacyNote).toBe(historyLegacyNote)
+    expect(view).not.toHaveProperty('legacy')
   })
 
-  it('非旧记录缺失败原因时既不补原因也不标旧记录', () => {
+  it('正常完成记录不显示失败原因', () => {
     const view = historyDetailViewOf(
       summary({ boundary: 'committed', stage: 'completed', message: '作品已提交' })
     )
 
     expect(view.failureReason).toBeNull()
-    expect(view.legacy).toBe(false)
-    expect(view.legacyNote).toBeNull()
   })
 })
 
@@ -282,8 +291,6 @@ describe('AI 历史待核对中断', () => {
       expect(view.stage).toBe(historyPendingVerificationStage)
       expect(view.tone).toBe('muted')
       expect(view.failureReason).toBeNull()
-      expect(view.legacy).toBe(false)
-      expect(view.legacyNote).toBeNull()
       expect(view.summary).toBe(message)
     }
   })
@@ -299,7 +306,7 @@ describe('AI 历史待核对中断', () => {
     }
   })
 
-  it('有失败原因或旧记录标记的失败记录仍显示失败', () => {
+  it('有失败原因的失败记录仍显示失败', () => {
     const withReason = summary({
       boundary: 'failed',
       stage: 'failed',
@@ -309,16 +316,6 @@ describe('AI 历史待核对中断', () => {
     expect(historyRowViewOf(withReason).status).toBe('失败')
     expect(historyDetailViewOf(withReason).stage).toBe('生成失败')
     expect(historyDetailViewOf(withReason).failureReason).toBe('模型暂时不可用')
-
-    const legacy = summary({
-      boundary: 'failed',
-      stage: 'failed',
-      message: '候选或基线冲突，需要重新核对',
-      legacy: true
-    })
-    expect(historyRowViewOf(legacy).status).toBe('失败')
-    expect(historyDetailViewOf(legacy).stage).toBe('生成失败')
-    expect(historyDetailViewOf(legacy).legacy).toBe(true)
   })
 })
 
@@ -335,14 +332,13 @@ describe('AI 历史行与详情渲染', () => {
     expect(html).not.toContain('候选')
   })
 
-  it('详情显示失败原因和旧记录，只保留返回按钮', () => {
+  it('详情显示失败原因，只保留返回按钮', () => {
     const html = renderDetail(
       summary({
         boundary: 'failed',
         stage: 'failed',
         message: '本次生成未完成',
-        failureReason: 'modelFailure',
-        legacy: true
+        failureReason: 'modelFailure'
       })
     )
 
@@ -351,8 +347,7 @@ describe('AI 历史行与详情渲染', () => {
     expect(html).toContain('所处阶段')
     expect(html).toContain('失败原因')
     expect(html).toContain('模型暂时不可用')
-    expect(html).toContain(historyLegacyLabel)
-    expect(html).toContain(historyLegacyNote)
+    expect(html).not.toContain('旧记录')
     expect(html).toContain(historyReadonlyNote)
     expect(html).not.toContain('耗时')
     expect(html).not.toContain('重试')
@@ -377,14 +372,13 @@ describe('AI 历史行与详情渲染', () => {
     expect(committed).toContain('已完成')
   })
 
-  it('旧记录缺失败原因时详情不渲染失败原因字段，也不补造原因', () => {
+  it('缺失败原因时详情不渲染失败原因字段，也不补造原因', () => {
     const html = renderDetail(
-      summary({ boundary: 'failed', stage: 'failed', message: '本次生成未完成', legacy: true })
+      summary({ boundary: 'failed', stage: 'failed', message: '本次生成未完成' })
     )
 
     expect(html).not.toContain('失败原因')
-    expect(html).toContain(historyLegacyLabel)
-    expect(html).toContain(historyLegacyNote)
+    expect(html).not.toContain('旧记录')
   })
 
   it('待核对记录的列表和详情不渲染失败或生成失败', () => {
@@ -401,15 +395,15 @@ describe('AI 历史行与详情渲染', () => {
     expect(detail).toContain('提交结果待核对')
     expect(detail).not.toContain('失败')
     expect(detail).not.toContain('失败原因')
-    expect(detail).not.toContain(historyLegacyLabel)
+    expect(detail).not.toContain('旧记录')
   })
 
-  it('普通记录详情不出现旧记录标记', () => {
+  it('普通记录详情不出现失败原因或旧记录标记', () => {
     const html = renderDetail(
       summary({ boundary: 'committed', stage: 'completed', message: '作品已提交' })
     )
 
-    expect(html).not.toContain(historyLegacyLabel)
+    expect(html).not.toContain('旧记录')
     expect(html).not.toContain('失败原因')
   })
 })

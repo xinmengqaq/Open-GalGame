@@ -18,7 +18,6 @@ import type { SceneGenerationClient } from '@interfaces/scene-generation/client/
 import {
   activeHistoryRowViewOf,
   historyDetailViewOf,
-  historyLegacyLabel,
   historyRowViewOf,
   type HistoryBoundaryTone
 } from './generationHistoryPresentation'
@@ -129,7 +128,6 @@ export function HistoryDetail({
           <h2 className="wb-hist__detail-title">{detail.summary}</h2>
           <div className="wb-hist__detail-badges">
             <HistoryStatusBadge label={detail.boundary} tone={detail.tone} />
-            {detail.legacy ? <span className="wb-hist__legacy">{historyLegacyLabel}</span> : null}
           </div>
           <dl className="wb-hist__meta">
             <div>
@@ -151,9 +149,6 @@ export function HistoryDetail({
               </div>
             ) : null}
           </dl>
-          {detail.legacyNote !== null ? (
-            <p className="wb-hist__legacy-note">{detail.legacyNote}</p>
-          ) : null}
           <p className="wb-hist__note">
             <LockKeyhole aria-hidden="true" />
             {detail.readonlyNote}

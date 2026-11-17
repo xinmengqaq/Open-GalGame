@@ -6,7 +6,7 @@ import type {
   SceneGenerationReplyReceiptVO,
   SceneGenerationStatusVO
 } from '../vo/SceneGenerationVO'
-import { publicFailureOf } from '../services/impl/SceneGenerationFailureFacts'
+import { publicFailureOf } from '../models/SceneGenerationFailureFacts'
 import { isTerminalState, phaseOf } from './SceneGenerationStateProjection'
 
 export function toOperationVO(execution: SceneGenerationOperationVO): SceneGenerationOperationVO {

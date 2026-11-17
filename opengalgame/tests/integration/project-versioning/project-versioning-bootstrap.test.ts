@@ -14,7 +14,8 @@ import type { SceneGenerationExecution } from '@application/scene-generation/mod
 import type { ProjectFileDialogGateway } from '@application/projects/ports/ProjectFileDialogGateway'
 import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
 import { createProjectServices } from '@bootstrap/projects'
-import { arrangementPath, documentBodyPath } from '@infrastructure/project-files/projectFilePaths'
+import { documentBodyPath } from '@infrastructure/project-files/projectFilePaths'
+import { arrangementPath } from '@infrastructure/scene-canvas/sceneCanvasPaths'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 import { SceneVersionGatewayImpl } from '@infrastructure/scene-generation/versions/SceneVersionGatewayImpl'
 
@@ -47,6 +48,7 @@ describe('版本后端装配', () => {
     const imported = await services.projectFiles.importProjectFiles({
       projectId: 'project-1',
       expectedCatalogVersion: catalog.catalogVersion,
+      operationIds: ['bootstrap-import-1'],
       localFilePaths: [world.sourceFile],
       parentFolderId: null
     })
@@ -113,6 +115,7 @@ describe('版本后端装配', () => {
       services.projectFiles.importProjectFiles({
         projectId: 'missing-project',
         expectedCatalogVersion: 'catalog-v1',
+        operationIds: ['bootstrap-import-missing'],
         localFilePaths: [world.sourceFile],
         parentFolderId: null
       })

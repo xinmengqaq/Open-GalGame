@@ -9,5 +9,3 @@ export const ConnectionErrorCodes = {
   credentialStoreFailed: 1408,
   settingsSaveFailed: 1409
 } as const
-
-export type ConnectionErrorCode = (typeof ConnectionErrorCodes)[keyof typeof ConnectionErrorCodes]

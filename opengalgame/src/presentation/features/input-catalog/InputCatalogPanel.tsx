@@ -35,12 +35,20 @@ interface InputCatalogPanelProps {
 }
 
 export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps): ReactElement {
-  const catalog = useInputCatalog(client)
+  const panelRef = useRef<HTMLElement | null>(null)
+  const catalog = useInputCatalog(client, panelRef)
   const menu = catalog.menu
   const clipboard = catalog.clipboard
   const [dropActive, setDropActive] = useState(false)
+  const [wasBusy, setWasBusy] = useState(catalog.busy)
   const overlayRef = useRef<HTMLDivElement>(null)
   const clipRef = useRef<HTMLParagraphElement>(null)
+
+  // busy 开始时立即丢掉拖入高亮；busy 结束只更新快照，不让高亮自己复活。
+  if (wasBusy !== catalog.busy) {
+    setWasBusy(catalog.busy)
+    if (catalog.busy) setDropActive(false)
+  }
 
   const currentFolderName = catalog.breadcrumbs[catalog.breadcrumbs.length - 1]?.name ?? '工程根'
   const menuSource =
@@ -85,10 +93,6 @@ export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps)
     }
   }, [])
 
-  useEffect(() => {
-    if (catalog.busy) setDropActive(false)
-  }, [catalog.busy])
-
   function isExternalFileDrag(event: DragEvent): boolean {
     return (
       event.dataTransfer.types.includes('Files') &&
@@ -114,13 +118,13 @@ export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps)
 
   return (
     <aside
-      ref={catalog.panelRef}
+      ref={panelRef}
       className={styles.panel}
       aria-label="输入目录"
       aria-busy={catalog.busy}
       data-testid="input-catalog"
       tabIndex={0}
-      onMouseDown={() => catalog.panelRef.current?.focus()}
+      onMouseDown={() => panelRef.current?.focus()}
       onDragEnter={handleDragEnter}
       onDragOver={(event) => {
         if (!isExternalFileDrag(event) || catalog.busy) return

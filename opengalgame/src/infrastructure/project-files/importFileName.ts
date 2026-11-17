@@ -5,6 +5,14 @@ import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileE
 
 const reserved = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/iu
 
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0
+    if (codePoint <= 0x1f) return true
+  }
+  return false
+}
+
 /**
  * @returns 文件名；无法识别时为“所选文件”。
  */
@@ -20,7 +28,8 @@ export function fileNameFromPath(localFilePath: string): string {
 export function assertPersistableFileName(fileName: string): void {
   if (
     reserved.test(fileName) ||
-    /[<>:"|?*\u0000-\u001f]/u.test(fileName) ||
+    /[<>:"|?*]/u.test(fileName) ||
+    hasControlCharacter(fileName) ||
     fileName.endsWith(' ') ||
     fileName.endsWith('.')
   ) {

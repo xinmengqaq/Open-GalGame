@@ -94,10 +94,7 @@ export function PromptEditor({
   )
   const issue = promptReferenceIssueSummary(chipViews)
   const saveFailure = session.saveError
-    ? promptReferenceFailureOf({
-        code: session.saveError.code,
-        message: session.saveError.msg
-      })
+    ? promptReferenceFailureOf(session.saveError)
     : null
   const alert = session.promptReferenceAlert
   const cardAlert = alert && (alert.cardId === undefined || alert.cardId === cardId) ? alert : null

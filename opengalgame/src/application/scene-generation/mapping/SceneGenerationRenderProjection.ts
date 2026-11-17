@@ -12,12 +12,6 @@ import type {
   SceneGenerationInputsDTO,
   SceneGenerationPromptScopeDTO
 } from '../dto/SceneGenerationDTO'
-import {
-  failureClassOfLegacyReason,
-  NEXT_ACTIONS,
-  type FailureClass,
-  type NextAction
-} from '../models/SceneGenerationRunOutcome'
 import type { SceneGenerationInteractionVO } from '../vo/SceneGenerationVO'
 import { renderStageOf } from './SceneGenerationStateProjection'
 import type {
@@ -123,9 +117,7 @@ function withDuplicateOrdinals(parts: readonly InputDetailParts[]): InputDetailP
 }
 
 /** 一类明细的统一收口：丢弃空名称、重名编号、拼接说明、套用条数上限。 */
-function buildInputDetails(
-  partsList: readonly InputDetailParts[]
-): readonly string[] | undefined {
+function buildInputDetails(partsList: readonly InputDetailParts[]): readonly string[] | undefined {
   const visible = partsList.filter((parts) => parts.name !== '')
   return clampInputDetails(withDuplicateOrdinals(visible).map(inputDetailText))
 }
@@ -258,10 +250,18 @@ export function renderActivity(
 
 const SAFE_TEXT_LIMIT = 2000
 
+function stripControlChars(value: string): string {
+  let result = ''
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0
+    if (codePoint > 0x1f && codePoint !== 0x7f) result += character
+  }
+  return result
+}
+
 /** 展示文本去掉控制字符并限长。不保留路径、原始模型输出或执行记录。 */
 function safeDisplayText(value: string | undefined, limit = SAFE_TEXT_LIMIT): string {
-  return (value ?? '')
-    .replace(/[\u0000-\u001f\u007f]/g, '')
+  return stripControlChars(value ?? '')
     .trim()
     .slice(0, limit)
 }
@@ -408,36 +408,6 @@ function renderKnownIssues(
       }
     ]
   })
-}
-
-/**
- * 失败分类优先执行记录，旧记录按现有原因映射；未知分类或原因不补造。
- */
-function renderFailureClass(execution: SceneGenerationExecution): FailureClass | undefined {
-  const failure = execution.failure
-  if (failure?.failureClass) return failure.failureClass
-  return failure?.reason ? failureClassOfLegacyReason(failure.reason) : undefined
-}
-
-/** 下一步动作优先执行记录，缺省按分类映射；没有分类时不补造。 */
-function renderNextActions(
-  execution: SceneGenerationExecution,
-  failureClass: FailureClass | undefined
-): readonly NextAction[] | undefined {
-  const recorded = execution.failure?.nextActions
-  if (recorded && recorded.length > 0) return recorded
-  return failureClass ? NEXT_ACTIONS[failureClass] : undefined
-}
-
-/**
- * 旧记录近似：failed 且执行记录本身缺少失败分类或下一步动作。分类和动作可以从
- * 旧原因推导，但推导结果仍标旧记录；当前记录遇到未能分类的失败也会缺字段，
- * 因此只用于展示“旧记录”，不反推记录版本。
- */
-function isLegacyFailure(execution: SceneGenerationExecution): boolean {
-  if (execution.state !== 'failed') return false
-  const recorded = execution.failure
-  return !recorded?.failureClass || !recorded.nextActions || recorded.nextActions.length === 0
 }
 
 const RECENT_PROGRESS_LIMIT = 6
@@ -618,8 +588,7 @@ export function toHistorySummary(
     // 只在真实失败终态补原因；待核对中断保留“提交结果待核对”，不把底层原因当失败原因。
     ...(boundary === 'failed' && execution.state === 'failed' && execution.failure?.reason
       ? { failureReason: execution.failure.reason }
-      : {}),
-    ...(isLegacyFailure(execution) ? { legacy: true } : {})
+      : {})
   }
 }
 
@@ -648,12 +617,7 @@ const SAFE_FAILURE_MESSAGE: Record<string, true> = {
   提交结果待核对: true
 }
 
-/** 已确认的旧版安全文案到当前固定文案的精确映射；只登记确认过的原文，不扩大安全集合。 */
-const LEGACY_FAILURE_MESSAGE: Record<string, string> = {
-  '连续读取没有获得新内容，本次生成已停止': FAILURE_REASON_MESSAGE.noInformationGain
-}
-
-/** 原因优先固定文案；旧记录先映射已登记的旧版文案，其它未知原文回退阶段文案。 */
+/** 原因优先固定文案；其它未知原文回退阶段文案。 */
 function safeFailureMessage(execution: SceneGenerationExecution): string | undefined {
   const failure = execution.failure
   if (!failure) return undefined
@@ -661,22 +625,20 @@ function safeFailureMessage(execution: SceneGenerationExecution): string | undef
   if (fixed) return fixed
   const persisted = safeDisplayText(failure.message)
   if (Object.hasOwn(SAFE_FAILURE_MESSAGE, persisted)) return persisted
-  if (Object.hasOwn(LEGACY_FAILURE_MESSAGE, persisted)) return LEGACY_FAILURE_MESSAGE[persisted]
   return renderStageMessage(renderStage(execution))
 }
 
+/** 失败分类和动作只透出执行记录已持久化的事实；缺失保持缺失，不补造。 */
 function safeRenderFailure(
   execution: SceneGenerationExecution
 ): NonNullable<SceneGenerationRenderStatusVO['failure']> | undefined {
   const failure = execution.failure
   const reference = failure?.diagnosticRef
-  const failureClass = renderFailureClass(execution)
-  const nextActions = renderNextActions(execution, failureClass)
-  const legacy = isLegacyFailure(execution)
+  const failureClass = failure?.failureClass
+  const nextActions = failure?.nextActions
   const safeFacts = {
     ...(failureClass ? { failureClass } : {}),
-    ...(nextActions && nextActions.length > 0 ? { nextActions: [...nextActions] } : {}),
-    ...(legacy ? { legacy: true } : {})
+    ...(nextActions && nextActions.length > 0 ? { nextActions: [...nextActions] } : {})
   }
   if (execution.interruptReason === 'commitUnknown') {
     return {

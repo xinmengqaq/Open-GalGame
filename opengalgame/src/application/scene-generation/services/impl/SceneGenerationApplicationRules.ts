@@ -1,52 +1,24 @@
 import type {
   ForkSceneGenerationDTO,
   GenerateSceneDTO,
-  ReplySceneGenerationInteractionDTO,
-  RetrySceneGenerationRepairDTO,
-  SceneGenerationScopeDTO,
-  SceneGenerationThreadDTO
+  RetrySceneGenerationRepairDTO
 } from '../../dto/SceneGenerationDTO'
 import type { SceneGenerationExecution } from '../../models/SceneGenerationExecution'
-import type {
-  SceneGenerationCheckpointVO,
-  SceneGenerationOperationVO,
-  SceneGenerationReplyReceiptVO
-} from '../../vo/SceneGenerationVO'
+import type { SceneGenerationOperationVO } from '../../vo/SceneGenerationVO'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { replyFingerprint } from '../../policies/SceneGenerationIdempotency'
-export { safeFailure } from './SceneGenerationFailureFacts'
+export { safeFailureWithDiagnosticRef as safeFailure } from './SceneGenerationFailureFacts'
 export { requireAcceptableCandidate as requireAcceptable } from '../../policies/SceneGenerationCandidatePolicy'
 
-/** 形成不混淆工程、场景和操作的键。 */
-export function operationKey(scope: SceneGenerationScopeDTO): string {
-  return JSON.stringify([scope.projectId, scope.sceneId, scope.operationId])
-}
-
-export function threadKey(scope: SceneGenerationThreadDTO): string {
-  return JSON.stringify([scope.projectId, scope.sceneId, scope.threadId])
-}
-
 /** 提取调用方需要的身份，避免以展开内部执行模型的方式泄露状态。 */
-export function operationVO(execution: SceneGenerationOperationVO): SceneGenerationOperationVO {
+function operationVO(execution: SceneGenerationOperationVO): SceneGenerationOperationVO {
   return {
     projectId: execution.projectId,
     sceneId: execution.sceneId,
     operationId: execution.operationId,
     threadId: execution.threadId,
     branchId: execution.branchId
-  }
-}
-
-export function replyReceipt(
-  execution: SceneGenerationExecution,
-  reply: ReplySceneGenerationInteractionDTO
-): SceneGenerationReplyReceiptVO {
-  return {
-    ...operationVO(execution),
-    interactionId: reply.interactionId,
-    replyId: reply.replyId,
-    accepted: true
   }
 }
 
@@ -72,25 +44,6 @@ export function completedExecution(
     failure: undefined,
     result: { ...operationVO(execution), commitId, preview: execution.preview }
   }
-}
-
-/**
- * 按安全字段提取历史详情，丢弃适配返回值可能附带的内部恢复状态。
- * @returns 不包含执行种子或原始图状态的详情。
- */
-export function checkpointVO(view: SceneGenerationCheckpointVO): SceneGenerationCheckpointVO {
-  return structuredClone({
-    ...operationVO(view),
-    checkpointId: view.checkpointId,
-    phase: view.phase,
-    summary: view.summary,
-    decisions: view.decisions,
-    differences: view.differences,
-    preview: view.preview,
-    canView: view.canView,
-    canContinue: view.canContinue,
-    reason: view.reason
-  })
 }
 
 /** 按明确用例字段建立稳定请求指纹，归一默认值并忽略对象字段顺序。 */

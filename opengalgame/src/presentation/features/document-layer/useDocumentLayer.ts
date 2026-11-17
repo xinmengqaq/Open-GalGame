@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import type { ProjectInputSourceVO } from '@application/project-files/vo/ProjectInputSourceVO'
 import type { ProjectFilesClient } from '@interfaces/project-files/client/ProjectFilesClient'
 import { failureOf, requireSuccess } from '../../feedback/failure'
 import { sourceFactsOf } from '../workbench-session/workbenchSessionSelectors'
@@ -24,6 +25,15 @@ type DocumentRequest = {
   reload: boolean
 }
 
+type DocumentLoadKey = {
+  client: ProjectFilesClient
+  cardId: string
+  sourceId: string
+  attempt: number
+  refresh: boolean
+  detail: ProjectInputSourceVO | undefined
+}
+
 /**
  * 文档正文只从工程来源读取。已有详情直接使用，否则按当前卡片重新读取。
  * `reload` 在已有详情时也强制重读，用于保存冲突后取最新正文。
@@ -44,16 +54,41 @@ export function useDocumentBody(
     message: null,
     reload: false
   })
+  const loadKey: DocumentLoadKey = {
+    client,
+    cardId: card.cardId,
+    sourceId: card.sourceId,
+    attempt,
+    refresh,
+    detail
+  }
+  const [applied, setApplied] = useState<DocumentLoadKey>(loadKey)
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
   const reload = useCallback(() => {
     setRefresh(true)
     setAttempt((value) => value + 1)
   }, [])
 
+  const needsLoad = detail === undefined || refresh
+  // 客户端、卡片、尝试次数、重载意图或来源详情构成一次读取的身份。身份变化时
+  // 在渲染期重建请求，替代 effect 内的同步 setState（避免级联渲染）；异步结果只写 request。
+  if (
+    applied.client !== loadKey.client ||
+    applied.cardId !== loadKey.cardId ||
+    applied.sourceId !== loadKey.sourceId ||
+    applied.attempt !== loadKey.attempt ||
+    applied.refresh !== loadKey.refresh ||
+    applied.detail !== loadKey.detail
+  ) {
+    setApplied(loadKey)
+    if (needsLoad) {
+      setRequest({ cardId: card.cardId, status: 'loading', message: null, reload: refresh })
+    }
+  }
+
   useEffect(() => {
     if (detail && !refresh) return
     let cancelled = false
-    setRequest({ cardId: card.cardId, status: 'loading', message: null, reload: refresh })
     const load = async (): Promise<void> => {
       const state = useWorkbenchSessionStore.getState()
       try {

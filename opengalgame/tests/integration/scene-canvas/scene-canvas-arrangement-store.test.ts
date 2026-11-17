@@ -5,15 +5,19 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/SceneCanvasArrangementVO'
 import { AppException } from '@common/errors/AppException'
-import { SceneCanvasErrorCodes } from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
+import { FailureReasons } from '@common/errors/FailureReasons'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { LocalSceneCanvasArrangementPersistenceGatewayImpl } from '@infrastructure/scene-canvas/LocalSceneCanvasArrangementPersistenceGatewayImpl'
+import { CanvasArrangementMigration } from '@infrastructure/scene-canvas/migration/CanvasArrangementMigration'
 import { SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION } from '@infrastructure/scene-canvas/documents/SceneCanvasArrangementDocument'
 import {
-  arrangementPath,
   encodeStorageKey,
   MAX_IDENTITY_BYTES,
   MAX_JSON_BYTES
-} from '@infrastructure/project-files/projectFilePaths'
+} from '@infrastructure/project-files/public/projectFileStorage'
+import { PROJECT_ARRANGEMENT_FORMAT_VERSION } from '@infrastructure/scene-canvas/migration/legacy/documents/LegacySceneCanvasArrangementDocument'
+import { arrangementPath } from '@infrastructure/scene-canvas/sceneCanvasPaths'
 
 const directories: string[] = []
 
@@ -40,11 +44,20 @@ async function writeRelative(root: string, relativePath: string, content: string
   await writeFile(target, content, 'utf8')
 }
 
+function migrationFor(root: string): CanvasArrangementMigration {
+  const backupRoot = `${root}-migration`
+  directories.push(backupRoot)
+  return new CanvasArrangementMigration({ backupRoot })
+}
+
 function gateway(root: string): LocalSceneCanvasArrangementPersistenceGatewayImpl {
-  return new LocalSceneCanvasArrangementPersistenceGatewayImpl(async (projectId) => ({
-    projectId,
-    directory: root
-  }))
+  return new LocalSceneCanvasArrangementPersistenceGatewayImpl(
+    async (projectId) => ({
+      projectId,
+      directory: root
+    }),
+    migrationFor(root)
+  )
 }
 
 function arrangement(body = '提示词\n  保留'): SceneCanvasArrangementVO {
@@ -86,29 +99,28 @@ describe('场景画布编排存储', () => {
   it('写入后重读一致，并用紧凑 JSON 保留正文', async () => {
     const root = await temporaryRoot()
     const store = gateway(root)
-    await store.writeArrangement(arrangement())
+    await store.writeArrangement(arrangement(), null)
     const text = await readFile(join(root, arrangementPath('scene-1', 'canvas-1')), 'utf8')
     expect(text).not.toContain('\n  ')
     expect(text).toContain('提示词\\n  保留')
-    await expect(store.readArrangement('project-1', 'scene-1', 'canvas-1')).resolves.toEqual(
-      arrangement()
-    )
+    const reread = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
+    expect(reread?.arrangement).toEqual(arrangement())
   })
 
-  it('提示词卡缩放后的宽高随格式 4 往返', async () => {
+  it('提示词卡缩放后的宽高随当前格式往返', async () => {
     const root = await temporaryRoot()
     const store = gateway(root)
     const saved = arrangement()
     const prompt = saved.cards.find((card) => card.kind === 'prompt')
     if (!prompt) throw new Error('测试编排缺少提示词卡')
     prompt.layout = { x: 30, y: 40, width: 480, height: 360 }
-    await store.writeArrangement(saved)
+    await store.writeArrangement(saved, null)
     const text = await readFile(join(root, arrangementPath('scene-1', 'canvas-1')), 'utf8')
     expect(JSON.parse(text)).toMatchObject({
       formatVersion: SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION
     })
     const reread = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
-    expect(reread?.cards.find((card) => card.kind === 'prompt')?.layout).toEqual({
+    expect(reread?.arrangement.cards.find((card) => card.kind === 'prompt')?.layout).toEqual({
       x: 30,
       y: 40,
       width: 480,
@@ -120,25 +132,27 @@ describe('场景画布编排存储', () => {
     const root = await temporaryRoot()
     const store = gateway(root)
     const saved = arrangement('x'.repeat(MAX_JSON_BYTES + 1))
-    await store.writeArrangement(saved)
-    await expect(store.readArrangement('project-1', 'scene-1', 'canvas-1')).resolves.toEqual(saved)
+    await store.writeArrangement(saved, null)
+    const reread = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
+    expect(reread?.arrangement).toEqual(saved)
   })
 
   it('拒绝写入读取格式不能接受的身份，并保留原文件', async () => {
     const root = await temporaryRoot()
     const store = gateway(root)
     const saved = arrangement()
-    await store.writeArrangement(saved)
+    await store.writeArrangement(saved, null)
     const overlong = arrangement()
     overlong.cards = [
       { ...overlong.cards[0]!, cardId: 'a'.repeat(MAX_IDENTITY_BYTES + 1) },
       overlong.cards[1]!
     ]
     overlong.relations = []
-    await expect(store.writeArrangement(overlong)).rejects.toMatchObject({
+    await expect(store.writeArrangement(overlong, null)).rejects.toMatchObject({
       code: SceneCanvasErrorCodes.persistFailed
     })
-    await expect(store.readArrangement('project-1', 'scene-1', 'canvas-1')).resolves.toEqual(saved)
+    const preservedAfterFailure = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
+    expect(preservedAfterFailure?.arrangement).toEqual(saved)
     const maxId = 'b'.repeat(MAX_IDENTITY_BYTES)
     const maxArrangement = arrangement()
     maxArrangement.cards = [
@@ -146,16 +160,15 @@ describe('场景画布编排存储', () => {
       maxArrangement.cards[1]!
     ]
     maxArrangement.relations = []
-    await store.writeArrangement(maxArrangement)
-    await expect(store.readArrangement('project-1', 'scene-1', 'canvas-1')).resolves.toEqual(
-      maxArrangement
-    )
+    await store.writeArrangement(maxArrangement, null)
+    const maxReread = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
+    expect(maxReread?.arrangement).toEqual(maxArrangement)
   })
 
   it('已保存编排违反领域规则时按内容损坏读取', async () => {
     const root = await temporaryRoot()
     const store = gateway(root)
-    await store.writeArrangement(arrangement())
+    await store.writeArrangement(arrangement(), null)
     const relative = arrangementPath('scene-1', 'canvas-1')
     const document = JSON.parse(await readFile(join(root, relative), 'utf8')) as {
       relations: { toCardId: string }[]
@@ -174,25 +187,32 @@ describe('场景画布编排存储', () => {
 
     const relative = arrangementPath('scene-1', 'canvas-1')
     await writeRelative(root, relative, '{')
-    await expect(store.readArrangement('project-1', 'scene-1', 'canvas-1')).rejects.toMatchObject({
-      code: SceneCanvasErrorCodes.contentDamaged
-    })
+    const damaged = await store
+      .readArrangement('project-1', 'scene-1', 'canvas-1')
+      .catch((error: unknown) => error)
+    expect(damaged).toMatchObject({ code: SceneCanvasErrorCodes.contentDamaged })
+    expect(new IpcErrorMapper().map(damaged)).toEqual({ code: 4416, msg: '编排内容损坏' })
 
     await writeRelative(
       root,
       relative,
       JSON.stringify({
-        formatVersion: SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION - 1,
+        formatVersion: PROJECT_ARRANGEMENT_FORMAT_VERSION,
         projectId: 'project-1',
         sceneId: 'scene-1',
         canvasId: 'canvas-1'
       })
     )
-    await expect(store.readArrangement('project-1', 'scene-1', 'canvas-1')).rejects.toMatchObject({
-      code: SceneCanvasErrorCodes.unsupportedFormat
+    const unsupported = await store
+      .readArrangement('project-1', 'scene-1', 'canvas-1')
+      .catch((error: unknown) => error)
+    expect(unsupported).toMatchObject({ code: SceneCanvasErrorCodes.unsupportedFormat })
+    expect(new IpcErrorMapper().map(unsupported)).toEqual({
+      code: 4417,
+      msg: '编排格式不受支持'
     })
 
-    await store.writeArrangement(arrangement())
+    await store.writeArrangement(arrangement(), null)
     const owned = JSON.parse(await readFile(join(root, relative), 'utf8')) as {
       projectId: string
     }
@@ -214,7 +234,9 @@ describe('场景画布编排存储', () => {
       if (error instanceof Error && 'code' in error && error.code === 'EPERM') return
       throw error
     }
-    await expect(gateway(root).writeArrangement(arrangement())).rejects.toBeInstanceOf(AppException)
+    await expect(gateway(root).writeArrangement(arrangement(), null)).rejects.toBeInstanceOf(
+      AppException
+    )
     expect(
       await readFile(
         join(outside, encodeStorageKey('scene-1'), `${encodeStorageKey('canvas-1')}.json`),
@@ -223,27 +245,31 @@ describe('场景画布编排存储', () => {
     ).toBeNull()
   })
 
-  it('旧提示词记录缺省引用为空，保存后重读保持引用身份', async () => {
+  it('旧 v4 提示词记录缺省引用为空，保存后升级为当前格式并保持引用身份', async () => {
     const root = await temporaryRoot()
     const store = gateway(root)
     const relative = arrangementPath('scene-1', 'canvas-1')
     const legacy = arrangement()
     const document = {
-      formatVersion: SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION,
+      formatVersion: 4,
       projectId: legacy.projectId,
       sceneId: legacy.sceneId,
       canvasId: legacy.canvasId,
       viewport: legacy.viewport,
       cards: legacy.cards.map((card) => {
         if (card.kind !== 'prompt') return card
-        const { references: _references, ...withoutReferences } = card
+        const withoutReferences = Object.fromEntries(
+          Object.entries(card).filter(([key]) => key !== 'references')
+        ) as typeof card
         return withoutReferences
       }),
       relations: legacy.relations
     }
     await writeRelative(root, relative, JSON.stringify(document))
     const read = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
-    expect(read?.cards.find((card) => card.kind === 'prompt')).toMatchObject({ references: [] })
+    expect(read?.arrangement.cards.find((card) => card.kind === 'prompt')).toMatchObject({
+      references: []
+    })
 
     const renamed = structuredClone(legacy)
     const documentCard = renamed.cards.find((card) => card.cardId === 'doc-1')
@@ -253,7 +279,7 @@ describe('场景画布编排存储', () => {
     }
     documentCard.title = '新设定'
     promptCard.references = [{ cardId: 'doc-1' }]
-    await store.writeArrangement(renamed)
+    await store.writeArrangement(renamed, read)
     const saved = JSON.parse(await readFile(join(root, relative), 'utf8')) as {
       cards: { kind: string; references?: { cardId: string; displayName?: string }[] }[]
     }
@@ -261,8 +287,10 @@ describe('场景画布编排存储', () => {
       { cardId: 'doc-1' }
     ])
     const reread = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
-    expect(reread?.cards.find((card) => card.cardId === 'doc-1')).toMatchObject({ title: '新设定' })
-    expect(reread?.cards.find((card) => card.cardId === 'prompt-1')).toMatchObject({
+    expect(reread?.arrangement.cards.find((card) => card.cardId === 'doc-1')).toMatchObject({
+      title: '新设定'
+    })
+    expect(reread?.arrangement.cards.find((card) => card.cardId === 'prompt-1')).toMatchObject({
       references: [{ cardId: 'doc-1' }]
     })
   })
@@ -292,7 +320,7 @@ describe('场景画布编排存储', () => {
       }
     ]
     media.relations = []
-    await store.writeArrangement(media)
+    await store.writeArrangement(media, null)
     const written = JSON.parse(await readFile(join(root, relative), 'utf8')) as {
       cards: { kind: string; summary?: string }[]
     }
@@ -300,17 +328,26 @@ describe('场景画布编排存储', () => {
       ['image', '  人物立绘  '],
       ['video', '']
     ])
-    await expect(store.readArrangement('project-1', 'scene-1', 'canvas-1')).resolves.toEqual(media)
+    const mediaReread = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
+    expect(mediaReread?.arrangement).toEqual(media)
 
-    const legacy = structuredClone(written)
-    for (const card of legacy.cards) delete card.summary
+    const legacy = {
+      formatVersion: 4,
+      projectId: media.projectId,
+      sceneId: media.sceneId,
+      canvasId: media.canvasId,
+      viewport: media.viewport,
+      cards: media.cards.map((card) =>
+        Object.fromEntries(Object.entries(card).filter(([key]) => key !== 'summary'))
+      ),
+      relations: media.relations
+    }
     await writeRelative(root, relative, JSON.stringify(legacy))
     const read = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
-    expect(read?.cards.map((card) => ('summary' in card ? card.summary : 'missing'))).toEqual([
-      '',
-      ''
-    ])
-    await store.writeArrangement(read!)
+    expect(
+      read?.arrangement.cards.map((card) => ('summary' in card ? card.summary : 'missing'))
+    ).toEqual(['', ''])
+    await store.writeArrangement(read!.arrangement, read)
     const restored = JSON.parse(await readFile(join(root, relative), 'utf8')) as {
       cards: { summary?: string }[]
     }
@@ -324,18 +361,80 @@ describe('场景画布编排存储', () => {
     const prompt = missing.cards.find((card) => card.kind === 'prompt')
     if (prompt?.kind !== 'prompt') throw new Error('测试编排缺少提示词卡')
     prompt.references = [{ cardId: 'missing-card' }]
-    await expect(store.writeArrangement(missing)).rejects.toMatchObject({
+    const missingError = await store
+      .writeArrangement(missing, null)
+      .catch((error: unknown) => error)
+    expect(missingError).toMatchObject({
       code: SceneCanvasErrorCodes.targetMissing,
+      reason: FailureReasons.promptReferenceTargetMissing,
       message: '提示词引用必须是当前画布中的其他卡片'
+    })
+    expect(new IpcErrorMapper().map(missingError)).toEqual({
+      code: 4402,
+      msg: '提示词引用必须是当前画布中的其他卡片',
+      reason: FailureReasons.promptReferenceTargetMissing
     })
 
     const duplicated = arrangement()
     const duplicatedPrompt = duplicated.cards.find((card) => card.kind === 'prompt')
     if (duplicatedPrompt?.kind !== 'prompt') throw new Error('测试编排缺少提示词卡')
     duplicatedPrompt.references = [{ cardId: 'doc-1' }, { cardId: 'doc-1' }]
-    await expect(store.writeArrangement(duplicated)).rejects.toMatchObject({
+    const duplicatedError = await store
+      .writeArrangement(duplicated, null)
+      .catch((error: unknown) => error)
+    expect(duplicatedError).toMatchObject({
       code: SceneCanvasErrorCodes.identityConflict,
+      reason: FailureReasons.promptReferenceDuplicate,
       message: '同一提示词不能重复引用同一卡片'
+    })
+    expect(new IpcErrorMapper().map(duplicatedError)).toEqual({
+      code: 4401,
+      msg: '同一提示词不能重复引用同一卡片',
+      reason: FailureReasons.promptReferenceDuplicate
+    })
+  })
+
+  it('没有读取快照时按原语义覆盖旧格式和损坏文件，不把未读内容当作必须接受', async () => {
+    const root = await temporaryRoot()
+    const store = gateway(root)
+    const relative = arrangementPath('scene-1', 'canvas-1')
+    await writeRelative(
+      root,
+      relative,
+      JSON.stringify({
+        formatVersion: PROJECT_ARRANGEMENT_FORMAT_VERSION,
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        canvasId: 'canvas-1',
+        viewport: { x: 0, y: 0, zoom: 1 },
+        cards: [],
+        relations: []
+      })
+    )
+    await store.writeArrangement(arrangement(), null)
+    const afterLegacyOverwrite = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
+    expect(afterLegacyOverwrite?.arrangement).toEqual(arrangement())
+
+    await writeRelative(root, relative, '{')
+    await store.writeArrangement(arrangement(), null)
+    const afterDamagedOverwrite = await store.readArrangement('project-1', 'scene-1', 'canvas-1')
+    expect(afterDamagedOverwrite?.arrangement).toEqual(arrangement())
+  })
+
+  it('写入先校验请求并序列化，序列化失败优先于工程定位错误', async () => {
+    const root = await temporaryRoot()
+    const store = new LocalSceneCanvasArrangementPersistenceGatewayImpl(
+      async (projectId) => ({
+        projectId: `${projectId}-other`,
+        directory: root
+      }),
+      migrationFor(root)
+    )
+    const overlong = arrangement()
+    overlong.cards = [{ ...overlong.cards[0]!, cardId: 'a'.repeat(MAX_IDENTITY_BYTES + 1) }]
+    overlong.relations = []
+    await expect(store.writeArrangement(overlong, null)).rejects.toMatchObject({
+      code: SceneCanvasErrorCodes.persistFailed
     })
   })
 })

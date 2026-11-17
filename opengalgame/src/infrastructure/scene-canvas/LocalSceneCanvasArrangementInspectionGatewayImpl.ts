@@ -2,9 +2,9 @@ import type { VerifiedProjectReadLocation } from '@application/project-files/mod
 import type { SceneCanvasArrangementInspectionFact } from '@application/project-files/models/SceneCanvasArrangementReadFacts'
 import type { SceneCanvasArrangementReaderGateway } from '@application/project-files/ports/SceneCanvasArrangementReaderGateway'
 import { AppException } from '@common/errors/AppException'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
 import type { SceneCanvasArrangementInspectionItem } from '@domain/project-files/models/ProjectFileDiagnostic'
 import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileErrorCodes'
-import { SceneCanvasErrorCodes } from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
 import type { SceneCanvasArrangement } from '@domain/scene-canvas/models/SceneCanvasArrangement'
 import { validateSceneCanvasArrangement } from '@domain/scene-canvas/services/validateSceneCanvasArrangement'
 import {
@@ -14,21 +14,18 @@ import {
 import { StableFileReadError } from '@infrastructure/storage/StableProjectFileReader'
 import { parseUnknownValue } from '@infrastructure/validation/parseUnknownValue'
 import {
-  arrangementPath,
   decodeStorageKey,
   identityFromDescriptorName,
-  projectFileLocations
-} from '@infrastructure/project-files/projectFilePaths'
-import {
   withProjectFileRead,
   type ProjectFileReadWindow
-} from '@infrastructure/project-files/reading/ProjectFileReadWindow'
+} from '@infrastructure/project-files/public/projectFileStorage'
 import {
   SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION,
   sceneCanvasArrangementDocumentSchema,
-  sceneCanvasArrangementFormatProbeSchema,
-  type SceneCanvasArrangementDocument
+  sceneCanvasArrangementFormatProbeSchema
 } from './documents/SceneCanvasArrangementDocument'
+import { currentDocumentToModel } from './sceneArrangementCurrentMapping'
+import { arrangementPath, CANVAS_DIRECTORY } from './sceneCanvasPaths'
 
 /** 用当前编排格式检查工程内已保存编排。不删除卡片，也不加载来源正文。 */
 export class LocalSceneCanvasArrangementInspectionGatewayImpl implements SceneCanvasArrangementReaderGateway {
@@ -65,7 +62,7 @@ type ArrangementRecord =
   | { status: 'damaged' | 'missing' | 'unsupported'; canvasId: string }
 
 async function loadArrangementCatalog(window: ProjectFileReadWindow): Promise<ArrangementRecord[]> {
-  const canvases = await window.captureDirectory(projectFileLocations.canvases)
+  const canvases = await window.captureDirectory(CANVAS_DIRECTORY)
   if (canvases === null) return []
   const records: ArrangementRecord[] = []
   for (const scene of canvases.members) {
@@ -77,7 +74,7 @@ async function loadArrangementCatalog(window: ProjectFileReadWindow): Promise<Ar
         msg: '工程文件无法读取'
       })
     }
-    const sceneDirectory = `${projectFileLocations.canvases}/${scene.name}`
+    const sceneDirectory = `${CANVAS_DIRECTORY}/${scene.name}`
     const files = await window.captureDirectory(sceneDirectory)
     if (files === null) {
       throw new AppException({
@@ -147,30 +144,26 @@ function parseArrangementFile(
     msg: '编排内容损坏'
   })
   const probe = sceneCanvasArrangementFormatProbeSchema.safeParse(value)
-  if (!probe.success || probe.data.formatVersion !== SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION) {
-    if (probe.success && typeof probe.data.formatVersion === 'number') return null
+  if (!probe.success) {
     throw new AppException({
       code: SceneCanvasErrorCodes.contentDamaged,
       msg: '编排内容损坏'
     })
   }
-  const document = parseUnknownValue(
-    sceneCanvasArrangementDocumentSchema,
-    value,
-    SceneCanvasErrorCodes.contentDamaged,
-    '编排内容损坏'
-  )
-  if (
-    document.projectId !== window.projectId ||
-    document.sceneId !== sceneId ||
-    document.canvasId !== canvasId
-  ) {
-    throw new AppException({
-      code: SceneCanvasErrorCodes.ownershipMismatch,
-      msg: '工程文件归属不匹配'
-    })
+  const formatVersion = probe.data.formatVersion
+  let arrangement: SceneCanvasArrangement
+  if (formatVersion === SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION) {
+    const document = parseUnknownValue(
+      sceneCanvasArrangementDocumentSchema,
+      value,
+      SceneCanvasErrorCodes.contentDamaged,
+      '编排内容损坏'
+    )
+    assertOwnership(document, window, sceneId, canvasId)
+    arrangement = currentDocumentToModel(document)
+  } else {
+    return null
   }
-  const arrangement = toArrangement(document)
   try {
     validateSceneCanvasArrangement(arrangement)
   } catch (error) {
@@ -183,32 +176,20 @@ function parseArrangementFile(
   return arrangement
 }
 
-function toArrangement(document: SceneCanvasArrangementDocument): SceneCanvasArrangement {
-  return {
-    projectId: document.projectId,
-    sceneId: document.sceneId,
-    canvasId: document.canvasId,
-    viewport: { ...document.viewport },
-    cards: document.cards.map((card) => {
-      if (card.kind === 'animation' || card.kind === 'effect') {
-        return {
-          kind: card.kind,
-          cardId: card.cardId,
-          webgalPreset: card.webgalPreset === null ? null : { ...card.webgalPreset },
-          layout: { ...card.layout }
-        }
-      }
-      if (card.kind === 'prompt') {
-        return {
-          kind: 'prompt' as const,
-          cardId: card.cardId,
-          body: card.body,
-          references: (card.references ?? []).map((reference) => ({ cardId: reference.cardId })),
-          layout: { ...card.layout }
-        }
-      }
-      return { ...card, layout: { ...card.layout } }
-    }),
-    relations: document.relations.map((relation) => ({ ...relation }))
+function assertOwnership(
+  document: { projectId: string; sceneId: string; canvasId: string },
+  window: ProjectFileReadWindow,
+  sceneId: string,
+  canvasId: string
+): void {
+  if (
+    document.projectId !== window.projectId ||
+    document.sceneId !== sceneId ||
+    document.canvasId !== canvasId
+  ) {
+    throw new AppException({
+      code: SceneCanvasErrorCodes.ownershipMismatch,
+      msg: '工程文件归属不匹配'
+    })
   }
 }

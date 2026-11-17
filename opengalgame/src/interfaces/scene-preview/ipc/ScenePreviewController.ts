@@ -1,5 +1,6 @@
 import type { SceneCandidatePreviewApplicationService } from '@application/scene-preview/services/SceneCandidatePreviewApplicationService'
 import type { ScenePreviewApplicationService } from '@application/scene-preview/services/ScenePreviewApplicationService'
+import type { SceneCandidatePreviewGateway } from '@application/scene-generation/ports/SceneCandidatePreviewGateway'
 import type { SceneGenerationCandidatePreviewEventVO } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { CandidatePreviewVO } from '@application/scene-preview/vo/CandidatePreviewVO'
 import type {
@@ -37,7 +38,11 @@ export class ScenePreviewController {
   constructor(
     private readonly currentScene: ScenePreviewApplicationService,
     private readonly candidatePreview: SceneCandidatePreviewApplicationService,
-    exceptions: IpcExceptionHandler
+    exceptions: IpcExceptionHandler,
+    private readonly candidateEvents: Pick<
+      SceneCandidatePreviewGateway,
+      'subscribeCandidatePreviewEvents' | 'readCandidatePreviewEvent'
+    >
   ) {
     this.handle = createRequestHandler(exceptions)
   }
@@ -163,14 +168,20 @@ export class ScenePreviewController {
     )
   }
 
+  /** 订阅候选舞台事件。只由 IPC 注册时建立，释放由调用方负责。 */
+  subscribeCandidateEvents(
+    listener: (event: SceneGenerationCandidatePreviewEventVO) => void
+  ): () => void {
+    return this.candidateEvents.subscribeCandidatePreviewEvents(listener)
+  }
+
   /**
    * 补投候选会话最后一条真实舞台事实。
    * 只返回与请求项目、场景和会话一致的事件；没有事件时返回 null。
    */
   readCandidateEvent(
     input: unknown,
-    access: IpcRequestAccess,
-    read: (previewSessionId: string) => SceneGenerationCandidatePreviewEventVO | undefined
+    access: IpcRequestAccess
   ): Promise<AjaxResult<SceneGenerationCandidatePreviewEventVO | null>> {
     return this.handle(
       readCandidatePreviewSchema,
@@ -178,7 +189,7 @@ export class ScenePreviewController {
       access,
       '候选预览事件已读取',
       (request) => {
-        const event = read(request.previewSessionId)
+        const event = this.candidateEvents.readCandidatePreviewEvent(request.previewSessionId)
         if (!event || event.projectId !== request.projectId || event.sceneId !== request.sceneId) {
           return null
         }

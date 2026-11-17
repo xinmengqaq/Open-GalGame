@@ -35,8 +35,6 @@ export type SessionImageCard = SceneCanvasImageCardVO
 export type SessionAudioCard = SceneCanvasAudioCardVO
 export type SessionVideoCard = SceneCanvasVideoCardVO
 export type SessionPromptCard = SceneCanvasPromptCardVO
-export type SessionAnimationCard = SceneCanvasAnimationCardVO
-export type SessionEffectCard = SceneCanvasEffectCardVO
 export type SessionFieldCard = SceneCanvasAnimationCardVO | SceneCanvasEffectCardVO
 export type SessionCardKind = SessionCard['kind']
 

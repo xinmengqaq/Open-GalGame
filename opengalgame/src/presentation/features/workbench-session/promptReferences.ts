@@ -1,4 +1,5 @@
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { FailureReasons } from '@common/errors/FailureReasons'
 
 import {
   cardIconProps,
@@ -8,13 +9,6 @@ import {
   type SessionTextKind
 } from './contentKindLabel'
 import type { SessionCard, SessionPromptCard } from './workbenchSession.types'
-
-/**
- * 与领域 `SceneCanvasErrorCodes` 对齐的表现层判定码。
- * 只用于内部判别，不导入领域、不把数值码写进可见文案，也不按同名标题猜测引用对象。
- */
-export const PROMPT_REFERENCE_DUPLICATE_CODE = 4401
-export const PROMPT_REFERENCE_UNKNOWN_CODE = 4402
 
 /** 与生成输入允许的引用类别一致；提示词本身和未知类别不进入候选。 */
 const referenceableKinds: Record<Exclude<SessionCard['kind'], 'prompt'>, true> = {
@@ -263,33 +257,25 @@ export function promptReferenceIssueSummary(
 }
 
 /**
- * 4401/4402/4101 只做内部判别，展示层统一换成可读中文。
- * 不把后端数值码或原始报文透传到可见文案里。
+ * 只按结构化 reason 归类提示词引用失败；缺失或未知 reason 一律不归类。
+ * `code` 只用于保留 4402 与生成侧 4101 既有的目标缺失文案，不读取消息文本。
  */
 export function promptReferenceFailureOf(
-  failure: { code: number; message?: string } | null
+  failure: { code: number; reason?: string } | null
 ): PromptReferenceFailureView | null {
   if (failure === null) return null
-  const message = failure.message ?? ''
-  // 4401/4402 也被画布其他校验复用；只有报文指向引用时才归到提示词问题。
-  const referenceFailure = message.length === 0 || mentionsPromptReference(message)
-  if (failure.code === PROMPT_REFERENCE_DUPLICATE_CODE && referenceFailure) {
+  if (failure.reason === FailureReasons.promptReferenceDuplicate) {
     return { text: '同一提示词不能重复引用同一卡片。' }
   }
-  if (failure.code === PROMPT_REFERENCE_UNKNOWN_CODE && referenceFailure) {
-    return { text: '提示词引用必须是当前画布中的其他卡片。' }
+  if (failure.reason === FailureReasons.promptReferenceTargetMissing) {
+    return {
+      text:
+        failure.code === ErrorCodes.invalidRequest
+          ? '提示词引用的卡片不在当前画布或无法读取。'
+          : '提示词引用必须是当前画布中的其他卡片。'
+    }
   }
-  if (failure.code !== ErrorCodes.invalidRequest || !mentionsPromptReference(message)) return null
-  return {
-    text: message.includes('重复')
-      ? '同一提示词不能重复引用同一卡片。'
-      : '提示词引用的卡片不在当前画布或无法读取。'
-  }
-}
-
-/** 生成侧 4101 是通用请求错误，只有文案指向引用时才显示到提示词卡上。 */
-export function mentionsPromptReference(message: string): boolean {
-  return message.includes('引用')
+  return null
 }
 
 /**

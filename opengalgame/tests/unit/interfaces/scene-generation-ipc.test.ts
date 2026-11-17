@@ -29,6 +29,7 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { LoggerGateway } from '@common/logging/LoggerGateway'
 import { createBrowserDesktopBridge } from '@bootstrap/browser/BrowserDesktopBridge'
 import { createSceneGenerationFixture } from '@bootstrap/browser/sceneGenerationFixture'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { SceneGenerationClientImpl } from '@interfaces/scene-generation/client/SceneGenerationClientImpl'
 import { SceneGenerationController } from '@interfaces/scene-generation/ipc/SceneGenerationController'
@@ -89,6 +90,52 @@ function status(sequence = 1): SceneGenerationRenderStatusVO {
 
 function event(sequence: number, threadId = 'thread-1'): SceneGenerationRenderProgressEventVO {
   return { ...status(sequence), threadId, message: status(sequence).stageMessage }
+}
+
+interface ControllableWindow {
+  sender: {
+    id: number
+    isDestroyed: () => boolean
+    send: (channel: string, value: unknown) => void
+    once: (event: string, listener: () => void) => void
+  }
+  frame: { url: string }
+  window: {
+    isDestroyed: () => boolean
+    webContents: { mainFrame: { url: string } }
+  }
+  sent: { channel: string; value: unknown }[]
+  destroy: () => void
+}
+
+/** 可独立销毁的窗口，用来观察多窗口进度订阅与销毁释放。 */
+function controllableWindow(id: number): ControllableWindow {
+  const destroyed = { value: false }
+  const destroyListeners: (() => void)[] = []
+  const sent: { channel: string; value: unknown }[] = []
+  const sender = {
+    id,
+    isDestroyed: () => destroyed.value,
+    send: (channel: string, value: unknown) => sent.push({ channel, value }),
+    once: (name: string, listener: () => void) => {
+      if (name === 'destroyed') destroyListeners.push(listener)
+    }
+  }
+  const frame = { url: 'http://127.0.0.1:5173/' }
+  const window = {
+    isDestroyed: () => destroyed.value,
+    webContents: Object.assign(sender, { mainFrame: frame })
+  }
+  return {
+    sender,
+    frame,
+    window,
+    sent,
+    destroy: () => {
+      destroyed.value = true
+      for (const listener of destroyListeners) listener()
+    }
+  }
 }
 
 function startRequest(): StartSceneGenerationDTO {
@@ -242,7 +289,7 @@ function controller(partial = services()): {
   return {
     logs,
     services: partial,
-    controller: new SceneGenerationController(partial, new IpcExceptionHandler(logger))
+    controller: new SceneGenerationController(partial, new IpcExceptionHandler(logger, new IpcErrorMapper()))
   }
 }
 
@@ -455,6 +502,86 @@ describe('场景生成用户接口', () => {
     expect(ipc.handlers.size).toBe(0)
     expect(app.subscriptions).toHaveLength(1)
     expect(app.calls).toContain('unsubscribe')
+  })
+
+  it('两个窗口的进度订阅互不释放，销毁和注销只停止本窗口监听', async () => {
+    const { controller: sceneGeneration, services: app } = controller()
+    const publishes = new Map<
+      string,
+      (value: SceneGenerationRenderProgressEventVO) => void
+    >()
+    vi.mocked(app.renderQuery.subscribeSceneGenerationProgress).mockImplementation(
+      (request, publish) => {
+        app.calls.push('subscribe')
+        publishes.set(request.operationId, publish)
+        const unsubscribe = vi.fn(() => app.calls.push('unsubscribe'))
+        app.subscriptions.push(unsubscribe)
+        return unsubscribe
+      }
+    )
+    const first = controllableWindow(7)
+    const second = controllableWindow(8)
+    let active = first
+    const detach = registerSceneGenerationIpc({
+      sceneGeneration,
+      getWindow: () => active.window as never,
+      rendererUrl: 'http://127.0.0.1:5173/'
+    })
+    const scope = (
+      operationId: string
+    ): SceneGenerationScopeDTO & { threadId: string; branchId: string } => ({
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      operationId,
+      threadId: 'thread-1',
+      branchId: 'branch-1'
+    })
+    const subscribe = async (
+      window: ControllableWindow,
+      operationId: string
+    ): Promise<unknown> => {
+      active = window
+      return ipc.handlers.get('scene-generation:progress')?.(
+        { sender: window.sender, senderFrame: window.frame },
+        scope(operationId)
+      )
+    }
+    await subscribe(first, 'operation-1')
+    await subscribe(second, 'operation-2')
+    expect(publishes.size).toBe(2)
+
+    active = first
+    publishes.get('operation-1')?.({ ...event(1), operationId: 'operation-1' })
+    publishes.get('operation-1')?.({ ...event(2), operationId: 'operation-2' })
+    active = second
+    publishes.get('operation-2')?.({ ...event(1), operationId: 'operation-2' })
+    expect(first.sent).toEqual([
+      { channel: 'scene-generation:progress', value: { ...event(1), operationId: 'operation-1' } }
+    ])
+    expect(second.sent).toEqual([
+      { channel: 'scene-generation:progress', value: { ...event(1), operationId: 'operation-2' } }
+    ])
+
+    await subscribe(first, 'operation-1')
+    expect(app.calls.filter((call) => call === 'unsubscribe')).toHaveLength(1)
+    active = second
+    publishes.get('operation-2')?.({ ...event(2), operationId: 'operation-2' })
+    expect(second.sent).toEqual([
+      { channel: 'scene-generation:progress', value: { ...event(1), operationId: 'operation-2' } },
+      { channel: 'scene-generation:progress', value: { ...event(2), operationId: 'operation-2' } }
+    ])
+
+    second.destroy()
+    expect(app.calls.filter((call) => call === 'unsubscribe')).toHaveLength(2)
+    publishes.get('operation-2')?.({ ...event(3), operationId: 'operation-2' })
+    expect(second.sent).toEqual([
+      { channel: 'scene-generation:progress', value: { ...event(1), operationId: 'operation-2' } },
+      { channel: 'scene-generation:progress', value: { ...event(2), operationId: 'operation-2' } }
+    ])
+
+    detach()
+    expect(app.calls.filter((call) => call === 'unsubscribe').length).toBeGreaterThanOrEqual(3)
+    expect(ipc.handlers.size).toBe(0)
   })
 
   it('预览只接受绑定身份，浏览器桥明确不支持且不返回成功', async () => {

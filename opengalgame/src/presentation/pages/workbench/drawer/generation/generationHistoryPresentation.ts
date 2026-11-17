@@ -22,9 +22,6 @@ export type HistoryViewState = 'loading' | 'error' | 'empty' | 'ready'
 
 export const historyPageSize = 20
 
-/** 旧记录缺字段时的唯一标记；只在后端给出 `legacy` 时显示，不反推记录版本。 */
-export const historyLegacyLabel = '旧记录'
-export const historyLegacyNote = '这条记录缺少部分保存字段，只显示已有事实。'
 export const historyReadonlyNote =
   '这里只显示后端保存的操作摘要，不包含完整对话、候选内容或提交结果。'
 
@@ -70,23 +67,6 @@ const stageLabels: Record<SceneGenerationRenderStage, string> = {
   failed: '生成失败',
   cancelled: '已取消',
   paused: '已暂停'
-}
-
-/**
- * 历史摘要只有旧 reason 字段：先经统一桥接还原失败分类，再按分类取用户语言。
- * 旧 reason 文案只作未识别原因的 legacy 兜底，不进入新失败决策。
- */
-const legacyFailureReasonLabels: Record<SceneGenerationFailureReasonVO, string> = {
-  noInformationGain: '重复读取没有获得新内容',
-  missingCandidateWrite: '收到完成提示后仍未写出候选',
-  outputTruncated: '模型输出达到长度上限',
-  missingStructuredResult: '模型没有提交结构化结果',
-  structuredOutput: '模型输出不符合约定',
-  modelFailure: '模型调用失败',
-  modelRejected: '模型拒绝了这次请求',
-  modelAccess: '模型鉴权失败',
-  contextOverflow: '输入超出模型可处理范围',
-  correctionsExhausted: '自动修正次数已用尽'
 }
 
 export function historyBoundaryLabel(boundary: SceneGenerationHistoryBoundary): string {
@@ -165,14 +145,17 @@ export function historySecondTime(value: string): string {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
-/** 失败原因只在后端给出安全码时显示；缺失保持 null，不用“未完成”补造原因。 */
+/**
+ * 历史摘要只有旧 reason 字段：先经统一桥接还原失败分类，再按分类取用户语言。
+ * 失败原因只在后端给出安全码时显示；缺失保持 null，不用“未完成”补造原因。
+ */
 export function historyFailureReasonLabel(
   reason: SceneGenerationFailureReasonVO | null | undefined
 ): string | null {
   if (!reason) return null
   const failureClass = failureClassOfLegacyReason(reason)
   if (failureClass) return failureClassTitle(failureClass)
-  return legacyFailureReasonLabels[reason] ?? null
+  return null
 }
 
 /** 列表行只取时间、状态和摘要；阶段、耗时、候选与重试不属于行内信息。 */
@@ -183,7 +166,7 @@ export type HistoryRowView = {
   summary: string
 }
 
-/** 详情只读视图；失败原因和旧记录标记只来自后端字段，缺失不补造。 */
+/** 详情只读视图；失败原因只来自后端字段，缺失不补造。 */
 export type HistoryDetailView = {
   clock: string
   time: string
@@ -192,20 +175,17 @@ export type HistoryDetailView = {
   stage: string
   tone: HistoryBoundaryTone
   failureReason: string | null
-  legacy: boolean
-  legacyNote: string | null
   readonlyNote: string
 }
 
 /**
  * 只认 P4-1 投影出的两条固定安全摘要，精确匹配其他文案不算待核对。
- * 有真实失败原因或旧记录标记时仍按失败处理，不让文案覆盖明确事实。
+ * 有真实失败原因时仍按失败处理，不让文案覆盖明确事实。
  */
 function isPendingVerification(record: SceneGenerationHistorySummaryVO): boolean {
   return (
     record.boundary === 'failed' &&
     !record.failureReason &&
-    record.legacy !== true &&
     pendingVerificationMessages.has(record.message)
   )
 }
@@ -224,8 +204,6 @@ export function historyRowViewOf(record: SceneGenerationHistorySummaryVO): Histo
 
 export function historyDetailViewOf(record: SceneGenerationHistorySummaryVO): HistoryDetailView {
   const pendingVerification = isPendingVerification(record)
-  const failureReason = historyFailureReasonLabel(record.failureReason)
-  const legacy = record.legacy === true
   return {
     clock: historyClock(record.createdAt),
     time: historyFullTime(record.createdAt),
@@ -235,9 +213,7 @@ export function historyDetailViewOf(record: SceneGenerationHistorySummaryVO): Hi
       : historyBoundaryLabel(record.boundary),
     stage: pendingVerification ? historyPendingVerificationStage : historyStageLabel(record.stage),
     tone: pendingVerification ? 'muted' : historyBoundaryTone(record.boundary),
-    failureReason,
-    legacy,
-    legacyNote: legacy ? historyLegacyNote : null,
+    failureReason: historyFailureReasonLabel(record.failureReason),
     readonlyNote: historyReadonlyNote
   }
 }

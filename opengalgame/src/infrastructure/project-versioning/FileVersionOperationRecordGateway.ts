@@ -41,6 +41,7 @@ const operationDocumentSchema = z.strictObject({
   projectId: z.string().min(1),
   operationId: z.string().regex(OPERATION_ID_PATTERN),
   sourceModule: z.string().min(1),
+  callerOperationId: z.string().regex(OPERATION_ID_PATTERN).optional(),
   targets: z.array(z.strictObject({ kind: z.string().min(1), id: z.string().min(1) })),
   changePaths: z.array(z.string().min(1)),
   watchedPaths: z.array(z.string().min(1)),
@@ -68,7 +69,8 @@ const callerLinkSchema = z.strictObject({
   operationId: z.string().regex(OPERATION_ID_PATTERN),
   targets: z.array(z.strictObject({ kind: z.string().min(1), id: z.string().min(1) })),
   changePaths: z.array(z.string().min(1)),
-  watchedPaths: z.array(z.string().min(1))
+  watchedPaths: z.array(z.string().min(1)),
+  state: z.enum(['pending', 'notStarted', 'committed', 'notCommitted']).optional()
 })
 
 type CallerLinkDocument = z.infer<typeof callerLinkSchema>
@@ -178,13 +180,89 @@ export class FileVersionOperationRecordGateway implements VersionOperationRecord
     })
   }
 
+  async prepareOrClaimCaller(
+    record: VersionPreparedRecord,
+    callerOperationId: string
+  ): Promise<VersionOperationRecord> {
+    requireOperationId(record.operationId)
+    requireOperationId(callerOperationId)
+    const root = await resolveProjectWorkRoot(this.userDirectory, record.projectId)
+    return enqueueWorkWrite(root, async () => {
+      const occupied = await this.findCallerOperation(record.sourceModule, callerOperationId)
+      if (occupied && occupied.projectId !== record.projectId) {
+        throw conflictingOperation()
+      }
+      const records = (await this.listByProject(record.projectId)).filter(
+        (item) =>
+          item.sourceModule === record.sourceModule &&
+          item.callerOperationId === callerOperationId
+      )
+      if (records.length > 1) throw conflictingOperation()
+      const existing = records[0]
+      const path = await callerLinkPath(root, record.sourceModule, callerOperationId)
+      const value = await readVersionValue(path)
+      const link = value === null ? null : parseVersionValue(callerLinkSchema, value)
+      if (link?.state === 'notStarted' || link?.state === 'notCommitted') {
+        throw new AppException({
+          code: ErrorCodes.operationConflict,
+          msg: '操作已终止，不能重试'
+        })
+      }
+      if (existing) {
+        if (link && link.operationId !== existing.operationId) throw conflictingOperation()
+        if (!link) {
+          const document: CallerLinkDocument = {
+            formatVersion: 1,
+            projectId: existing.projectId,
+            sourceModule: existing.sourceModule,
+            callerOperationId,
+            operationId: existing.operationId,
+            targets: existing.targets.map((target) => ({ kind: target.kind, id: target.id })),
+            changePaths: [...existing.changePaths],
+            watchedPaths: [...existing.watchedPaths],
+            state: 'pending'
+          }
+          await writeVersionValue(path, document)
+        }
+        return existing
+      }
+      const sameId = await readVersionOperation(root, record.operationId)
+      if (sameId) {
+        if (sameId.callerOperationId !== undefined) throw conflictingOperation()
+        await writeVersionOperation(root, { ...sameId, callerOperationId })
+      } else {
+        await writeVersionOperation(root, { ...record, callerOperationId, commitIntent: null })
+      }
+      if (!link) {
+        const document: CallerLinkDocument = {
+          formatVersion: 1,
+          projectId: record.projectId,
+          sourceModule: record.sourceModule,
+          callerOperationId,
+          operationId: record.operationId,
+          targets: record.targets.map((target) => ({ kind: target.kind, id: target.id })),
+          changePaths: [...record.changePaths],
+          watchedPaths: [...record.watchedPaths],
+          state: 'pending'
+        }
+        await writeVersionValue(path, document)
+      }
+      return readVersionOperation(root, record.operationId).then((stored) => {
+        if (!stored) throw conflictingOperation()
+        return stored
+      })
+    })
+  }
+
   async bindCallerOperation(binding: VersionCallerOperationBinding): Promise<void> {
     requireOperationId(binding.callerOperationId)
     requireOperationId(binding.operationId)
     const occupied = await this.findCallerOperation(binding.sourceModule, binding.callerOperationId)
     if (
       occupied &&
-      (occupied.projectId !== binding.projectId || occupied.operationId !== binding.operationId)
+      (occupied.projectId !== binding.projectId ||
+        (occupied.operationId !== binding.operationId &&
+          occupied.state !== 'notStarted'))
     ) {
       throw conflictingOperation()
     }
@@ -199,6 +277,18 @@ export class FileVersionOperationRecordGateway implements VersionOperationRecord
       ) {
         throw conflictingOperation()
       }
+      const occupiedRecords = (await this.listByProject(binding.projectId)).filter(
+        (record) =>
+          record.sourceModule === binding.sourceModule &&
+          record.callerOperationId === binding.callerOperationId
+      )
+      if (occupiedRecords.length > 1) throw conflictingOperation()
+      if (
+        occupiedRecords[0] &&
+        occupiedRecords[0].operationId !== binding.operationId
+      ) {
+        throw conflictingOperation()
+      }
       const path = await callerLinkPath(root, binding.sourceModule, binding.callerOperationId)
       const value = await readVersionValue(path)
       if (value !== null) {
@@ -206,14 +296,26 @@ export class FileVersionOperationRecordGateway implements VersionOperationRecord
         if (
           existing.projectId !== binding.projectId ||
           existing.sourceModule !== binding.sourceModule ||
-          existing.callerOperationId !== binding.callerOperationId ||
-          existing.operationId !== binding.operationId ||
-          !sameScope(existing, binding)
+          existing.callerOperationId !== binding.callerOperationId
         ) {
+          throw conflictingOperation()
+        }
+        if (existing.state === 'committed') {
+          if (existing.operationId !== binding.operationId) throw conflictingOperation()
+          return
+        }
+        if (existing.state === 'notStarted' || existing.state === 'notCommitted') {
+          throw new AppException({
+            code: ErrorCodes.operationConflict,
+            msg: '操作已终止，不能重试'
+          })
+        }
+        if (existing.operationId !== binding.operationId || !sameScope(existing, binding)) {
           throw conflictingOperation()
         }
         return
       }
+      await writeVersionOperation(root, { ...prepared, callerOperationId: binding.callerOperationId })
       const document: CallerLinkDocument = {
         formatVersion: 1,
         projectId: binding.projectId,
@@ -222,9 +324,9 @@ export class FileVersionOperationRecordGateway implements VersionOperationRecord
         operationId: binding.operationId,
         targets: binding.targets.map((target) => ({ kind: target.kind, id: target.id })),
         changePaths: [...binding.changePaths],
-        watchedPaths: [...binding.watchedPaths]
+        watchedPaths: [...binding.watchedPaths],
+        state: 'pending'
       }
-      parseVersionValue(callerLinkSchema, document)
       await writeVersionValue(path, document)
     })
   }
@@ -266,6 +368,7 @@ export class FileVersionOperationRecordGateway implements VersionOperationRecord
     }
     return first
   }
+
 }
 
 /** 读取本仓库中的版本操作绑定。损坏时失败，不把缺失说成损坏。 */
@@ -289,6 +392,9 @@ async function writeVersionOperation(
     projectId: record.projectId,
     operationId: record.operationId,
     sourceModule: record.sourceModule,
+    ...(record.callerOperationId === undefined
+      ? {}
+      : { callerOperationId: record.callerOperationId }),
     targets: record.targets.map((target) => ({ kind: target.kind, id: target.id })),
     changePaths: [...record.changePaths],
     watchedPaths: [...record.watchedPaths],
@@ -323,6 +429,9 @@ function toRecord(document: OperationDocument): VersionOperationRecord {
     projectId: document.projectId,
     operationId: document.operationId,
     sourceModule: document.sourceModule,
+    ...(document.callerOperationId === undefined
+      ? {}
+      : { callerOperationId: document.callerOperationId }),
     targets: document.targets,
     changePaths: document.changePaths,
     watchedPaths: document.watchedPaths,
@@ -381,6 +490,148 @@ async function repositoryMetadataReadable(projectRoot: string): Promise<boolean>
   return true
 }
 
+/** 队列内使用：按 caller 读取 link（不自行入队）。 */
+export async function readCallerIntentAt(
+  projectRoot: string,
+  projectId: string,
+  sourceModule: string,
+  callerOperationId: string
+): Promise<VersionCallerOperationLink | null> {
+  return readCallerLink(projectRoot, projectId, sourceModule, callerOperationId)
+}
+
+/** 队列内使用：列出工程/来源的全部 caller link（不自行入队）。 */
+export async function listCallerIntentsAt(
+  projectRoot: string,
+  projectId: string,
+  sourceModule: string
+): Promise<readonly VersionCallerOperationLink[]> {
+  const directory = await versionDocumentPath(
+    projectRoot,
+    [...CALLER_DIRECTORY, safeModule(sourceModule)],
+    '.'
+  )
+  const names = await listVersionDocuments(directory)
+  const links: VersionCallerOperationLink[] = []
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue
+    const callerOperationId = name.slice(0, -'.json'.length)
+    if (!OPERATION_ID_PATTERN.test(callerOperationId)) throw unreadableRecord()
+    const link = await readCallerLink(projectRoot, projectId, sourceModule, callerOperationId)
+    if (link) links.push(link)
+  }
+  return links
+}
+
+/** 队列内使用：列出全部 version intent（不自行入队）。 */
+export async function listVersionOperationsAt(
+  projectRoot: string
+): Promise<readonly VersionOperationRecord[]> {
+  const directory = await versionDocumentPath(projectRoot, OPERATION_DIRECTORY, '.')
+  const names = await listVersionDocuments(directory)
+  const records: VersionOperationRecord[] = []
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue
+    const operationId = name.slice(0, -'.json'.length)
+    if (!OPERATION_ID_PATTERN.test(operationId)) throw unreadableRecord()
+    const record = await readVersionOperation(projectRoot, operationId)
+    if (record) records.push(record)
+  }
+  return records
+}
+
+/** 队列内使用：无 link 且无 version intent 时写 notStarted tombstone。 */
+export async function markCallerNotStartedAt(
+  projectRoot: string,
+  projectId: string,
+  sourceModule: string,
+  callerOperationId: string
+): Promise<VersionCallerOperationLink> {
+  const path = await callerLinkPath(projectRoot, sourceModule, callerOperationId)
+  const value = await readVersionValue(path)
+  if (value !== null) {
+    const existing = parseVersionValue(callerLinkSchema, value)
+    if (
+      existing.projectId === projectId &&
+      existing.sourceModule === sourceModule &&
+      existing.callerOperationId === callerOperationId &&
+      existing.state === 'notStarted'
+    ) {
+      return { ...existing, state: 'notStarted' as const }
+    }
+    throw conflictingOperation()
+  }
+  const document: CallerLinkDocument = {
+    formatVersion: 1,
+    projectId,
+    sourceModule,
+    callerOperationId,
+    operationId: callerOperationId,
+    targets: [],
+    changePaths: [],
+    watchedPaths: [],
+    state: 'notStarted'
+  }
+  parseVersionValue(callerLinkSchema, document)
+  await writeVersionValue(path, document)
+  return { ...document, state: 'notStarted' as const }
+}
+
+/** 队列内使用：按已关联/version intent 写终态（含 notStarted）。 */
+export async function setCallerStateAt(
+  projectRoot: string,
+  projectId: string,
+  sourceModule: string,
+  callerOperationId: string,
+  operationId: string,
+  state: 'notStarted' | 'committed' | 'notCommitted'
+): Promise<void> {
+  const path = await callerLinkPath(projectRoot, sourceModule, callerOperationId)
+  const value = await readVersionValue(path)
+  if (value !== null) {
+    const existing = parseVersionValue(callerLinkSchema, value)
+    if (
+      existing.projectId !== projectId ||
+      existing.sourceModule !== sourceModule ||
+      existing.callerOperationId !== callerOperationId ||
+      existing.operationId !== operationId
+    ) {
+      throw conflictingOperation()
+    }
+    if (
+      existing.state !== undefined &&
+      existing.state !== 'pending' &&
+      existing.state !== state
+    ) {
+      throw conflictingOperation()
+    }
+    if (existing.state === state) return
+    await writeVersionValue(path, { ...existing, state })
+    return
+  }
+  const record = await readVersionOperation(projectRoot, operationId)
+  if (
+    !record ||
+    record.projectId !== projectId ||
+    record.sourceModule !== sourceModule ||
+    record.callerOperationId !== callerOperationId
+  ) {
+    throw conflictingOperation()
+  }
+  const document: CallerLinkDocument = {
+    formatVersion: 1,
+    projectId,
+    sourceModule,
+    callerOperationId,
+    operationId,
+    targets: record.targets.map((target) => ({ kind: target.kind, id: target.id })),
+    changePaths: [...record.changePaths],
+    watchedPaths: [...record.watchedPaths],
+    state
+  }
+  await writeVersionValue(path, document)
+}
+
 async function readCallerLink(
   projectRoot: string,
   projectId: string,
@@ -403,7 +654,8 @@ async function readCallerLink(
     projectId: document.projectId,
     sourceModule: document.sourceModule,
     callerOperationId: document.callerOperationId,
-    operationId: document.operationId
+    operationId: document.operationId,
+    state: document.state ?? 'pending'
   }
 }
 

@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -13,14 +12,6 @@ export interface LoadedPrompt {
   reference: PromptReference
   body: string
   digest: string
-}
-
-/**
- * 源码树中的系统提示词根目录。
- * 打包后的资源根由装配方另行传入，读取器本身不查看当前工作目录。
- */
-export function sourcePromptResourceRoot(): string {
-  return fileURLToPath(new URL('../../../../resources/ai/prompts/', import.meta.url))
 }
 
 export class FilePromptLoader {

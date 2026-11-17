@@ -5,7 +5,8 @@ import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/Scen
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { LoggerGateway } from '@common/logging/LoggerGateway'
-import { SceneCanvasErrorCodes } from '@domain/scene-canvas/errors/SceneCanvasErrorCodes'
+import { SceneCanvasErrorCodes } from '@common/errors/SceneCanvasErrorCodes'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
 import { SceneCanvasClientImpl } from '@interfaces/scene-canvas/client/SceneCanvasClientImpl'
 import { SceneCanvasController } from '@interfaces/scene-canvas/ipc/SceneCanvasController'
@@ -62,7 +63,7 @@ function createController(service: Partial<SceneCanvasApplicationService>): {
     calls,
     controller: new SceneCanvasController(
       service as SceneCanvasApplicationService,
-      new IpcExceptionHandler(logger)
+      new IpcExceptionHandler(logger, new IpcErrorMapper())
     )
   }
 }

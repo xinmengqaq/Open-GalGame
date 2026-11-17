@@ -7,10 +7,8 @@ import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { Project } from '@domain/projects/models/Project'
 import { resolveContained } from '@infrastructure/git/containedPath'
-import {
-  encodeStorageKey,
-  projectFileLocations
-} from '@infrastructure/project-files/projectFilePaths'
+import { encodeStorageKey } from '@infrastructure/project-files/public/projectFileStorage'
+import { CANVAS_DIRECTORY } from '@infrastructure/scene-canvas/sceneCanvasPaths'
 import { LocalProjectListQueryGatewayImpl } from '@infrastructure/projects/LocalProjectListQueryGatewayImpl'
 import { LocalProjectStorageGatewayImpl } from '@infrastructure/projects/LocalProjectStorageGatewayImpl'
 import { WEBGAL_COMPATIBILITY_PROFILE } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
@@ -48,7 +46,7 @@ export class RegisteredSceneLocationGatewayImpl {
     }
     const canvasDirectory = await resolveContained(
       registration.directory,
-      `${projectFileLocations.canvases}/${encodeStorageKey(scene.sceneId)}`
+      `${CANVAS_DIRECTORY}/${encodeStorageKey(scene.sceneId)}`
     )
     let names: string[]
     try {

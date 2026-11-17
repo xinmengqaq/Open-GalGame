@@ -8,12 +8,14 @@ import {
   type SceneGenerationDependencies,
   type SceneGenerationDispatchIdentity
 } from '@application/scene-generation/services/impl/SceneGenerationCoordinator'
-import { SceneGenerationApplicationServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationApplicationServiceImpl'
-import { SceneGenerationMemoryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationMemoryServiceImpl'
-import { SceneGenerationCandidateEditServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationCandidateEditServiceImpl'
-import { SceneGenerationHistoryQueryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationHistoryQueryServiceImpl'
-import { SceneGenerationStatusQueryServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationStatusQueryServiceImpl'
+import { RunSceneGeneration } from '@application/scene-generation/services/impl/RunSceneGeneration'
+import { ClearSceneGenerationMemory } from '@application/scene-generation/services/impl/ClearSceneGenerationMemory'
+import { EditSceneGenerationCandidate } from '@application/scene-generation/services/impl/EditSceneGenerationCandidate'
+import { QuerySceneGenerationHistory } from '@application/scene-generation/services/impl/QuerySceneGenerationHistory'
+import { QuerySceneGenerationStatus } from '@application/scene-generation/services/impl/QuerySceneGenerationStatus'
 import type { SceneGenerationWorkspaceGateway } from '@application/scene-generation/ports/SceneGenerationWorkspaceGateway'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
+import type { SceneGenerationDomainService } from '@domain/scene-generation/services/SceneGenerationDomainService'
 import type { SceneGenerationMemoryGateway } from '@application/scene-generation/ports/SceneGenerationMemoryGateway'
 import type { SceneGenerationHistoryReader } from '@application/scene-generation/ports/SceneGenerationHistoryReader'
 import type { SceneGenerationSceneHistoryReader } from '@application/scene-generation/ports/SceneGenerationSceneHistoryReader'
@@ -31,7 +33,6 @@ import type { SceneArtifactGateway } from '@application/scene-generation/ports/S
 import type { SceneGenerationWorkflow } from '@application/scene-generation/ports/SceneGenerationWorkflow'
 import type { SceneInputGateway } from '@application/scene-generation/ports/SceneInputGateway'
 import type { SceneVersionGateway } from '@application/scene-generation/ports/SceneVersionGateway'
-import { SceneGenerationApplicationServiceImpl } from '@application/scene-generation/services/impl/SceneGenerationApplicationServiceImpl'
 import type { SceneGenerationProgressVO } from '@application/scene-generation/vo/SceneGenerationVO'
 import { phaseOf } from '@application/scene-generation/mapping/SceneGenerationStateProjection'
 
@@ -80,7 +81,7 @@ export const questionInteraction = {
 /** 建立仅使用内存替身的应用编排夹具，不实现文件、Git 或工作流技术适配。 */
 export interface SceneGenerationTestFixture {
   service: TestServices
-  generation: SceneGenerationApplicationServiceImpl
+  generation: RunSceneGeneration
   coordinator: SceneGenerationCoordinator
   deps: SceneGenerationDependencies
   workflow: Mocked<
@@ -105,7 +106,9 @@ export interface SceneGenerationTestFixture {
   restart: () => TestServices
 }
 
-export function createSceneGenerationFixture(): SceneGenerationTestFixture {
+export function createSceneGenerationFixture(
+  domain: SceneGenerationDomainService = new SceneGenerationDomainServiceImpl()
+): SceneGenerationTestFixture {
   const executions = new Map<string, SceneGenerationExecution>()
   const commits = new Map<string, SceneGenerationCommitState>()
   const jobs: (() => Promise<void>)[] = []
@@ -404,6 +407,7 @@ export function createSceneGenerationFixture(): SceneGenerationTestFixture {
     }))
   }
   const deps = {
+    domain,
     workflow,
     executions: workflow,
     history: workflow,
@@ -425,15 +429,15 @@ export function createSceneGenerationFixture(): SceneGenerationTestFixture {
       progress.push(event)
     }
   }
-  let generation!: SceneGenerationApplicationServiceImpl
+  let generation!: RunSceneGeneration
   let coordinator!: SceneGenerationCoordinator
   const createServices = (): TestServices => {
     coordinator = new SceneGenerationCoordinator(deps)
-    generation = new SceneGenerationApplicationServiceImpl(deps, coordinator)
-    const s1 = new SceneGenerationStatusQueryServiceImpl(deps, coordinator)
-    const s2 = new SceneGenerationHistoryQueryServiceImpl(workflow, workflow)
-    const s3 = new SceneGenerationCandidateEditServiceImpl(deps, coordinator, deps.candidatePreview)
-    const s4 = new SceneGenerationMemoryServiceImpl(deps, coordinator)
+    generation = new RunSceneGeneration(deps, coordinator)
+    const s1 = new QuerySceneGenerationStatus(deps, coordinator)
+    const s2 = new QuerySceneGenerationHistory(workflow, workflow)
+    const s3 = new EditSceneGenerationCandidate(deps, coordinator, deps.candidatePreview)
+    const s4 = new ClearSceneGenerationMemory(deps, coordinator)
     return {
       generateScene: generation.generateScene.bind(generation),
       cancelSceneGeneration: generation.cancelSceneGeneration.bind(generation),

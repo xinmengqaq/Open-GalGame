@@ -11,14 +11,19 @@ import type {
   WindowsScenePackageResult,
   WindowsScenePackager
 } from '@application/scene-export/ports/WindowsScenePackager'
+import { errorFacts } from '@common/errors/errorFacts'
+import type { LoggerGateway } from '@common/logging/LoggerGateway'
 import {
   sceneExportErrorMessages,
   SceneExportErrorCodes
 } from '@domain/scene-export/errors/SceneExportErrorCodes'
 import { assertRelativePath, resolveContained } from '@infrastructure/git/containedPath'
 import { RegisteredSceneLocationGatewayImpl } from '@infrastructure/scenes/RegisteredSceneLocationGatewayImpl'
-
 import { resolveSceneAssetReference } from '@infrastructure/webgal/assetPath'
+import {
+  DEFAULT_GAME_CONFIG,
+  DEFAULT_USER_STYLE_SHEET
+} from '@infrastructure/webgal/runtime/defaultWebgalAssets'
 
 const require = createRequire(import.meta.url)
 const execFileAsync = promisify(execFile)
@@ -42,12 +47,6 @@ const TERRE_WINDOWS_RELEASE = {
   webgalTemplate: 'release/assets/templates/WebGAL_Template'
 } as const
 
-const SINGLE_SCENE_CONFIG = `Game_name:当前场景;
-Game_key:;
-Title_img:;
-Title_bgm:;
-`
-
 type AsarPackager = {
   createPackageWithOptions(
     source: string,
@@ -56,12 +55,19 @@ type AsarPackager = {
   ): Promise<unknown>
 }
 
+type PackagingStage = 'preparing-staging' | 'assembling' | 'publishing' | 'verifying'
+
+const SAFE_DIAGNOSTIC_NAME = /^[A-Z][A-Za-z0-9_.]{0,63}$/u
+
 /**
  * 按 Terre `exportGame(gameName, 'electron-windows')` 组装当前已保存场景。
  * 官方模板未校验通过时返回不可用，不调用 electron-builder，也不生成假可执行文件。
  */
 export class TerreWindowsScenePackager implements WindowsScenePackager {
-  constructor(private readonly userDirectory = path.join(homedir(), '.opengalgame')) {}
+  constructor(
+    private readonly logger: LoggerGateway,
+    private readonly userDirectory = path.join(homedir(), '.opengalgame')
+  ) {}
 
   async packageWindowsScene(source: SavedSceneExportSource): Promise<WindowsScenePackageResult> {
     if (process.platform !== 'win32') return unavailable()
@@ -70,13 +76,17 @@ export class TerreWindowsScenePackager implements WindowsScenePackager {
     const directoryName = sceneDirectoryName(source)
     const outputRoot = path.join(this.userDirectory, 'exports', directoryName)
     const staging = path.join(tmpdir(), `terre-export-${directoryName}`)
+    let stage: PackagingStage = 'preparing-staging'
     try {
       await rm(staging, { recursive: true, force: true })
       await mkdir(staging, { recursive: true })
+      stage = 'assembling'
       await assembleOfficialWindowsExport(release, staging, source, this.userDirectory)
+      stage = 'publishing'
       await mkdir(path.dirname(outputRoot), { recursive: true })
       await rm(outputRoot, { recursive: true, force: true })
       await cp(staging, outputRoot, { recursive: true })
+      stage = 'verifying'
       const executable = await stat(path.join(outputRoot, 'WebGAL.exe'))
       if (!executable.isFile() || executable.size <= 0) return failed()
       return {
@@ -92,11 +102,36 @@ export class TerreWindowsScenePackager implements WindowsScenePackager {
           versionReference: source.versionReference
         }
       }
-    } catch {
+    } catch (error) {
+      this.recordPackagingFailure(stage, error)
       await rm(outputRoot, { recursive: true, force: true }).catch(() => undefined)
       return failed()
     } finally {
       await rm(staging, { recursive: true, force: true }).catch(() => undefined)
+    }
+  }
+
+  /**
+   * 诊断边界只写结构化事实；日志出口失败不改变已经形成的 4605，也不跳过调用方清理。
+   */
+  private recordPackagingFailure(stage: PackagingStage, error: unknown): void {
+    try {
+      const facts = errorFacts(error)
+      const failure = packagingFailureOf(error)
+      const causeNames = facts.causeNames.filter((name) => SAFE_DIAGNOSTIC_NAME.test(name))
+      this.logger.error('Windows 场景导出打包失败', {
+        stage,
+        errorCode: SceneExportErrorCodes.exportFailed,
+        category: failure.category,
+        ...(facts.errorName !== undefined && SAFE_DIAGNOSTIC_NAME.test(facts.errorName)
+          ? { errorName: facts.errorName }
+          : {}),
+        ...(causeNames.length > 0 ? { causeNames: causeNames.join(',') } : {}),
+        ...(failure.codes.length > 0 ? { causeCodes: failure.codes.join(',') } : {}),
+        ...(facts.statuses.length > 0 ? { statuses: facts.statuses.join(',') } : {})
+      })
+    } catch {
+      // 日志出口失败不改变已经形成的失败结果，也不跳过 outputRoot 清理。
     }
   }
 }
@@ -114,6 +149,73 @@ function failed(): WindowsScenePackageResult {
     status: 'failed',
     message: sceneExportErrorMessages[SceneExportErrorCodes.exportFailed]
   }
+}
+
+/**
+ * 只从错误链提取稳定类名、系统错误码和有限 stderr 派生的固定类别；
+ * 原文、绝对路径和用户正文不进入日志。
+ */
+function packagingFailureOf(error: unknown): {
+  readonly category:
+    | 'systemTarMissing'
+    | 'systemTarRemotePath'
+    | 'pathMissing'
+    | 'diskFull'
+    | 'templateExtractionFailed'
+    | 'packagingFailed'
+  readonly codes: readonly string[]
+} {
+  const codes = new Set<string>()
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (
+    current !== undefined &&
+    current !== null &&
+    typeof current === 'object' &&
+    !seen.has(current)
+  ) {
+    seen.add(current)
+    if ('code' in current) {
+      const code: unknown = current.code
+      if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,31}$/u.test(code)) codes.add(code)
+      else if (typeof code === 'number' && Number.isFinite(code)) codes.add(String(code))
+    }
+    current = 'cause' in current ? current.cause : undefined
+  }
+  const codesList = [...codes]
+  const stderr = diagnosticStderr(error)
+  const systemTar = isSystemTarFailure(error)
+  if (codes.has('ENOSPC') || /No space left on device/iu.test(stderr)) {
+    return { category: 'diskFull', codes: codesList }
+  }
+  if (codes.has('ENOENT')) {
+    return { category: systemTar ? 'systemTarMissing' : 'pathMissing', codes: codesList }
+  }
+  if (systemTar && /(?:Cannot connect to|resolve failed)/iu.test(stderr)) {
+    return { category: 'systemTarRemotePath', codes: codesList }
+  }
+  if (systemTar) return { category: 'templateExtractionFailed', codes: codesList }
+  return { category: 'packagingFailed', codes: codesList }
+}
+
+/** 只用于选择固定类别，不写日志；截断避免无界读取。 */
+function diagnosticStderr(error: unknown): string {
+  if (typeof error !== 'object' || error === null || !('stderr' in error)) return ''
+  return typeof error.stderr === 'string' ? error.stderr.slice(0, 4096) : ''
+}
+
+/** 通过 cmd/path/syscall 判断失败是否来自系统 tar，不读取参数全文。 */
+function isSystemTarFailure(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const values: unknown[] = []
+  if ('cmd' in error) values.push(error.cmd)
+  if ('path' in error) values.push(error.path)
+  if ('syscall' in error) values.push(error.syscall)
+  return values.some(
+    (value) =>
+      typeof value === 'string' &&
+      /(?:^|[\\/\s])tar(?:\.exe)?(?:[\s"']|$)/iu.test(value)
+  )
 }
 
 function sceneDirectoryName(source: SavedSceneExportSource): string {
@@ -266,15 +368,27 @@ export async function maximizeCopiedTemplateWindow(mainPath: string): Promise<vo
  */
 export async function writeCopiedTemplateBaseStyle(publicDir: string): Promise<void> {
   const stylePath = path.join(publicDir, 'game', 'userStyleSheet.css')
-  await writeFile(stylePath, 'html,body{background:#000}\n')
+  await writeFile(stylePath, DEFAULT_USER_STYLE_SHEET)
 }
 
 async function extractOfficialTemplates(releaseZip: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true })
   const prefixes = [TERRE_WINDOWS_RELEASE.electronTemplate, TERRE_WINDOWS_RELEASE.webgalTemplate]
-  await execFileAsync('tar', ['-xf', releaseZip, '-C', destination, ...prefixes], {
+  await execFileAsync(systemTarExecutable(), ['-xf', releaseZip, '-C', destination, ...prefixes], {
     windowsHide: true
   })
+}
+
+/**
+ * Windows 自带 bsdtar 能直接读取 ZIP。
+ * PATH 上的 tar 可能是 Git/MSYS 的 GNU tar，会把 `C:` 盘符当成远程主机；
+ * 因此固定取 SystemRoot 下的系统 tar，缺失时直接失败，不回退到其他 tar。
+ */
+function systemTarExecutable(): string {
+  if (process.platform !== 'win32') return 'tar'
+  const systemRoot = process.env.SystemRoot
+  if (!systemRoot) throw new Error('SystemRoot unavailable')
+  return path.join(systemRoot, 'System32', 'tar.exe')
 }
 
 async function assertOrdinaryDirectory(root: string, marker: string): Promise<void> {
@@ -309,7 +423,7 @@ export async function writeSingleScene(
   if (!entry.startsWith('game/')) throw new Error('entry outside game')
   const entryInsideGame = entry.slice('game/'.length)
   await mkdir(path.dirname(path.join(gameDir, entryInsideGame)), { recursive: true })
-  await writeFile(path.join(gameDir, 'config.txt'), SINGLE_SCENE_CONFIG)
+  await writeFile(path.join(gameDir, 'config.txt'), DEFAULT_GAME_CONFIG)
   await writeFile(path.join(gameDir, entryInsideGame), source.sceneText)
   if (source.referencedAssets.length === 0) return
   const location = await new RegisteredSceneLocationGatewayImpl(

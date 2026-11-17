@@ -3,7 +3,7 @@ import { isAbsolute, relative, sep } from 'node:path'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 
-import { decodeStorageKey } from '@infrastructure/project-files/projectFilePaths'
+import { decodeStorageKey } from '@infrastructure/project-files/public/projectFileStorage'
 
 /** 与 `webgal-engine@4.6.5` 的 fileType 顺序一致。tex 没有 game 目录。 */
 const assetDirectoryByType = ['background', 'bgm', 'figure', 'scene', '', 'vocal', 'video'] as const
@@ -25,10 +25,6 @@ export const WEBGAL_ASSET_DIRECTORIES = [
 export function isInsideRoot(root: string, candidate: string): boolean {
   const path = relative(root, candidate)
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-}
-
-export function assetKind(assetType: number): string {
-  return assetDirectoryByType[assetType] || `type-${assetType}`
 }
 
 /**
@@ -56,7 +52,13 @@ export function projectAssetRelativePaths(kind: string, rawReference: string): r
       sourcePath: normalized,
       runtimeDirectory: kind
     })
-    if (!paths.includes(resolved.canonicalPath)) paths.unshift(resolved.canonicalPath)
+    // 原文自带 `game/` 或 `assets/` 时按字面查找，不能把剥前缀后的路径当候选。
+    if (
+      !normalized.startsWith('game/') &&
+      !normalized.startsWith('assets/') &&
+      !paths.includes(resolved.canonicalPath)
+    )
+      paths.unshift(resolved.canonicalPath)
     const imported = /^([^/]+)\/(.+)$/u.exec(normalized)
     if (imported && decodeStorageKey(imported[1] ?? '') !== null) {
       const sourcePath = `assets/${normalized}`

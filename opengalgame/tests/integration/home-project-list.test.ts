@@ -221,6 +221,7 @@ describe('项目列表只读查询', () => {
     const manifestPath = join(healthy.directory, '.opengalgame/manifest.json')
     const projectPath = join(healthy.directory, '.opengalgame/project.json')
     const registrationsPath = join(f.userDirectory, 'projects.json')
+    const removedEntriesBefore = (await readdir(removed.directory)).sort()
     const manifestBefore = await readFile(manifestPath)
     const projectBefore = await readFile(projectPath)
     const registrationsBefore = await readFile(registrationsPath)
@@ -230,7 +231,7 @@ describe('项目列表只读查询', () => {
     expect(await readFile(manifestPath)).toEqual(manifestBefore)
     expect(await readFile(projectPath)).toEqual(projectBefore)
     expect(await readFile(registrationsPath)).toEqual(registrationsBefore)
-    expect(await readdir(removed.directory)).toEqual(['assets'])
+    expect((await readdir(removed.directory)).sort()).toEqual(removedEntriesBefore)
   })
 
   it('分页只返回当前页，总数仍是全部登记', async () => {

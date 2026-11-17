@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type {
+  SceneGenerationFailureReasonVO,
   SceneGenerationRenderInteractionVO,
   SceneGenerationRenderStatusVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
@@ -705,6 +706,25 @@ describe('开始、暂停与失败', () => {
       unverified: false,
       retryHint: null
     })
+  })
+
+  it('无法分类的未知失败原因使用通用标题兜底，不补造分类或旧文案', () => {
+    const view = failureViewOf(
+      status({
+        state: 'failed',
+        stage: 'failed',
+        failure: {
+          code: ErrorCodes.operationConflict,
+          message: '安全失败正文',
+          reason: 'retiredUnknownReason' as unknown as SceneGenerationFailureReasonVO
+        }
+      })
+    )
+
+    expect(view.title).toBe('生成没有完成')
+    expect(view.message).toBe('安全失败正文')
+    expect(view.unverified).toBe(false)
+    expect(view.retryHint).toBeNull()
   })
 
   it('生成活动期间阻止作品历史撤销', () => {

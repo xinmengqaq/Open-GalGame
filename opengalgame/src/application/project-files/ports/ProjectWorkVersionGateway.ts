@@ -28,4 +28,16 @@ export interface ProjectWorkVersionGateway {
     project: VerifiedProjectReadLocation,
     operationId: string
   ): Promise<ProjectFileOperationSettlement>
+
+  /** caller link 是否存在；不读写、不推断操作是否执行。 */
+  hasOperationLink(project: VerifiedProjectReadLocation, operationId: string): Promise<boolean>
+
+  /** 明确恢复写入口：按 caller ID 固化已提交/未提交/notStarted 终态。 */
+  resolveCallerOperations(
+    project: VerifiedProjectReadLocation,
+    operationIds: readonly string[]
+  ): Promise<readonly { callerOperationId: string; state: 'pending' | 'notStarted' | 'committed' | 'notCommitted' }[]>
+
+  /** 按技术 WAL 恢复 project-files 的未完成操作。 */
+  recoverProject(project: VerifiedProjectReadLocation): Promise<void>
 }

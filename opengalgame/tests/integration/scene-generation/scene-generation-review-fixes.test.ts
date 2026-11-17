@@ -1,6 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
+import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
+import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { createWebGalGenerationGraph } from '@infrastructure/scene-generation/workflow/createWebGalGenerationGraph'
 import { WebGalGenerationCheckpointSaver } from '@infrastructure/scene-generation/history/WebGalGenerationCheckpoint'
 import { langGraphThreadKey } from '@infrastructure/workflow/WorkflowIdentity'
@@ -109,8 +111,11 @@ it('分叉选中的新素材进入候选工作区，合法引用不再缺失', a
     ...request,
     operationId: 'fork-platform'
   }))!
+  const forkedWorkspace = new AiProjectFileSystemImpl(
+    f.config.userStateRoot
+  ).locateWorkspace(forked)
   expect(
-    await readFile(join(forked.workspace!.rootDirectory, 'assets/background/platform.svg'), 'utf8')
+    await readFile(join(forkedWorkspace.rootDirectory, 'assets/background/platform.svg'), 'utf8')
   ).toBe(platformSvg)
   const candidate = await f.app.ports.artifacts.readCandidate(forked, forked.candidateSnapshotId!)
   expect(
@@ -156,7 +161,8 @@ it('分叉按交互身份替换旧决定，摘要不再保留被替换要求', a
   const graph = createWebGalGenerationGraph({
     stateRoot,
     saver: new WebGalGenerationCheckpointSaver(stateRoot),
-    artifacts: f.app.ports.artifacts
+    artifacts: f.app.ports.artifacts,
+    domain: new SceneGenerationDomainServiceImpl()
   })
   const updated = await graph.updateState(
     { configurable: { thread_id: langGraphThreadKey(execution) } },
