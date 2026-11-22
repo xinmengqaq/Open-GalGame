@@ -1,14 +1,18 @@
 import type {
+  ForkSceneGenerationFromHistoryDTO,
   ListSceneGenerationHistoryForSceneDTO,
   ReadSceneGenerationCheckpointDTO,
   ReplySceneGenerationInteractionDTO,
-  ResumeSceneGenerationDTO,
   RetrySceneGenerationRepairDTO,
+  SceneGenerationResumeRequestDTO,
   SceneGenerationScopeDTO,
   StartSceneGenerationDTO
 } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type {
+  SceneGenerationForkVO,
   SceneGenerationHistoryBoundary,
+  SceneGenerationHistoryDetailVO,
+  SceneGenerationHistoryPageVO,
   SceneGenerationHistorySummaryVO,
   SceneGenerationRenderInteractionVO,
   SceneGenerationRenderProgressEventVO,
@@ -57,16 +61,17 @@ export interface SceneGenerationFixture {
   status(request: SceneGenerationScopeDTO): AjaxResult<SceneGenerationRenderStatusVO>
   reply(request: ReplySceneGenerationInteractionDTO): AjaxResult<SceneGenerationRenderStatusVO>
   pause(request: SceneGenerationScopeDTO): AjaxResult<SceneGenerationRenderStatusVO>
-  resume(request: ResumeSceneGenerationDTO): AjaxResult<SceneGenerationRenderStatusVO>
+  resume(request: SceneGenerationResumeRequestDTO): AjaxResult<SceneGenerationRenderStatusVO>
   cancel(request: SceneGenerationScopeDTO): AjaxResult<SceneGenerationRenderStatusVO>
   listHistory(
     request: ListSceneGenerationHistoryForSceneDTO
   ):
-    | AjaxResult<readonly SceneGenerationHistorySummaryVO[]>
-    | Promise<AjaxResult<readonly SceneGenerationHistorySummaryVO[]>>
+    | AjaxResult<SceneGenerationHistoryPageVO>
+    | Promise<AjaxResult<SceneGenerationHistoryPageVO>>
   readCheckpoint(
     request: ReadSceneGenerationCheckpointDTO
-  ): AjaxResult<SceneGenerationHistorySummaryVO>
+  ): AjaxResult<SceneGenerationHistoryDetailVO>
+  fork(request: ForkSceneGenerationFromHistoryDTO): AjaxResult<SceneGenerationForkVO>
   subscribeProgress(
     request: SceneGenerationScopeDTO & { readonly threadId: string; readonly branchId: string },
     publish: (event: SceneGenerationRenderProgressEventVO) => void
@@ -442,8 +447,6 @@ function statusOf(
         }
       }
     case 'failureWithoutFacts': {
-      // 失败但缺少持久失败分类、动作与原因，且没有执行时间线；
-      // 最近安全进度保持缺失，不能从基础夹具继承。
       const legacyBase = { ...base }
       delete legacyBase.recentProgress
       return {
@@ -512,7 +515,6 @@ function statusOf(
     case 'historyEmpty':
     case 'historyLoading':
     case 'historyError':
-      // 历史走查场景没有活动任务：最近一次记录已终态，页面不会采纳为进行中的生成。
       return {
         ...base,
         state: 'succeeded',
@@ -604,7 +606,6 @@ const historyRecordCount = 43
 const historyRecordIntervalMs = 37 * 60 * 1000
 const historyRecordAnchor = new Date(2026, 9, 21, 18, 40).getTime()
 
-/** 只读历史替身：43 条固定摘要，支持 checkpointId 游标和三页读取。 */
 function sceneHistoryRecords(identity: {
   projectId: string
   sceneId: string
@@ -622,6 +623,9 @@ function sceneHistoryRecords(identity: {
       stage: historyBoundaryStages[boundary],
       message: historyBoundaryMessages[boundary],
       createdAt: new Date(historyRecordAnchor - index * historyRecordIntervalMs).toISOString(),
+      ...(boundary === 'waitingReview' || boundary === 'paused'
+        ? { candidateSnapshotId: `fixture-history-candidate-${index + 1}` }
+        : {}),
       ...(boundary === 'failed' ? { failureReason: 'modelFailure' as const } : {})
     }
   })
@@ -639,6 +643,14 @@ function historyPage(
     start = index + 1
   }
   return records.slice(start, start + limit)
+}
+
+/** 夹具只把带候选的审阅/暂停记录视为可复制，模拟后端资格，不代表真实分叉成功。 */
+function fixtureCanFork(record: SceneGenerationHistorySummaryVO): boolean {
+  return (
+    record.candidateSnapshotId !== undefined &&
+    (record.boundary === 'waitingReview' || record.boundary === 'paused')
+  )
 }
 
 function historyRecordsForScenario(
@@ -669,12 +681,6 @@ const success = <T>(msg: string, data: T): AjaxResult<T> => ({
   data
 })
 
-/**
- * 浏览器走查用的生成夹具。只在没有桌面桥且 URL 带 `generation` 参数时启用，
- * 用固定安全 VO 走查空态、等待、审阅、暂停、失败和完成；不代表真实生成成功。
- * `historyRecords` / `historyEmpty` / `historyLoading` / `historyError` 只提供
- * AI 历史的只读替身（43 条固定摘要），不是真实生成记录，也不会写入作品。
- */
 export function createSceneGenerationFixture(value: string | null): SceneGenerationFixture | null {
   const known: readonly GenerationFixtureScenario[] = [
     'idle',
@@ -715,20 +721,23 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
   let sequence = statusOf(initial, identity).sequence
   let progressStarted = false
   let recordedAnswers: SceneGenerationRenderStatusVO['answeredQuestions']
+  let forkIdentity: { operationId: string; threadId: string; branchId: string } | null = null
 
   const adopt = (scope: { projectId: string; sceneId: string }): void => {
     identity = { projectId: scope.projectId, sceneId: scope.sceneId }
   }
 
+  /** 分叉后同一操作身份贯穿状态查询；来源阶段仍用固定操作身份。 */
   const advance = (next: GenerationFixtureScenario): SceneGenerationRenderStatusVO => {
     current = next
     sequence += 1
-    return { ...statusOf(next, identity), sequence }
+    return { ...statusOf(next, identity), ...(forkIdentity ?? {}), sequence }
   }
 
   const expectScope = (scope: SceneGenerationScopeDTO): AjaxResult<never> | null =>
     scope.operationId === 'fixture-operation' ||
-    scope.operationId.startsWith('fixture-history-operation-')
+    scope.operationId.startsWith('fixture-history-operation-') ||
+    (forkIdentity !== null && scope.operationId === forkIdentity.operationId)
       ? null
       : { code: ErrorCodes.invalidRequest, msg: '夹具里没有这个生成操作' }
 
@@ -798,6 +807,7 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
   return {
     start(request) {
       adopt(request)
+      forkIdentity = null
       if (initial === 'progressEvents') {
         progressStarted = true
         current = 'progressEvents'
@@ -844,8 +854,8 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
       adopt(request)
       const status =
         current === 'progressEvents' && progressStarted
-          ? progressStatus(identity, sequence)
-          : { ...statusOf(current, identity), sequence }
+          ? { ...progressStatus(identity, sequence), ...(forkIdentity ?? {}) }
+          : { ...statusOf(current, identity), ...(forkIdentity ?? {}), sequence }
       return success(
         '生成状态已读取',
         current === 'questionsFollowup' && recordedAnswers
@@ -897,6 +907,20 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
     resume(request) {
       const invalid = expectScope(request)
       if (invalid) return invalid
+      if ('recovery' in request) {
+        if (request.recovery === 'cleanup') {
+          return success('提交后清理已重试', {
+            ...statusOf(current, identity),
+            cleanupPending: false,
+            canRetryCleanup: false
+          })
+        }
+        return success('已继续未完成的生成', {
+          ...statusOf(current, identity),
+          state: 'pending',
+          canResumeUnfinished: false
+        })
+      }
       if (request.checkpointId !== 'fixture-checkpoint') {
         return { code: ErrorCodes.operationConflict, msg: '恢复身份已过期' }
       }
@@ -918,21 +942,48 @@ export function createSceneGenerationFixture(value: string | null): SceneGenerat
       }
       const records = historyRecordsForScenario(current, identity)
       const page = historyPage(records, request.cursor, limit)
+      const data: SceneGenerationHistoryPageVO = { items: page, unfinished: [] }
       if (current === 'historyLoading' && limit > 1) {
-        return new Promise<AjaxResult<readonly SceneGenerationHistorySummaryVO[]>>((resolve) => {
-          setTimeout(() => resolve(success('场景历史已读取', page)), 1400)
+        return new Promise<AjaxResult<SceneGenerationHistoryPageVO>>((resolve) => {
+          setTimeout(() => resolve(success('场景历史已读取', data)), 1400)
         })
       }
-      return success('场景历史已读取', page)
+      return success('场景历史已读取', data)
     },
     readCheckpoint(request) {
       adopt(request)
       const found = historyRecordsForScenario(current, identity).find(
         (record) => record.checkpointId === request.checkpointId
       )
-      return found
-        ? success('检查点已读取', found)
-        : { code: ErrorCodes.invalidRequest, msg: '夹具里没有这个检查点' }
+      if (!found) return { code: ErrorCodes.invalidRequest, msg: '夹具里没有这个检查点' }
+      const canFork = fixtureCanFork(found)
+      return success('检查点已读取', {
+        ...found,
+        canFork,
+        ...(canFork ? {} : { forkReason: '这条记录没有可复制的候选修订' })
+      })
+    },
+    fork(request) {
+      adopt(request)
+      const found = historyRecordsForScenario(current, identity).find(
+        (record) =>
+          record.checkpointId === request.checkpointId &&
+          record.threadId === request.threadId &&
+          record.branchId === request.branchId
+      )
+      if (!found) return { code: ErrorCodes.invalidRequest, msg: '夹具里没有这条历史记录' }
+      if (!fixtureCanFork(found)) {
+        return { code: ErrorCodes.operationConflict, msg: '这条记录没有可复制的候选修订' }
+      }
+      forkIdentity = {
+        operationId: 'fixture-fork-operation',
+        threadId: found.threadId,
+        branchId: `${found.branchId}-fork`
+      }
+      return success('已从历史创建新分支', {
+        status: advance('running'),
+        source: { summary: found.message, createdAt: found.createdAt }
+      })
     },
     subscribeProgress(request, publish) {
       adopt(request)

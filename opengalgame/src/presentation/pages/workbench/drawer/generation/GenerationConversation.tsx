@@ -10,6 +10,7 @@ import {
   Package,
   Play,
   RefreshCw,
+  SearchCheck,
   Sparkles,
   X
 } from 'lucide-react'
@@ -65,9 +66,12 @@ interface GenerationConversationProps {
   projectName: string
   sceneLabel: string
   startBlockedReason: string | null
+  /** 启动被已有生成挡住；只有该原因下提供 AI 历史处理入口。 */
+  startBlockedByGeneration: boolean
+  /** 修复重跑自己的禁用依据；不包含已有生成冲突。 */
+  repairBlockedReason: string | null
   startPhase: 'saving' | 'preparing' | null
   reviseOpen: boolean
-  /** 导出入口由工作台页面接入；旧对话流不传时隐藏按钮。 */
   exportDisabled?: boolean
   exportHint?: string
   exporting?: boolean
@@ -78,6 +82,9 @@ interface GenerationConversationProps {
   onReturnToCanvas?: () => void
   onReload: () => void
   onResume: () => void
+  /** 旧壳不传时不显示核对结果动作。 */
+  onVerifyResult?: () => void
+  onRetryCleanup?: () => void
   onRetryRepair: () => void
   onCancel: () => void
   onOpenWorks: () => void
@@ -297,9 +304,6 @@ function ResultOrb({
   )
 }
 
-/**
- * 已确认的候选问题只显示应用层固定文案，不显示原始诊断或路径。
- */
 function KnownIssueList({
   issues
 }: {
@@ -317,10 +321,6 @@ function KnownIssueList({
   )
 }
 
-/**
- * “重试本次修改”的确认区：明确展示将携带的修改正文、上一候选的只读边界
- * 和输入来源，再发新操作；不会改写原失败记录。
- */
 function RetryRepairConfirm({
   view,
   pending,
@@ -378,7 +378,6 @@ function RetryRepairConfirm({
   )
 }
 
-/** 诊断折叠只显示故障指纹和操作时间；缺失时明确写没有编号，不补造。 */
 function FailureDiagnostics({
   failure
 }: {
@@ -412,9 +411,17 @@ interface GenerationOutcomeBubbleProps {
   pending: boolean
   pendingAction: GenerationActionKind | null
   startBlockedReason: string | null
+  /** 修复重跑自己的禁用依据；不含已有生成冲突。 */
+  repairBlockedReason: string | null
+  /** 启动被已有生成挡住；只在此时显示去 AI 历史的处理路径。 */
+  startBlockedByGeneration: boolean
   retryError: string | null
+  /** 本次显式核对的安全结论；缺失表示还没有核对。 */
+  verifyMessage?: string | null
+  onOpenHistory?: () => void
   onResume?: () => void
   onCancel?: () => void
+  onVerifyResult?: () => void
   onRetryRepair?: () => void
   onRegenerate?: () => void
   onViewPreviousCandidate?: () => void
@@ -426,7 +433,12 @@ interface GenerationOutcomeBubbleProps {
 function outcomeIconOf(action: GenerationOutcomeActionId): ReactElement {
   switch (action) {
     case 'resume':
+    case 'resume-unfinished':
       return <Play />
+    case 'retry-cleanup':
+      return <RefreshCw />
+    case 'verify-result':
+      return <SearchCheck />
     case 'retry-repair':
     case 'regenerate':
       return <Sparkles />
@@ -451,25 +463,30 @@ function outcomePendingLabel(
 ): string {
   if (!pending) return label
   if (action === 'resume' && pendingAction === 'resume') return '正在继续…'
+  if (action === 'resume-unfinished' && pendingAction === 'resumeUnfinished')
+    return '正在继续…'
+  if (action === 'retry-cleanup' && pendingAction === 'retryCleanup') return '正在重试清理…'
+  if (action === 'verify-result' && pendingAction === 'verifyResult') return '正在核对…'
   if (action === 'cancel' && pendingAction === 'cancel') return '正在取消…'
   if (action === 'retry-repair' && pendingAction === 'retryRepair') return '正在重试本次修改…'
   if (action === 'regenerate' && pendingAction === 'start') return '正在准备生成…'
   return label
 }
 
-/**
- * 暂停、失败和取消共用同一状态气泡：状态标记 → 标题 → 原因 → 下一步 →
- * 真实可用动作 → 诊断。动作集合来自运行投影，不直接渲染后端 nextActions。
- */
 export function GenerationOutcomeBubble({
   view,
   status,
   pending,
   pendingAction,
   startBlockedReason,
+  repairBlockedReason,
+  startBlockedByGeneration,
   retryError,
+  verifyMessage = null,
+  onOpenHistory,
   onResume,
   onCancel,
+  onVerifyResult,
   onRetryRepair,
   onRegenerate,
   onViewPreviousCandidate,
@@ -488,6 +505,9 @@ export function GenerationOutcomeBubble({
   }
   const handlers: Record<GenerationOutcomeActionId, (() => void) | null> = {
     resume: onResume ?? null,
+    'resume-unfinished': null,
+    'retry-cleanup': null,
+    'verify-result': onVerifyResult ?? null,
     'retry-repair': retry?.eligible === true ? () => setRetryConfirm(true) : null,
     'view-previous-candidate': onViewPreviousCandidate ?? null,
     regenerate: onRegenerate ?? null,
@@ -553,6 +573,12 @@ export function GenerationOutcomeBubble({
       </div>
 
       <p className="wb-gen-outcome__reason">{reason}</p>
+      {verifyMessage ? (
+        <div className="wb-gen-outcome__next" role="status">
+          <span>核对结果</span>
+          <p>{verifyMessage}</p>
+        </div>
+      ) : null}
       {nextStep ? (
         <div className="wb-gen-outcome__next">
           <span>下一步</span>
@@ -565,12 +591,20 @@ export function GenerationOutcomeBubble({
         <p className="wb-gen-outcome__note">{view.candidate.previousNote}</p>
       ) : null}
       {startBlockedReason && phase !== 'paused' ? (
-        <p className="wb-gen-outcome__blocker">{startBlockedReason}</p>
+        <div className="wb-gen-outcome__blocked">
+          <p className="wb-gen-outcome__blocker">{startBlockedReason}</p>
+          {startBlockedByGeneration && onOpenHistory ? (
+            <button className="wb-gen-result__link" onClick={onOpenHistory} type="button">
+              去 AI 历史处理
+              <ArrowRight />
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {retryConfirm && retry?.eligible ? (
         <RetryRepairConfirm
-          blockedReason={startBlockedReason}
+          blockedReason={repairBlockedReason}
           error={retryError}
           onCancel={() => setRetryConfirm(false)}
           onConfirm={() => onRetryRepair?.()}
@@ -629,23 +663,32 @@ export function GenerationOutcomeBubble({
 interface GenerationCompletedBubbleProps {
   pending: boolean
   startBlockedReason: string | null
+  /** 启动被已有生成挡住；只在此时显示去 AI 历史的处理路径。 */
+  startBlockedByGeneration: boolean
   onStart: () => void
   onOpenWorks: () => void
+  onOpenHistory?: () => void
+  cleanupPending?: boolean
+  cleanupBusy?: boolean
+  cleanupError?: string | null
+  onRetryCleanup?: () => void
   onExport?: () => void
   exportDisabled?: boolean
   exportHint?: string
   exporting?: boolean
 }
 
-/**
- * 「已提交」终态气泡：保留作品历史入口，并给一个按当前画布重新生成、
- * 启动全新操作的新入口；不沿用上一候选，也不覆盖旧记录。
- */
 export function GenerationCompletedBubble({
   pending,
   startBlockedReason,
+  startBlockedByGeneration,
   onStart,
   onOpenWorks,
+  onOpenHistory,
+  cleanupPending = false,
+  cleanupBusy = false,
+  cleanupError = null,
+  onRetryCleanup,
   onExport,
   exportDisabled,
   exportHint,
@@ -666,6 +709,33 @@ export function GenerationCompletedBubble({
           <ArrowRight />
         </button>
       </div>
+      {cleanupPending ? (
+        <div className="wb-gen-result__actions">
+          <Button
+            className="wb-gen-secondary"
+            disabled={cleanupBusy || onRetryCleanup === undefined}
+            onClick={onRetryCleanup}
+            type="button"
+          >
+            <RefreshCw />
+            {cleanupBusy ? '正在重试清理…' : '重试清理'}
+          </Button>
+          <span className="wb-gen-result__hint">
+            {cleanupError ?? '作品已提交；清理只删除本次候选临时区，不会再次提交。'}
+          </span>
+        </div>
+      ) : null}
+      {startBlockedReason ? (
+        <div className="wb-gen-result__blocked">
+          <p className="wb-gen-result__hint">{startBlockedReason}</p>
+          {startBlockedByGeneration && onOpenHistory ? (
+            <button className="wb-gen-result__link" onClick={onOpenHistory} type="button">
+              去 AI 历史处理
+              <ArrowRight />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="wb-gen-result__actions wb-gen-result__actions--completed">
         <Button
           className="wb-gen-primary"
@@ -701,11 +771,6 @@ interface GenerationStartRetryProps {
   onStart: () => void
 }
 
-/**
- * start 失败后，上一轮的「按画布重新生成」入口会随旧终态气泡一起收起；
- * 这里保留一个只依赖当前门控状态的重试入口，避免瞬时失败后只能刷新页面。
- * 重试仍调用 useSceneGeneration.start()，由其清空错误并重新进入 pending。
- */
 export function GenerationStartRetry({
   pending,
   startBlockedReason,
@@ -725,10 +790,6 @@ export function GenerationStartRetry({
   )
 }
 
-/**
- * 当前生成的对话流。用户消息只有启动指令，助手气泡依次承载紧凑进度行、
- * 当前交互和终态结果；阶段轨只在运行详情浮层里出现。
- */
 export function GenerationConversation({
   status,
   progress,
@@ -741,6 +802,8 @@ export function GenerationConversation({
   projectName,
   sceneLabel,
   startBlockedReason,
+  startBlockedByGeneration,
+  repairBlockedReason,
   startPhase,
   reviseOpen,
   exportDisabled,
@@ -753,6 +816,8 @@ export function GenerationConversation({
   onReturnToCanvas,
   onReload,
   onResume,
+  onVerifyResult,
+  onRetryCleanup,
   onRetryRepair,
   onCancel,
   onOpenWorks,
@@ -769,6 +834,7 @@ export function GenerationConversation({
   const startFailure = actionError && actionError.kind === 'start' ? actionError : null
   const replyFailure = actionError && actionError.kind === 'reply' ? actionError : null
   const retryFailure = actionError && actionError.kind === 'retryRepair' ? actionError : null
+  const verifyFailure = actionError && actionError.kind === 'verifyResult' ? actionError : null
   const view = status ? generationRunViewOf(status, progress) : null
   const activeInteraction = view?.interaction ?? null
   const activePhase = view?.phase ?? 'empty'
@@ -777,11 +843,6 @@ export function GenerationConversation({
     activePhase === 'running' ||
     activePhase === 'committing' ||
     activePhase === 'cancelling'
-  // 「重新生成」即新会话：start() 成功前 status 还是上一轮终态；启动请求期间
-  // 和启动失败后，上一轮回答、修改正文和终态结果都属于历史，不出现在新会话视图。
-  // 新 status 到达（启动成功）后，actionError 已清空，门控自动解除并按新状态渲染。
-  // 实时运行态（运行条可见）说明会话已经在跑，此时残留的 startFailure 不应把
-  // 进行中的会话按新会话处理，否则会误收起运行条和本轮输入。
   const pendingStart = pending && pendingAction === 'start'
   const newSessionAttempt = pendingStart || (startFailure !== null && !showRunStrip)
   const outcomePhase =
@@ -814,14 +875,12 @@ export function GenerationConversation({
         <ConversationContent className="wb-gen-conversation__content">
           <UserBubble>按已保存编排生成本场景。</UserBubble>
 
-          {/* 文案与应用层 SceneGenerationStartConflict 的常量保持一致；分层边界不允许直接导入。 */}
           {startFailure !== null ? (
             <>
               <p className="wb-gen-outcome__error" role="alert">
                 <CircleAlert />
                 {startFailure.message}
               </p>
-              {/* 旧终态气泡收起后不再渲染「按画布重新生成」；容器复用现有动作行类，不新增 CSS。 */}
               <div className="wb-gen-result__actions">
                 <GenerationStartRetry
                   onStart={onStart}
@@ -829,12 +888,16 @@ export function GenerationConversation({
                   startBlockedReason={startBlockedReason}
                   workspaceNotReady={startFailure.workspaceNotReady === true}
                 />
+                {startBlockedByGeneration && onOpenHistory ? (
+                  <button className="wb-gen-result__link" onClick={onOpenHistory} type="button">
+                    去 AI 历史处理
+                    <ArrowRight />
+                  </button>
+                ) : null}
               </div>
             </>
           ) : null}
 
-          {/* 用户已确认的决定和修改要求属于上一轮输入，排在本次运行进度之前，
-              避免修正轮看起来像 AI 先回复、用户后提要求。新会话尝试期间不展示。 */}
           {!newSessionAttempt
             ? status.answeredQuestions?.map((answer) => (
                 <div className="wb-gen-answered" key={answer.questionId}>
@@ -904,13 +967,23 @@ export function GenerationConversation({
           {activePhase === 'completed' && !newSessionAttempt ? (
             <AssistantBubble>
               <GenerationCompletedBubble
+                cleanupBusy={pendingAction === 'retryCleanup'}
+                cleanupError={
+                  actionError?.kind === 'retryCleanup'
+                    ? actionError.message
+                    : (status.failure?.message ?? null)
+                }
+                cleanupPending={status.cleanupPending === true}
+                onRetryCleanup={onRetryCleanup}
                 exportDisabled={exportDisabled}
                 exportHint={exportHint}
                 exporting={exporting}
                 onExport={onExport}
                 onOpenWorks={onOpenWorks}
+                onOpenHistory={onOpenHistory}
                 onStart={onStart}
                 pending={pending}
+                startBlockedByGeneration={startBlockedByGeneration}
                 startBlockedReason={startBlockedReason}
               />
             </AssistantBubble>
@@ -925,14 +998,19 @@ export function GenerationConversation({
                 onRegenerate={onStart}
                 onReload={onReload}
                 onResume={onResume}
+                onVerifyResult={onVerifyResult}
                 onRetryRepair={onRetryRepair}
                 onReturnToCanvas={onReturnToCanvas}
                 onViewPreviousCandidate={viewPreviousCandidate}
                 pending={pending}
                 pendingAction={pendingAction}
+                repairBlockedReason={repairBlockedReason}
                 retryError={retryFailure?.message ?? null}
+                startBlockedByGeneration={startBlockedByGeneration}
                 startBlockedReason={startBlockedReason}
+                onOpenHistory={onOpenHistory}
                 status={status}
+                verifyMessage={verifyFailure?.message ?? null}
                 view={view}
               />
             </AssistantBubble>

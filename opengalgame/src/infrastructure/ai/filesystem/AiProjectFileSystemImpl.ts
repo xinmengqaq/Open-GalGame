@@ -49,10 +49,6 @@ export interface CandidateFileBytes {
 }
 
 export interface CandidateEffects {
-  /**
-   * 发布候选修订引用。对象已经写完后才调用。
-   * @throws {AppException} 引用无法发布。
-   */
   publishRevision(gitDir: string, revisionId: string): Promise<void>
 }
 
@@ -72,9 +68,7 @@ const realCandidateEffects: CandidateEffects = {
   }
 }
 
-/** 候选工作区与候选 Git 修订的技术实现。目录由调用方给出的用户状态根推导，不装配其他模块。 */
 export class AiProjectFileSystemImpl {
-  /** 返回按身份推导的受限候选位置，供恢复、读取和版本适配共用，不创建文件。 */
   locateWorkspace(identity: {
     projectId: string
     threadId: string
@@ -82,17 +76,11 @@ export class AiProjectFileSystemImpl {
   }): CandidateWorkspace {
     return this.workspaceOf(identity.projectId, identity.threadId, identity.operationId)
   }
-  /**
-   * @param effects - 候选修订发布边界。默认写入真实引用。
-   */
   constructor(
     private readonly userStateRoot: string,
     private readonly effects: CandidateEffects = realCandidateEffects
   ) {}
 
-  /**
-   * @throws {AppException} 路径越界、源文件无法读取或工作区已存在。
-   */
   async createWorkspace(request: CreateCandidateWorkspaceRequest): Promise<CandidateWorkspace> {
     const workspace = this.workspaceOf(request.projectId, request.threadId, request.operationId)
     if (!isAbsolute(request.projectRoot)) {
@@ -126,18 +114,11 @@ export class AiProjectFileSystemImpl {
     }
   }
 
-  /**
-   * @throws {AppException} 路径越界或文件无法读取。
-   */
   async readFile(workspace: CandidateWorkspace, relativePath: string): Promise<CandidateFileBytes> {
     const bytes = await readContainedFile(this.requireRoot(workspace), relativePath)
     return { bytes, digest: digestBytes(bytes), size: bytes.byteLength }
   }
 
-  /**
-   * 按严格 UTF-8 读取文本。非法字节直接失败，不用替换字符代替。
-   * @throws {AppException} 路径越界、文件无法读取或编码无效。
-   */
   async readText(
     workspace: CandidateWorkspace,
     relativePath: string
@@ -155,10 +136,6 @@ export class AiProjectFileSystemImpl {
     }
   }
 
-  /**
-   * 把字节完整写入候选文件并回读核对。不发布修订。
-   * @throws {AppException} 路径越界或写入失败。
-   */
   async writeFile(
     workspace: CandidateWorkspace,
     relativePath: string,
@@ -171,11 +148,6 @@ export class AiProjectFileSystemImpl {
     await writeVerifiedBytes(absolute, bytes)
   }
 
-  /**
-   * 列出候选目录中的普通文件，不跟随符号链接或联接。
-   * @param relativeDirectory - 候选根内的目录；省略时从根列出。
-   * @throws {AppException} 路径越界或目录无法读取。
-   */
   async listFiles(workspace: CandidateWorkspace, relativeDirectory = ''): Promise<string[]> {
     const root = this.requireRoot(workspace)
     const files: string[] = []
@@ -183,10 +155,6 @@ export class AiProjectFileSystemImpl {
     return files.sort()
   }
 
-  /**
-   * 核对当前候选文件后，把它们写入候选 Git 提交并发布保留引用。
-   * @throws {AppException} 文件或修订发布失败。发布前失败不会留下可恢复引用。
-   */
   async saveRevision(workspace: CandidateWorkspace): Promise<{ revisionId: string }> {
     const root = this.requireRoot(workspace)
     const gitDir = workspace.revisionGitDir
@@ -238,11 +206,76 @@ export class AiProjectFileSystemImpl {
   }
 
   /**
-   * 按工程、线程和来源操作读取已发布修订中的一个普通文件。
-   * 不读取可变工作区，引用与对象不一致时失败。
-   * @returns 当时保存的字节；修订里没有该路径时为 null。
-   * @throws {AppException} 身份、引用或对象无法证明。
+   * 读取本操作已发布修订的归属与父修订，不读取可变工作区。
+   * 提交必须带当前 operationId 的所有权记录；引用缺失或对象损坏时失败。
+   * @throws {AppException} 修订不存在、owner 不符或对象无法读取。
    */
+  async readOwnedRevision(request: {
+    projectId: string
+    threadId: string
+    operationId: string
+    revisionId: string
+  }): Promise<{ revisionId: string; parentRevisionIds: readonly string[] }> {
+    if (!/^[0-9a-f]{40}$/u.test(request.revisionId)) {
+      throw new AppException({
+        code: SceneGenerationErrorCodes.gitQueryFailed,
+        msg: '候选修订不存在或已损坏'
+      })
+    }
+    const workspace = this.workspaceOf(request.projectId, request.threadId, request.operationId)
+    const published = await resolveRefIfExists(
+      { gitdir: workspace.revisionGitDir },
+      revisionRef(request.revisionId)
+    )
+    if (published !== request.revisionId)
+      throw new AppException({
+        code: SceneGenerationErrorCodes.gitQueryFailed,
+        msg: '候选修订不存在或已损坏'
+      })
+    let commit
+    try {
+      commit = await git.readCommit({
+        fs,
+        gitdir: workspace.revisionGitDir,
+        oid: request.revisionId
+      })
+    } catch (error) {
+      throw asGitException(
+        error,
+        SceneGenerationErrorCodes.gitQueryFailed,
+        '候选修订不存在或已损坏'
+      )
+    }
+    const owner = commit.commit.message
+      .split(/\r?\n/u)
+      .find((line) => line.startsWith('Operation-Id:'))
+      ?.slice('Operation-Id:'.length)
+      .trim()
+    if (owner !== request.operationId)
+      throw new AppException({
+        code: ErrorCodes.operationConflict,
+        msg: '候选修订不属于当前操作'
+      })
+    return { revisionId: request.revisionId, parentRevisionIds: commit.commit.parent }
+  }
+
+  /**
+   * 当前操作工作区引用指向的已发布修订；没有引用时返回 undefined。
+   * 只读取引用，不把可变工作区文件当作修订。
+   */
+  async currentWorkspaceRevision(request: {
+    projectId: string
+    threadId: string
+    operationId: string
+  }): Promise<string | undefined> {
+    const workspace = this.workspaceOf(request.projectId, request.threadId, request.operationId)
+    const value = await resolveRefIfExists(
+      { gitdir: workspace.revisionGitDir },
+      `refs/opengalgame/workspaces/${request.operationId}`
+    )
+    return value !== null && /^[0-9a-f]{40}$/u.test(value) ? value : undefined
+  }
+
   async readRevisionFile(request: {
     projectId: string
     threadId: string
@@ -286,10 +319,6 @@ export class AiProjectFileSystemImpl {
     }
   }
 
-  /**
-   * 在新的工作目录从指定修订恢复当时的文件，并把本操作修订引用绑定到来源。缺失对象时失败，不用当前文件代替。
-   * @throws {AppException} 修订不存在、对象缺失或恢复失败。
-   */
   async restoreRevision(request: RestoreCandidateRevisionRequest): Promise<CandidateWorkspace> {
     const workspace = this.workspaceOf(request.projectId, request.threadId, request.operationId)
     if (!/^[0-9a-f]{40}$/u.test(request.revisionId)) {
@@ -346,10 +375,6 @@ export class AiProjectFileSystemImpl {
     }
   }
 
-  /**
-   * 删除当前操作的候选工作目录。保留修订、其他工作区和正式工程。
-   * @throws {AppException} 目录不是本操作的真实目录，或删除失败。
-   */
   async discardWorkspace(workspace: CandidateWorkspace): Promise<void> {
     const root = this.requireRoot(workspace)
     try {
@@ -423,10 +448,6 @@ export class AiProjectFileSystemImpl {
   }
 }
 
-/**
- * 删除失败时返回失败本身。成功时返回空列表。
- * @returns 删除失败；成功时为空。
- */
 async function removeIfPresent(path: string): Promise<unknown[]> {
   try {
     await rm(path, { recursive: true, force: true })
@@ -436,13 +457,6 @@ async function removeIfPresent(path: string): Promise<unknown[]> {
   }
 }
 
-/**
- * 清理未完成时保留原始失败和清理失败。清理成功时只抛出原始失败。
- * @param error - 创建或恢复的原始失败。
- * @param cleanupErrors - 已经发生的删除失败。
- * @param fallbackMsg - 原始失败不是业务异常时的中文说明。
- * @throws {AppException} 原始失败；清理也失败时说明工作区可能仍有残留。
- */
 function throwWithCleanup(
   error: unknown,
   cleanupErrors: readonly unknown[],

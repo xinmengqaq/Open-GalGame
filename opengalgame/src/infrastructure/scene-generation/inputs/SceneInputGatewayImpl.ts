@@ -66,7 +66,6 @@ type LoadedSource = LoadedDocument | LoadedAsset
 export class SceneInputGatewayImpl implements SceneInputGateway {
   private readonly registrations: readonly SceneGenerationRegistration[]
 
-  /** 只登记受限工程位置。输入正文从已保存编排和真实来源读取。 */
   constructor(
     registrations: readonly SceneGenerationRegistration[],
     private readonly migration: CanvasArrangementMigration,
@@ -85,7 +84,6 @@ export class SceneInputGatewayImpl implements SceneInputGateway {
     })
   }
 
-  /** 只定位明确登记的工程与场景，不接受任意路径。 */
   async locateScene(scene: { projectId: string; sceneId: string }): Promise<SceneSourceLocation> {
     const registration = this.registrations.find(
       (item) => item.source.projectId === scene.projectId && item.source.sceneId === scene.sceneId
@@ -103,10 +101,6 @@ export class SceneInputGatewayImpl implements SceneInputGateway {
     return structuredClone(await this.production.resolveRegisteredScene(scene))
   }
 
-  /**
-   * 从已保存编排组装输入，并重新读取文档正文和素材字节。
-   * 提示词正文只取编排内卡片。已确认控制仍单独保留。
-   */
   async readInputs(
     source: SceneSourceLocation,
     selection: SceneInputSelectionDTO
@@ -124,7 +118,6 @@ export class SceneInputGatewayImpl implements SceneInputGateway {
         trigger: 'generation'
       })
     } catch {
-      // 迁移失败不回退旧读；未能升级的旧格式随后按 unsupportedFormat 明确拒绝。
     }
     return withProjectFileRead(source.projectRoot, source.projectId, async (window) => {
       const current = await readArrangement(window, source.sceneId, selection.canvasId)

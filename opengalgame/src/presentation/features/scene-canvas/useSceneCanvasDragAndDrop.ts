@@ -67,7 +67,6 @@ export function useSceneCanvasDragAndDrop(client: ProjectFilesClient): {
         if (useWorkbenchSessionStore.getState().projectId !== projectId) return
         useWorkbenchSessionStore.getState().putSourceDetails(snapshot.sources)
       } catch {
-        /* 详情失败不撤销建卡，来源状态由目录摘要判断。 */
       }
     },
     [client, commands, screenToFlowPosition]

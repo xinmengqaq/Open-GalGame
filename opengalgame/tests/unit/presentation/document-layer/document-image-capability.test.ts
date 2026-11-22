@@ -1,9 +1,3 @@
-// 文档图片能力关闭规则的单元测试。
-//
-// 默认测试环境是 node（vitest.config.ts: environment: 'node'）。仓库当前没有
-// jsdom / happy-dom / linkedom（package.json 与 node_modules 均无），安装 DOM 测试
-// 环境需要单独批准，因此依赖 DOM 的用例在缺少 DOM 测试环境时显式跳过；纯函数与
-// 反馈文案用例照常执行。若后续批准安装 jsdom，DOM 用例会自动恢复执行。
 import { createRequire } from 'node:module'
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -105,7 +99,6 @@ function makeTransferEvent(source: {
   clipboardData?: DocumentTransferSourceLike | null
   dataTransfer?: DocumentTransferSourceLike | null
 }): RecordedTransferEvent {
-  // 必须就地扩展同一对象：preventDefault/stopPropagation 闭包引用它自身。
   return Object.assign(makeGuardEvent(null), source) as RecordedTransferEvent
 }
 
@@ -167,7 +160,6 @@ describe.skipIf(!domEnvironmentAvailable)('图片入口关闭规则（依赖 DOM
     expect(upload?.disabled).toBe(true)
     expect(imageInput?.disabled).toBe(true)
 
-    // 非图片入口不被误伤。
     const undo = root.querySelector<HTMLButtonElement>('button[aria-label="撤销"]')
     const textInput = root.querySelector<HTMLInputElement>('input[accept=".txt,text/plain"]')
     const paragraph = root.querySelectorAll('button')[2]
@@ -199,7 +191,6 @@ describe.skipIf(!domEnvironmentAvailable)('图片入口关闭规则（依赖 DOM
     expect(root.querySelector<HTMLButtonElement>('.block-editor__block-toolbar button')?.hidden).toBe(
       true
     )
-    // 菜单容器外的「上传图片」只是普通文案，不按结构处理。
     const looseButton = root.querySelectorAll<HTMLButtonElement>('div:last-child button')[0]
     expect(looseButton.hidden).toBe(false)
   })
@@ -209,7 +200,6 @@ describe.skipIf(!domEnvironmentAvailable)('图片入口关闭规则（依赖 DOM
     expect(applyDocumentImageCapability(root)).toBe(3)
     expect(applyDocumentImageCapability(root)).toBe(0)
 
-    // 没有入口时也不抛错。
     expect(applyDocumentImageCapability(rootFromHtml('<p>正文</p>'))).toBe(0)
   })
 

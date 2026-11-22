@@ -12,7 +12,6 @@ import { writeCandidateRevision } from '@infrastructure/git/objects/writeCandida
 import { GitCandidatePreviewGatewayImpl } from '@infrastructure/scene-generation/preview/GitCandidatePreviewGatewayImpl'
 import { CandidatePreviewSessionGatewayImpl } from '@infrastructure/scene-preview/CandidatePreviewSessionGatewayImpl'
 import { WEBGAL_COMPATIBILITY_PROFILE } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
-import type { CandidateTrustedInput } from '@infrastructure/webgal/compatibility/candidateGameStart'
 
 const dialogue = '放学后的空地渐渐安静下来。澪一直没有把手里的画稿递出去。'
 const roots: string[] = []
@@ -22,32 +21,12 @@ afterEach(async () => {
 })
 
 describe('候选运行生命周期', () => {
-  it('标题快照不会就绪；可信输入后的游戏快照才就绪，就绪前只置进入游戏标志，且不发送定位命令', async () => {
+  it('标题快照不会就绪；真实游戏快照才就绪，且不发送定位命令', async () => {
     const fixture = await publishedCandidate()
     const { gateway, revisionId, dialogue } = fixture
     const events: Array<{ type: string; previewSessionId: string }> = []
     gateway.subscribeCandidatePreviewEvents((event) => events.push(event))
-    const sendGame = { current: undefined as (() => void) | undefined }
-    let visibilityCommand: Record<string, unknown> | undefined
-    let readyAfterVisibilityCommand = false
-    const started = new GitCandidatePreviewGatewayImpl(
-      new AiProjectFileSystemImpl(fixture.root),
-      join(fixture.root, 'state', 'ai'),
-      Date.now,
-      undefined,
-      4_000,
-      {
-        trustedInput: () =>
-          inputThatStarts(() => {
-            sendGame.current?.()
-          })
-      }
-    )
-    started.subscribeCandidatePreviewEvents((event) => {
-      events.push(event)
-      if (event.type === 'ready') readyAfterVisibilityCommand = visibilityCommand !== undefined
-    })
-    const opened = await started.openPublishedCandidatePreview(
+    const opened = await gateway.openPublishedCandidatePreview(
       openRequest(revisionId, 'operation-start'),
       {
         entryFile: 'game/scene/start.txt',
@@ -56,39 +35,6 @@ describe('候选运行生命周期', () => {
     )
     const received: string[] = []
     const socket = await connectPreview(opened.preview.url, received)
-    socket.on('message', (data) => {
-      const message = JSON.parse(data.toString()) as {
-        kind?: string
-        type?: string
-        requestId?: string
-        payload?: Record<string, unknown>
-      }
-      if (message.kind !== 'request' || !message.type || !message.requestId) return
-      if (message.type === 'preview.command.set-component-visibility') {
-        visibilityCommand = message.payload
-      }
-      socket.send(
-        JSON.stringify({
-          kind: 'response',
-          type: message.type,
-          requestId: message.requestId,
-          payload: {}
-        })
-      )
-    })
-    sendGame.current = () => {
-      socket.send(
-        JSON.stringify({
-          kind: 'event',
-          type: 'stage.snapshot.updated',
-          payload: {
-            sceneName: 'start.txt',
-            sentenceId: 1,
-            stageState: { showText: dialogue, command: 'say', currentDialogKey: 'line-1' }
-          }
-        })
-      )
-    }
     socket.send(registerRequest())
     socket.send(
       JSON.stringify({ kind: 'event', type: 'preview.ready.updated', payload: { ready: true } })
@@ -104,21 +50,33 @@ describe('候选运行生命周期', () => {
         }
       })
     )
+    setTimeout(() => {
+      socket.send(
+        JSON.stringify({
+          kind: 'event',
+          type: 'stage.snapshot.updated',
+          payload: {
+            sceneName: 'start.txt',
+            sentenceId: 1,
+            stageState: { showText: dialogue, command: 'say', currentDialogKey: 'line-1' }
+          }
+        })
+      )
+    }, 50)
     await opened.stage
     expect(
       events.filter((event) => event.previewSessionId === opened.preview.previewSessionId)
     ).toEqual([
       expect.objectContaining({ type: 'ready', previewSessionId: opened.preview.previewSessionId })
     ])
-    expect(received.join('\n')).toContain('preview.command.set-component-visibility')
-    expect(visibilityCommand).toEqual(expect.objectContaining({ isEnterGame: true }))
-    expect(readyAfterVisibilityCommand).toBe(true)
     expect(received.join('\n')).not.toContain('preview.command.sync-scene')
     expect(received.join('\n')).not.toContain('preview.command.run-scene-content')
+    expect(received.join('\n')).not.toContain('preview.command.set-component-visibility')
     socket.close()
 
-    const failed = await gateway.openPublishedCandidatePreview(
-      openRequest(revisionId, 'operation-title'),
+    const timedOut = await publishedCandidate()
+    const failed = await timedOut.gateway.openPublishedCandidatePreview(
+      openRequest(timedOut.revisionId, 'operation-title'),
       {
         entryFile: 'game/scene/start.txt',
         sceneName: 'start'
@@ -138,134 +96,25 @@ describe('候选运行生命周期', () => {
       })
     )
     await failed.stage
-    expect(gateway.readCandidatePreviewEvent(failed.preview.previewSessionId)).toMatchObject({
+    expect(timedOut.gateway.readCandidatePreviewEvent(failed.preview.previewSessionId)).toMatchObject({
       type: 'stageFailed',
-      message: '宿主无法开始游戏'
+      message: '游戏加载超时'
     })
-    const reopened = await gateway.openPublishedCandidatePreview(
-      openRequest(revisionId, 'operation-title'),
+    const reopened = await timedOut.gateway.openPublishedCandidatePreview(
+      openRequest(timedOut.revisionId, 'operation-title'),
       {
         entryFile: 'game/scene/start.txt',
         sceneName: 'start'
       }
     )
     expect(reopened.preview.previewSessionId).not.toBe(failed.preview.previewSessionId)
-    expect(reopened.preview.candidateSnapshotId).toBe(revisionId)
-    expect(gateway.readCandidatePreviewEvent(reopened.preview.previewSessionId)).toBeUndefined()
+    expect(reopened.preview.candidateSnapshotId).toBe(timedOut.revisionId)
+    expect(timedOut.gateway.readCandidatePreviewEvent(reopened.preview.previewSessionId)).toBeUndefined()
     titleSocket.close()
-    await gateway.close()
-    await started.close()
-  })
+    await timedOut.gateway.close()
 
-  it('进入游戏标志设置失败时只记 warn，降级为仍发布就绪，且不发送定位命令', async () => {
-    const fixture = await publishedCandidate()
-    const { gateway, revisionId } = fixture
-    const { logger, calls } = createLogger()
-    const events: Array<{ type: string; previewSessionId: string }> = []
-    const sendGame = { current: undefined as (() => void) | undefined }
-    const started = new GitCandidatePreviewGatewayImpl(
-      new AiProjectFileSystemImpl(fixture.root),
-      join(fixture.root, 'state', 'ai'),
-      Date.now,
-      undefined,
-      4_000,
-      {
-        trustedInput: () =>
-          inputThatStarts(() => {
-            sendGame.current?.()
-          }),
-        logger
-      }
-    )
-    started.subscribeCandidatePreviewEvents((event) => events.push(event))
-    const opened = await started.openPublishedCandidatePreview(
-      openRequest(revisionId, 'operation-degrade'),
-      {
-        entryFile: 'game/scene/start.txt',
-        sceneName: 'start'
-      }
-    )
-    const received: string[] = []
-    const socket = await connectPreview(opened.preview.url, received)
-    socket.on('message', (data) => {
-      const message = JSON.parse(data.toString()) as {
-        kind?: string
-        type?: string
-        requestId?: string
-      }
-      if (message.kind !== 'request' || !message.type || !message.requestId) return
-      if (message.type === 'preview.command.set-component-visibility') {
-        socket.send(
-          JSON.stringify({
-            kind: 'error',
-            type: message.type,
-            requestId: message.requestId,
-            error: { code: 'internal-error', message: '模拟进入游戏标志设置失败' }
-          })
-        )
-        return
-      }
-      socket.send(
-        JSON.stringify({
-          kind: 'response',
-          type: message.type,
-          requestId: message.requestId,
-          payload: {}
-        })
-      )
-    })
-    sendGame.current = () => {
-      socket.send(
-        JSON.stringify({
-          kind: 'event',
-          type: 'stage.snapshot.updated',
-          payload: {
-            sceneName: 'start.txt',
-            sentenceId: 1,
-            stageState: { showText: dialogue, command: 'say', currentDialogKey: 'line-1' }
-          }
-        })
-      )
-    }
-    socket.send(registerRequest())
-    socket.send(
-      JSON.stringify({ kind: 'event', type: 'preview.ready.updated', payload: { ready: true } })
-    )
-    socket.send(
-      JSON.stringify({
-        kind: 'event',
-        type: 'stage.snapshot.updated',
-        payload: {
-          sceneName: 'start.txt',
-          sentenceId: 0,
-          stageState: { showText: '', command: '', currentDialogKey: 'initial' }
-        }
-      })
-    )
-    await opened.stage
-    expect(
-      events.filter((event) => event.previewSessionId === opened.preview.previewSessionId)
-    ).toEqual([
-      expect.objectContaining({ type: 'ready', previewSessionId: opened.preview.previewSessionId })
-    ])
-    expect(received.join('\n')).toContain('preview.command.set-component-visibility')
-    expect(calls).toContainEqual(
-      expect.objectContaining({
-        level: 'warn',
-        event: '候选预览进入游戏标志设置失败，BGM 不会自动播放',
-        context: expect.objectContaining({
-          operationId: 'operation-degrade',
-          stage: 'candidate-preview-enter-game',
-          errorName: 'WebgalInfrastructureError'
-        })
-      })
-    )
-    expect(received.join('\n')).not.toContain('preview.command.sync-scene')
-    expect(received.join('\n')).not.toContain('preview.command.run-scene-content')
-    socket.close()
     await gateway.close()
-    await started.close()
-  })
+  }, 15_000)
 
   it('运行到期释放宿主和物化根，保留候选修订，并让同候选开出新会话', async () => {
     const { gateway, revisionId, dialogue, gitDir } = await publishedCandidate(40)
@@ -393,23 +242,6 @@ function openRequest(
     branchId: 'branch-candidate',
     checkpointId: 'checkpoint-candidate',
     candidateSnapshotId
-  }
-}
-
-function inputThatStarts(onClick: () => void): CandidateTrustedInput {
-  return {
-    async readScreen() {
-      return {
-        languageButtons: [],
-        titleButtons: [{ text: '开始游戏', x: 1, y: 1, disabled: false }]
-      }
-    },
-    async click() {
-      onClick()
-    },
-    async waitForLanguageDismissed(): Promise<void> {
-      return undefined
-    }
   }
 }
 

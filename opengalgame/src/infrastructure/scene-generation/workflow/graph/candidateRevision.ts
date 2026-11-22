@@ -7,12 +7,25 @@ import type {
 import type { SceneArtifactGateway } from '@application/scene-generation/ports/SceneArtifactGateway'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-import type { WebGalGenerationStateValue } from '../WebGalGenerationState'
 
-/** 用本次真实输入、回复、候选身份和模式生成副作用输入摘要；字段集合属于恢复契约。 */
+/** 生成模式属于运行事实，不再依赖旧图状态类型。 */
+export type CandidateWriteMode = 'generate' | 'repair' | 'validate' | 'finalize'
+
+/** 回复标识只用于区分同一操作的副作用步骤，不把请求原文写入路径。 */
+export function candidateReplyStepTag(replyId: string): string {
+  return createHash('sha256').update(replyId).digest('hex').slice(0, 16)
+}
+
+/** 输入摘要只消费不可变输入、回复与写入前候选身份。 */
+export interface CandidateInputFacts {
+  readonly inputSnapshot: SceneGenerationExecution['inputSnapshot']
+  readonly replies: SceneGenerationExecution['replies']
+  readonly candidateSnapshotId?: string
+}
+
 export function candidateInputDigest(
-  mode: WebGalGenerationStateValue['mode'],
-  execution: SceneGenerationExecution
+  mode: CandidateWriteMode,
+  execution: CandidateInputFacts
 ): string {
   return createHash('sha256')
     .update(
@@ -26,7 +39,6 @@ export function candidateInputDigest(
     .digest('hex')
 }
 
-/** 先保存不可变修订，再记录当前候选身份；两步失败保留原始错误，成功后才返回修订。 */
 export async function saveCandidateRevision(input: {
   artifacts: Pick<SceneArtifactGateway, 'saveCandidateRevision'>
   runtime: Pick<SceneGenerationRuntime, 'recordCandidateRevision'>

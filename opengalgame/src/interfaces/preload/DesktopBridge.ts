@@ -11,25 +11,19 @@ import {
   type DesktopBridgeInvokeChannel
 } from '@interfaces/contracts/desktopBridgeChannels'
 
-/** preload 对渲染进程暴露的最小传输端口；通道只来自冻结清单。 */
 export interface DesktopTransport {
   invoke(channel: DesktopBridgeInvokeChannel, input?: unknown): Promise<unknown>
-  /**
-   * @param listener - 不含 Electron event 的回调。
-   */
   subscribe(channel: DesktopBridgeEventChannel, listener: (value: unknown) => void): () => void
 }
 
 const { event: eventChannels, invoke: invokeChannels } = desktopBridgeChannels
 
-/** 建立固定桥接，不向表现层暴露通用 IPC。 */
 export function createDesktopBridge(transport: DesktopTransport): DesktopBridge {
   return {
     chooseSaveLocation: () =>
       transport.invoke(invokeChannels.chooseSaveLocation) as ReturnType<
         DesktopBridge['chooseSaveLocation']
       >,
-    /** 清除新建待用的保存位置。 */
     clearSaveLocation: () =>
       transport.invoke(invokeChannels.clearSaveLocation) as ReturnType<
         DesktopBridge['clearSaveLocation']
@@ -42,7 +36,6 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.importProject, request) as ReturnType<
         DesktopBridge['importProject']
       >,
-    /** 读取一页本机已登记项目。 */
     listProjects: (request) =>
       transport.invoke(invokeChannels.listProjects, request) as ReturnType<
         DesktopBridge['listProjects']
@@ -59,17 +52,14 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.unregisterProject, request) as ReturnType<
         DesktopBridge['unregisterProject']
       >,
-    /** 核对已登记工程的默认场景和作品基线。 */
     ensureProjectWorkspace: (request) =>
       transport.invoke(invokeChannels.ensureProjectWorkspace, request) as ReturnType<
         DesktopBridge['ensureProjectWorkspace']
       >,
-    /** 只读检查已登记工程的工作区，不补建。 */
     inspectProjectWorkspace: (request) =>
       transport.invoke(invokeChannels.inspectProjectWorkspace, request) as ReturnType<
         DesktopBridge['inspectProjectWorkspace']
       >,
-    /** 检查工程输入来源及画布编排文件。 */
     inspectProjectFiles: (request) =>
       transport.invoke(invokeChannels.inspectProjectFiles, request) as ReturnType<
         DesktopBridge['inspectProjectFiles']
@@ -78,17 +68,14 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.listProjectInputSources, request) as ReturnType<
         DesktopBridge['listProjectInputSources']
       >,
-    /** 批量读取来源内容及本次读取版本。 */
     readProjectInputSources: (request) =>
       transport.invoke(invokeChannels.readProjectInputSources, request) as ReturnType<
         DesktopBridge['readProjectInputSources']
       >,
-    /** 按来源身份读取工程内媒体字节。 */
     readProjectMedia: (request) =>
       transport.invoke(invokeChannels.readProjectMedia, request) as ReturnType<
         DesktopBridge['readProjectMedia']
       >,
-    /** 读取场景画布模块的已保存编排。 */
     readSceneCanvasArrangement: (request) =>
       transport.invoke(invokeChannels.readSceneCanvasArrangement, request) as ReturnType<
         DesktopBridge['readSceneCanvasArrangement']
@@ -113,7 +100,6 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.editSceneCanvasPromptBody, request) as ReturnType<
         DesktopBridge['editSceneCanvasPromptBody']
       >,
-    /** 绑定或清空字段预设。 */
     bindSceneCanvasFieldCardPreset: (request) =>
       transport.invoke(invokeChannels.bindSceneCanvasFieldCardPreset, request) as ReturnType<
         DesktopBridge['bindSceneCanvasFieldCardPreset']
@@ -162,7 +148,6 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.importProjectFiles, request) as ReturnType<
         DesktopBridge['importProjectFiles']
       >,
-    /** 用系统默认程序打开工程文件。 */
     openProjectFile: (request) =>
       transport.invoke(invokeChannels.openProjectFile, request) as ReturnType<
         DesktopBridge['openProjectFile']
@@ -171,7 +156,6 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.renameProjectFile, request) as ReturnType<
         DesktopBridge['renameProjectFile']
       >,
-    /** 删除工程文件及来源记录。 */
     deleteProjectFile: (request) =>
       transport.invoke(invokeChannels.deleteProjectFile, request) as ReturnType<
         DesktopBridge['deleteProjectFile']
@@ -180,7 +164,6 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.createProjectTextFile, request) as ReturnType<
         DesktopBridge['createProjectTextFile']
       >,
-    /** 覆盖已导入文档的正文。 */
     updateProjectTextFileBody: (request) =>
       transport.invoke(invokeChannels.updateProjectTextFileBody, request) as ReturnType<
         DesktopBridge['updateProjectTextFileBody']
@@ -201,7 +184,6 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.copyProjectFolder, request) as ReturnType<
         DesktopBridge['copyProjectFolder']
       >,
-    /** 按操作标识核对提交是否已经落地。 */
     readProjectFileOperation: (request) =>
       transport.invoke(invokeChannels.readProjectFileOperation, request) as ReturnType<
         DesktopBridge['readProjectFileOperation']
@@ -222,7 +204,6 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.deleteProjectFolder, request) as ReturnType<
         DesktopBridge['deleteProjectFolder']
       >,
-    /** 把拖入的磁盘文件转成本机路径。不经过导入通道。 */
     pathForDroppedFile: (file) => {
       try {
         const path = webUtils.getPathForFile(file)
@@ -306,6 +287,10 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.readSceneGenerationCheckpoint, request) as ReturnType<
         DesktopBridge['readSceneGenerationCheckpoint']
       >,
+    forkSceneGeneration: (request) =>
+      transport.invoke(invokeChannels.forkSceneGeneration, request) as ReturnType<
+        DesktopBridge['forkSceneGeneration']
+      >,
     openSceneGenerationPreview: (request) =>
       transport.invoke(invokeChannels.openSceneGenerationPreview, request) as ReturnType<
         DesktopBridge['openSceneGenerationPreview']
@@ -386,9 +371,13 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.exportSavedScene, request) as ReturnType<
         DesktopBridge['exportSavedScene']
       >,
-    readLatestPreviewSave: (request) =>
-      transport.invoke(invokeChannels.readLatestPreviewSave, request) as ReturnType<
-        DesktopBridge['readLatestPreviewSave']
+    readLatestSavedSceneVersion: (request) =>
+      transport.invoke(invokeChannels.readLatestSavedSceneVersion, request) as ReturnType<
+        DesktopBridge['readLatestSavedSceneVersion']
+      >,
+    chooseSceneExportDirectory: (request) =>
+      transport.invoke(invokeChannels.chooseSceneExportDirectory, request) as ReturnType<
+        DesktopBridge['chooseSceneExportDirectory']
       >,
     checkForUpdate: (request) =>
       transport.invoke(invokeChannels.checkForUpdate, request) as ReturnType<

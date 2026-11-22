@@ -99,25 +99,15 @@ type SourceRead = {
 const TARGET_VERSION = SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION
 const BATCH_DIGEST_LABEL = 'canvas-arrangement-migration-v1'
 
-/**
- * 把实际访问到的旧 v3/v4 画布升级为当前 v5。
- * 备份先于原子写；同工程写队列内做写前 CAS 与写后读回，验证失败只恢复自己写入的版本。
- * 外部编辑器在检查后到改名前的写入无法用现有代码完全阻止，由调用方交接说明。
- */
 export class CanvasArrangementMigration {
   private readonly backupRoot: string
   private readonly now: () => Date
 
-  /** @param options.backupRoot - 批次备份根，必须与来源工程根不重叠。 */
   constructor(options: { backupRoot: string; now?: () => Date }) {
     this.backupRoot = options.backupRoot
     this.now = options.now ?? (() => new Date())
   }
 
-  /**
-   * 迁移单个实际读取的画布。任何失败都不抛出，由调用方继续既有旧读或当前读。
-   * @param input - 已定位工程目录与画布身份。
-   */
   async ensureCurrent(
     input: CanvasArrangementMigrationInput
   ): Promise<CanvasArrangementMigrationOutcome> {
@@ -250,7 +240,6 @@ export class CanvasArrangementMigration {
         unsupported: plan.unsupported
       })
     } catch {
-      // 报告是证据，不影响已成功的原子写与备份。
       return migratedOutcome(plan, batchId, join(batchDir, 'manifest.json'), null)
     }
     return migratedOutcome(plan, batchId, join(batchDir, 'manifest.json'), reportPath)
@@ -276,7 +265,6 @@ export class CanvasArrangementMigration {
     }
   }
 
-  /** 备份先落盘并校验；同批次已存在时只接受内容完全一致的复用，绝不覆盖。 */
   private async ensureBatch(input: {
     backupRoot: string
     batchDir: string
@@ -359,7 +347,6 @@ export class CanvasArrangementMigration {
   }
 }
 
-/** 同批次复用前核对 manifest 严格格式、条目身份与备份字节。 */
 async function reuseBatch(input: {
   batchDir: string
   batchId: string
@@ -392,7 +379,6 @@ async function reuseBatch(input: {
   return manifest
 }
 
-/** 迁移写入前确认工程身份文件仍指向同一工程，避免在身份不符目录里落盘。 */
 async function projectIdentityMatches(
   projectDirectory: string,
   projectId: string
@@ -454,7 +440,6 @@ async function verifyWritten(
   }
 }
 
-/** 只在磁盘仍是本次写入时恢复备份；并发新写优先，绝不覆盖。 */
 async function recoverOwnWrite(
   target: string,
   backupFile: string,

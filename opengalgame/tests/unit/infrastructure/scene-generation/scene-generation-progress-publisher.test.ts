@@ -134,3 +134,36 @@ it('发布返回后若已停止，不再排队覆盖终态', async () => {
   await vi.advanceTimersByTimeAsync(1000)
   expect(published).toHaveLength(1)
 })
+
+it('节流发布沿用当前业务步骤，修正轮不写死生成中', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-29T00:00:00.000Z'))
+  const published: SceneGenerationWorkflowProgress[] = []
+  let step: 'generating' | 'correcting' = 'correcting'
+  const publisher = new SceneGenerationProgressPublisher({
+    publish: async (progress) => {
+      published.push(progress)
+      return {} as never
+    },
+    budget: new ExecutionBudget({ modelAttempts: 4, toolCalls: 4, activeMs: 900000 }),
+    previousBudget: () => ({
+      correctionsUsed: 1,
+      modelCallsUsed: 0,
+      toolCallsUsed: 0,
+      activeElapsedMs: 0
+    }),
+    attempt: () => 1,
+    step: () => step,
+    now: Date.now,
+    publishIntervalMs: 10,
+    idleNoticeMs: 50
+  })
+  publisher.start()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(published[0]?.step).toBe('correcting')
+  step = 'generating'
+  publisher.observe({ kind: 'model-start', at: Date.now(), usage: {} as never })
+  await vi.advanceTimersByTimeAsync(10)
+  expect(published.at(-1)?.step).toBe('generating')
+  publisher.dispose()
+})

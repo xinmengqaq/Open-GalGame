@@ -17,14 +17,6 @@ export interface TextRange {
   truncated: boolean
 }
 
-/**
- * 先查看文件大小，再按码位范围读取，不把整个文件载入为结果。
- * @param start - 起始码位，从 0 开始。
- * @param maxChars - 最多返回的码位数。省略时读到文件结束。
- * @param signal - 取消信号。
- * @returns 范围内的文本、版本和是否截断。
- * @throws {AppException} 编码非法、读取失败或调用已取消。
- */
 export async function readTextRange(
   absolutePath: string,
   start: number,
@@ -65,14 +57,6 @@ interface CollectedText {
   totalChars: number
 }
 
-/**
- * 按块解码并只保留请求的码位。凑满范围后再多看一个码位，用来判断是否截断。
- * @param start - 起始码位。
- * @param maxChars - 最多保留的码位。
- * @param signal - 取消信号。
- * @returns 保留的文本，以及是否已经读到文件末尾。
- * @throws {AppException} 解码失败或调用已取消。
- */
 async function collectCodePoints(
   handle: fs.FileHandle,
   size: number,
@@ -112,14 +96,6 @@ async function collectCodePoints(
   }
 }
 
-/**
- * 从一块已解码文本里收集仍需要的码位。
- * @param collected - 已经收集的码位。
- * @param charIndex - 当前文件中的码位位置。
- * @param start - 起始码位。
- * @param maxChars - 最多保留的码位。
- * @returns 新的码位位置，以及是否已经看到范围之后的字符。
- */
 function takePoints(
   chunk: string,
   collected: string[],
@@ -137,10 +113,6 @@ function takePoints(
   return { charIndex: index, filled: false }
 }
 
-/**
- * 统计 Unicode 码位数量。
- * @returns 码位个数。
- */
 function codePointLength(text: string): number {
   return [...text].length
 }
@@ -156,11 +128,6 @@ function decodeOrReadFailure(error: unknown): AppException {
   return new AppException({ code: ErrorCodes.internalError, msg: '文件读取失败', cause: error })
 }
 
-/**
- * 关闭读取句柄。关闭失败时保留原始读取错误。
- * @param failed - 读取过程中的失败。
- * @throws {AppException} 句柄关闭失败，或原样抛出读取失败。
- */
 async function closeHandle(handle: fs.FileHandle, failed: unknown): Promise<void> {
   try {
     await handle.close()

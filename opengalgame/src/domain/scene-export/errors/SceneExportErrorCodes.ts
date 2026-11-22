@@ -1,13 +1,11 @@
-/**
- * 单场景导出错误码。
- * 4601 起只表达导出输入、保存前置和打包能力，不复用预览错误码。
- */
 export const SceneExportErrorCodes = {
   exportInputRejected: 4601,
   saveNotCommitted: 4602,
   savedContentMismatch: 4603,
   windowsPackagerUnavailable: 4604,
-  exportFailed: 4605
+  exportFailed: 4605,
+  destinationRejected: 4606,
+  destinationConflict: 4607
 } as const
 
 export type SceneExportErrorCode =
@@ -18,5 +16,7 @@ export const sceneExportErrorMessages: Record<SceneExportErrorCode, string> = {
   [SceneExportErrorCodes.saveNotCommitted]: '当前场景还没有保存成功，不能导出',
   [SceneExportErrorCodes.savedContentMismatch]: '当前内容与本次保存不一致，不能导出',
   [SceneExportErrorCodes.windowsPackagerUnavailable]: '当前没有可调用的 Windows 桌面打包入口',
-  [SceneExportErrorCodes.exportFailed]: 'Windows 桌面导出没有完成'
+  [SceneExportErrorCodes.exportFailed]: 'Windows 桌面导出没有完成',
+  [SceneExportErrorCodes.destinationRejected]: '所选导出位置不可用，请选择其他文件夹',
+  [SceneExportErrorCodes.destinationConflict]: '导出位置已有同名文件夹且不属于当前场景，未覆盖'
 }

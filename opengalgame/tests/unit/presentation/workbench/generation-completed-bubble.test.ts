@@ -20,6 +20,7 @@ function renderBubble(
       onStart: () => undefined,
       pending: false,
       startBlockedReason: null,
+      startBlockedByGeneration: false,
       ...overrides
     })
   )

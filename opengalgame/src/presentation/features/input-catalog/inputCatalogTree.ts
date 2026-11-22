@@ -19,10 +19,6 @@ export function sortSources(
   return [...sources].sort((left, right) => left.name.localeCompare(right.name, 'zh'))
 }
 
-/**
- * 指定父目录下的直接子文件夹。
- * @param parentFolderId - 父目录，根为 null。
- */
 export function childFolders(
   folders: readonly ProjectFolderVO[],
   parentFolderId: CatalogFolderId
@@ -30,9 +26,6 @@ export function childFolders(
   return sortFolders(folders.filter((folder) => folder.parentFolderId === parentFolderId))
 }
 
-/**
- * @param parentFolderId - 父目录，根为 null。
- */
 export function childSources(
   sources: readonly ProjectInputSourceSummaryVO[],
   parentFolderId: CatalogFolderId
@@ -40,7 +33,6 @@ export function childSources(
   return sortSources(sources.filter((source) => source.parentFolderId === parentFolderId))
 }
 
-/** 从根到当前文件夹的面包屑，不含虚拟根。 */
 export function breadcrumbFolders(
   folders: readonly ProjectFolderVO[],
   folderId: CatalogFolderId
@@ -61,7 +53,6 @@ export function breadcrumbFolders(
   return chain
 }
 
-/** 目录刷新后去掉已经不存在的尾部路径，回到仍存在的祖先。 */
 export function pruneFolderTrail(
   folders: readonly ProjectFolderVO[],
   trail: readonly string[]
@@ -124,7 +115,6 @@ export function searchCatalogEntries(
   return [...folderHits, ...sourceHits]
 }
 
-/** 目标是否为指定文件夹自身或其后代，复制时禁止作为粘贴位置。 */
 export function isForbiddenFolderCopyTarget(
   folders: readonly ProjectFolderVO[],
   folderId: string,

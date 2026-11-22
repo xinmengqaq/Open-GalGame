@@ -197,113 +197,71 @@ const mediaResultSchema = z.union([
   }),
   failureResultSchema
 ])
-/**
- * 校验跨进程响应。结构不符时返回 null，不补字段。
- * @returns 校验后的响应；结构不符时为 null。
- */
 function parseProjectFilesResult<T>(schema: z.ZodType<T>, value: unknown): T | null {
   const parsed = schema.safeParse(value)
   return parsed.success ? parsed.data : null
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseProjectFilesInspectionResult(
   value: unknown
 ): AjaxResult<ProjectFilesInspectionVO> | null {
   return parseProjectFilesResult(inspectionResultSchema, value)
 }
 
-/**
- * @returns 校验后的媒体字节；结构不符时为 null。
- */
 export function parseProjectMediaResult(value: unknown): AjaxResult<ProjectMediaVO> | null {
   return parseProjectFilesResult(mediaResultSchema, value)
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseProjectInputSourceListResult(
   value: unknown
 ): AjaxResult<ProjectInputCatalogVO> | null {
   return parseProjectFilesResult(summaryResultSchema, value)
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseProjectFolderResult(value: unknown): AjaxResult<ProjectFolderVO> | null {
   return parseProjectFilesResult(folderResultSchema, value)
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseProjectFolderDeletionPlanResult(
   value: unknown
 ): AjaxResult<ProjectFolderDeletionPlanVO> | null {
   return parseProjectFilesResult(deletionPlanResultSchema, value)
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseProjectInputSourcesSnapshotResult(
   value: unknown
 ): AjaxResult<ProjectInputSourcesSnapshotVO> | null {
   return parseProjectFilesResult(snapshotResultSchema, value)
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseProjectInputSourceResult(
   value: unknown
 ): AjaxResult<ProjectInputSourceVO> | null {
   return parseProjectFilesResult(sourceValueResultSchema, value)
 }
 
-/**
- * 校验文件选择响应。取消时 data 为 null。
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseChosenProjectFilesResult(
   value: unknown
 ): AjaxResult<readonly string[] | null> | null {
   return parseProjectFilesResult(chosenFilesResultSchema, value)
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseImportProjectFilesResult(
   value: unknown
 ): AjaxResult<ImportProjectFilesVO> | null {
   return parseProjectFilesResult(importResultSchema, value)
 }
 
-/**
- * 校验打开或删除的空成功响应。
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseProjectFileNullResult(value: unknown): AjaxResult<null> | null {
   return parseProjectFilesResult(nullResultSchema, value)
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseRenamedProjectFileResult(
   value: unknown
 ): AjaxResult<ProjectInputSourceSummaryVO> | null {
   return parseProjectFilesResult(summaryValueResultSchema, value)
 }
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseDroppedFilePathResult(value: unknown): AjaxResult<string> | null {
   return parseProjectFilesResult(droppedFilePathResultSchema, value)
 }
@@ -321,9 +279,6 @@ const operationSettlementSchema = z.union([
   failureResultSchema
 ])
 
-/**
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseProjectFileOperationResult(
   value: unknown
 ): AjaxResult<ProjectFileOperationSettlementVO> | null {

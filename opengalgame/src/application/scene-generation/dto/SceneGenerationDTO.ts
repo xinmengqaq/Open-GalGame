@@ -30,14 +30,12 @@ export type SceneGenerationPromptScopeDTO =
   | { kind: 'cards'; cardIds: readonly string[] }
   | { kind: 'relation'; relationId: string }
 
-/** 提示词绑定的当前画布卡片事实。类别由卡片 kind 给出，不携带角色用途。 */
 export type SceneGenerationPromptReferenceDTO = {
   cardId: string
   kind: 'document' | 'image' | 'audio' | 'video' | 'animation' | 'effect'
   displayName: string
 }
 
-/** 指定要读取的已保存编排，以及本次人工确认的控制。 */
 export type SceneInputSelectionDTO = {
   canvasId: string
   confirmedControls: readonly SceneConfirmedControlDTO[]
@@ -103,10 +101,8 @@ export type GenerateSceneDTO = SceneGenerationScopeDTO & {
   branch?: { threadId: string; branchId: string }
   policy: SceneGenerationPolicyDTO
   reviewCandidate?: boolean
-  /** 生成前已核对的编排版本。存在时与重读快照不一致则不创建操作。 */
   expectedArrangementVersion?: string
 }
-/** B 版启动只提交稳定身份、已确认控制和策略；操作身份由应用层创建。 */
 export type StartSceneGenerationDTO = {
   projectId: string
   sceneId: string
@@ -115,10 +111,6 @@ export type StartSceneGenerationDTO = {
   policy: SceneGenerationPolicyDTO
 }
 
-/**
- * 非中断修复重跑只传来源身份和用户确认的修改正文。
- * 不接收路径、检查点内部或模型原文；来源候选只作为只读参考。
- */
 export type RetrySceneGenerationRepairDTO = StartSceneGenerationDTO & {
   repair: {
     sourceOperationId: string
@@ -130,18 +122,67 @@ export type RetrySceneGenerationRepairDTO = StartSceneGenerationDTO & {
   }
 }
 
-/** 恢复必须绑定当前操作、线程分支、检查点和候选修订，不接受调用方路径。 */
 export type ResumeSceneGenerationDTO = SceneGenerationBranchDTO & {
   operationId: string
   checkpointId: string
   candidateSnapshotId?: string
 }
 
+/**
+ * 未完成操作和无检查点提交后清理都只按操作身份核对，不接受检查点、候选或路径。
+ * 是否可继续/可重试由应用按持久事实决定，不能由调用方补造。
+ */
+export type SceneGenerationRecoveryScopeDTO = SceneGenerationBranchDTO & {
+  operationId: string
+}
+
+/** 通过既有 resume 通道表达的无检查点恢复；不是 checkpointId 可选。 */
+export type ResumeUnfinishedSceneGenerationDTO = SceneGenerationRecoveryScopeDTO & {
+  recovery: 'unfinished'
+}
+
+/** 通过既有 resume 通道表达的提交后清理重试；不重开生成。 */
+export type RetrySceneGenerationCleanupDTO = SceneGenerationRecoveryScopeDTO & {
+  recovery: 'cleanup'
+}
+
+/** 通过既有 resume 通道表达的待核对结果重新核对；只读证据，不新增提交。 */
+export type VerifyUnknownSceneGenerationDTO = SceneGenerationRecoveryScopeDTO & {
+  recovery: 'verify'
+}
+
+export type SceneGenerationResumeRequestDTO =
+  | ResumeSceneGenerationDTO
+  | ResumeUnfinishedSceneGenerationDTO
+  | RetrySceneGenerationCleanupDTO
+  | VerifyUnknownSceneGenerationDTO
+
 export type ListSceneGenerationHistoryForSceneDTO = {
   projectId: string
   sceneId: string
+  /** 历史页游标：上一页最后一条历史摘要的 checkpointId。 */
   cursor?: string
   limit: number
+  /**
+   * 需要作者处理的操作页游标：上一页最后一条的 operationId。
+   * 与历史 cursor 互斥，避免两类分页位置混用。
+   */
+  unfinishedCursor?: string
+  /** 需要作者处理的操作页大小；与历史 limit 独立，默认 100。 */
+  unfinishedLimit?: number
+}
+
+/**
+ * 只读分页列出需要作者显式处理的操作：尚未结束且没有检查点的遗留、
+ * 带检查点但写入/提交回执待核对的中断，以及会阻止新普通生成的非终态 generate。
+ * 不接受操作、线程或检查点身份。
+ */
+export type ListUnfinishedSceneGenerationsDTO = {
+  projectId: string
+  sceneId: string
+  /** 上一页最后一条的 operationId；只在同一排序内推进。 */
+  cursor?: string
+  limit?: number
 }
 
 export type OpenSceneGenerationCandidatePreviewDTO = SceneGenerationBranchDTO & {
@@ -160,7 +201,6 @@ export type SceneGenerationQuestionAnswerDTO = {
   body?: string
 }
 
-/** 服务端确认后的一题事实。请求不带题干和选项标题。 */
 export type SceneGenerationAnswerFactDTO = {
   questionId: string
   prompt: string
@@ -183,14 +223,12 @@ export type ReplySceneGenerationInteractionDTO = SceneGenerationBranchDTO & {
   candidateSnapshotId?: string
   replyId: string
   reply: SceneGenerationReplyDTO
-  /** 领域确认后的选项标题、说明和自由文本。请求可以不带，接受后由应用层写入。 */
   selection?: {
     optionId: string
     label: string
     description: string
     body?: string
   }
-  /** 领域按当前问题构造的整组事实。请求不带，接受后由应用层写入。 */
   selections?: readonly SceneGenerationAnswerFactDTO[]
 }
 
@@ -209,6 +247,15 @@ export type ForkSceneGenerationDTO = ReadSceneGenerationCheckpointDTO & {
   decisionChanges?: readonly { interactionId: string; reply: SceneGenerationReplyDTO }[]
   policy: SceneGenerationPolicyDTO
   reviewCandidate?: boolean
+}
+
+/**
+ * 从 AI 历史创建分叉的公开请求：只交来源分支、检查点和已批准策略。
+ * 新操作身份由应用层生成，不接受输入或决定变更。
+ */
+export type ForkSceneGenerationFromHistoryDTO = SceneGenerationBranchDTO & {
+  checkpointId: string
+  policy: SceneGenerationPolicyDTO
 }
 
 export type EditSceneGenerationCandidateDTO = SceneGenerationScopeDTO & {

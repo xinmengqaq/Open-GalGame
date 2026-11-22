@@ -1,14 +1,23 @@
 import type { SceneExportContentBasis } from './SceneExportContentBasis'
 
-export type SceneExportVersionReference = {
-  readonly kind: 'preview-save'
-  readonly requestId: string
-}
+/**
+ * 导出绑定的正式版本引用。
+ * 预览保存用自己的 requestId；生成提交用发起生成的 operationId 与正式提交标识。
+ */
+export type SceneExportVersionReference =
+  | {
+      readonly kind: 'preview-save'
+      readonly requestId: string
+    }
+  | {
+      readonly kind: 'generation-commit'
+      readonly operationId: string
+      readonly commitId: string
+    }
 
 export type WindowsScenePackageVO = {
   readonly executableName: 'WebGAL.exe'
   readonly directoryName: string
-  /** 产物目录的绝对路径；展示层只读，打开目录仍由服务端校验。 */
   readonly directoryPath: string
   readonly bytes: number
   readonly containsFixedEngine: true

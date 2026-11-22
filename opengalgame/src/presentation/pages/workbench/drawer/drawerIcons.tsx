@@ -2,7 +2,6 @@ import type { ReactElement, SVGProps } from 'react'
 
 type IconProps = SVGProps<SVGSVGElement>
 
-/** 抽屉品牌标记；只作装饰，不承担业务含义。 */
 export function SparkleMark(props: IconProps): ReactElement {
   return (
     <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" {...props}>
@@ -19,7 +18,6 @@ export function SparkleMark(props: IconProps): ReactElement {
   )
 }
 
-/** 自动保存分组的刻线节点，和手动保存的里程碑节点区分。 */
 export function TicksGlyph(props: IconProps): ReactElement {
   return (
     <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" {...props}>
@@ -33,7 +31,6 @@ export function TicksGlyph(props: IconProps): ReactElement {
   )
 }
 
-/** 空态时间线标记。 */
 export function TimelineGlyph(props: IconProps): ReactElement {
   return (
     <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" {...props}>

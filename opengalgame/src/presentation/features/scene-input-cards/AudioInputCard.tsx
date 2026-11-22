@@ -12,7 +12,6 @@ import styles from './SceneInputCards.module.css'
 import { useWorkbenchSessionStore } from '../workbench-session/workbenchSession.store'
 import type { SessionAudioCard } from '../workbench-session/workbenchSession.types'
 
-/** 音频卡片内容。来源可读时提供真实播放、进度、时长和能量条。 */
 export function AudioInputCard({
   card,
   onEditSummary

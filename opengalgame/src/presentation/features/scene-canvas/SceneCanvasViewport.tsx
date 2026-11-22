@@ -62,7 +62,6 @@ interface SceneCanvasViewportProps {
   canvas: SceneCanvasState
   safeArea: CanvasSafeArea
   onAddPrompt: () => void
-  /** 低缩放记录装载：命中仲裁算出锚点后直接走应用层连接动作，绕开 React Flow 的坐标重解析。 */
   onAttachRecord: (relationId: string) => boolean
 }
 
@@ -79,13 +78,9 @@ export function SceneCanvasViewport({
   const drop = useSceneCanvasDragAndDrop(client)
   const cards = useWorkbenchSessionStore((state) => state.cards)
   const storedViewport = useWorkbenchSessionStore((state) => state.viewport)
-  // 默认视口只取挂载时的快照；之后 store 视口变化仍由下方同步 effect 处理。
   const [initialViewport] = useState<Viewport>(() => useWorkbenchSessionStore.getState().viewport)
   const lastLocalViewport = useRef<Viewport | null>(null)
-  // 最近一次被重定向转发的 mousedown 坐标：只用于判定随后的 click 是否同一次手势。
   const redirectedPressRef = useRef<CanvasPoint | null>(null)
-  // 最近一次松手坐标：drag 的 target 在 pointermove 期由库的 elementFromPoint 决定，
-  // 松手后用它重新裁决记录装载归属（低缩放下叠压的 handle 会把 target 判给相邻锚点）。
   const releasePointRef = useRef<CanvasPoint | null>(null)
 
   const onMove = useCallback<OnMove>(
@@ -96,7 +91,6 @@ export function SceneCanvasViewport({
     [commands]
   )
 
-  // 低缩放命中补偿：视口变化只改画布祖先上的 CSS 变量，不触发节点重渲染。
   const syncZoomInverse = useCallback(
     (viewport: Viewport) => {
       applyCanvasZoomInverse(surfaceRef.current, viewport.zoom)
@@ -106,20 +100,13 @@ export function SceneCanvasViewport({
 
   useOnViewportChange({ onChange: syncZoomInverse })
 
-  // 低缩放命中仲裁：端口与锚点的 DOM 命中区互相叠压，按最近的可见中心重新归属；
-  // 归属不一致时拦住原事件，向解析出的元素转发同坐标事件，保住 React Flow 的连线起手。
   const arbitrateCanvasHit = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       const root = surfaceRef.current
       if (!root || event.button !== 0) return
-      // 新手势开始：清掉上一次 drag 的松手点，避免旧坐标参与随后的 onConnect 纠正。
       if (event.type === 'mousedown') releasePointRef.current = null
       const point = { x: event.clientX, y: event.clientY }
       if (event.type === 'click') {
-        // drag 完成边后 mouseup 已清掉 click 连线起点，浏览器还会补发一次 target 为公共
-        // 祖先的 click；只有它与一次被重定向的 mousedown 同点（同一手势）时才继续，
-        // 否则放行，避免把补发的 click 转发给端口、被 Handle.onClick 当成新的 click
-        // 连线起点，留下 ct=6 的待连接态。
         if (!shouldForwardClickAtRedirectedPress(redirectedPressRef.current, point)) return
         redirectedPressRef.current = null
       }
@@ -128,8 +115,6 @@ export function SceneCanvasViewport({
       if (!(target instanceof Element)) return
       const handle = target.closest('.react-flow__handle')
       if (handle && !handle.matches('[data-port-key]')) {
-        // 卡片目标端口仍直接放行，保住 click 连线第二步；关系锚点的记录装载 handle
-        // 在低缩放下会互相叠压，DOM 层叠决定事件落到哪个锚点，需要按锚点容器重算归属。
         const anchorNode = target.closest('.react-flow__node-relationAnchor')
         const actualRelationId =
           anchorNode?.querySelector<HTMLElement>('[data-anchor-id]')?.dataset.anchorId
@@ -139,9 +124,6 @@ export function SceneCanvasViewport({
         )
         const winner = resolveAnchorContainerTarget(point, anchors, actualRelationId)
         if (!winner || winner.id === actualRelationId) return
-        // click 装载走应用层动作：React Flow 的 click-connect 第二步会用 click 坐标
-        // elementFromPoint 重解析目标 handle，低缩放下叠压的宽 handle 会把转发给 winner
-        // 的 click 重新解析成上层锚点；这里直接按 winner 装载，绕开坐标重解析。
         if (event.type === 'click' && onAttachRecord(winner.id)) {
           event.stopPropagation()
           event.preventDefault()
@@ -165,11 +147,7 @@ export function SceneCanvasViewport({
       if (!resolved) return
       const actual = canvasHitAttributionOf(target)
       if (actual && actual.kind === resolved.kind && actual.id === resolved.id) return
-      // 没有落在端口/锚点上时，不抢卡片内按钮、链接等既有交互。
       if (!actual && isInteractiveCanvasElement(target)) return
-      // 锚点一侧按光点本体纠偏：解析结果也是锚点时只放行落在其自身光点上的点击，展开的标签
-      // 文字仍由它自己的锚点元素接收；解析结果是端口时再交给 shouldRedirectCanvasHit 按 bullseye
-      // 与最近中心裁决，避免误开邻近关系。
       if (actual?.kind === 'anchor') {
         const glyphOf = (
           id: string
@@ -187,7 +165,6 @@ export function SceneCanvasViewport({
             return
           }
         } else {
-          // 实际落在锚点元素上，但解析结果是端口：bullseye 或端口中心更近才转派，标签区不参与判定。
           const actualGlyph = glyphOf(actual.id)
           if (
             !actualGlyph ||
@@ -210,15 +187,10 @@ export function SceneCanvasViewport({
     [flow, onAttachRecord, surfaceRef]
   )
 
-  // React 根 capture 的 mouseup 早于 React Flow 挂在 document（冒泡）上的松手监听，
-  // 先记录松手坐标，onConnect 触发时它已就绪。
   const noteReleasePoint = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     releasePointRef.current = { x: event.clientX, y: event.clientY }
   }, [])
 
-  // drag 装载纠正：React Flow 的拖拽 target 由 pointermove 期的 elementFromPoint 决定，
-  // 低缩放下 2937 的宽 handle 会盖住 5985 的 handle，松手时只消费最后一次结果。
-  // 这里按锚点容器重新裁决，不一致时改投应用层 onConnect，绕开库的坐标重解析。
   const handleConnect = useCallback(
     (connection: Connection) => {
       const root = surfaceRef.current

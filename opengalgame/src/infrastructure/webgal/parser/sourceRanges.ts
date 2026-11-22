@@ -2,7 +2,6 @@ import type { SceneSourceRange } from '@application/scenes/models/ParsedScene'
 
 type SourceLine = { readonly start: number; readonly end: number }
 
-/** 从未经预处理的字符串取得实际行边界，偏移为 UTF-16 字符位置。 */
 export function sourceLines(text: string): readonly SourceLine[] {
   const lines: SourceLine[] = []
   let start = 0
@@ -15,10 +14,6 @@ export function sourceLines(text: string): readonly SourceLine[] {
   return lines
 }
 
-/**
- * 将官方首尾行换成能从原文准确切片的半开范围，不包含末行换行符。
- * @param lines - 未经预处理的源行。
- */
 export function sourceRange(
   lines: readonly SourceLine[],
   startLine: number,
@@ -34,7 +29,6 @@ export function sourceRange(
   }
 }
 
-/** 保留语句的内容原文，不反向使用已改写的运行时资源地址。 */
 export function rawSentenceContent(rawText: string): string {
   const beforeComment = rawText.split(/(?<!\\);/u)[0]!
   const colon = beforeComment.indexOf(':')
@@ -43,10 +37,6 @@ export function rawSentenceContent(rawText: string): string {
   return argument ? content.slice(0, argument.index) : content
 }
 
-/**
- * 只在原文能唯一证明正文切片时返回范围。
- * 多行续写、重复正文或转义改写都没有安全替换点，返回 undefined。
- */
 export function dialogueContentRange(
   rawText: string,
   content: string,

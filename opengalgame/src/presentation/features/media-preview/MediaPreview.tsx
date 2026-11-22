@@ -25,7 +25,6 @@ interface MediaPreviewProps {
   kind: ProjectFileAssetKind
   title: string
   variant?: MediaVariant
-  /** 目录行离开视口前不读取字节。 */
   lazy?: boolean
   enabled?: boolean
   onNaturalSize?: (width: number, height: number) => void
@@ -40,10 +39,6 @@ interface MediaSurfaceProps {
   onNaturalSize?: (width: number, height: number) => void
 }
 
-/**
- * 真实媒体预览。字节只来自受控读取；读取、解码或格式失败时回到安全占位，
- * 不显示路径或内部错误。画布卡与输入目录共用同一比例规则。
- */
 export function MediaPreview({
   sourceId,
   kind,

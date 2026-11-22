@@ -124,12 +124,6 @@ export const WEBGAL_COMMAND_ARGUMENTS: Readonly<Record<string, ArgumentProfile>>
   showVars: {}
 }
 
-/**
- * 按 WebGAL 引擎的布尔读取转换参数值。
- * 字符串先去掉首尾空白并转小写；只有 true 和 false 得到布尔，动态变量和其他文本留到运行时判断。
- * @param value - 解析后的参数值。缺失时为 undefined。
- * @returns 引擎确定的布尔；无法静态判定时为 undefined。
- */
 export function webgalBoolean(value: SceneArgumentValue | null | undefined): boolean | undefined {
   if (typeof value === 'boolean') return value
   if (typeof value === 'string') {
@@ -142,7 +136,6 @@ export function webgalBoolean(value: SceneArgumentValue | null | undefined): boo
   return undefined
 }
 
-/** 核对字面值类型；引擎会先插值的未转义占位保留至运行时判断。 */
 export function isWebgalArgumentValueSupported(
   value: SceneArgumentValue,
   kind: ArgumentKind

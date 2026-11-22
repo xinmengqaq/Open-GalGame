@@ -408,30 +408,30 @@ describe('渲染状态严格响应', () => {
     const parsed = parseSceneGenerationHistoryResult({
       code: ErrorCodes.success,
       msg: '场景历史已读取',
-      data: [summary]
+      data: { items: [summary], unfinished: [] }
     })
-    expect(parsed?.data?.[0]).toMatchObject({
+    expect(parsed?.data?.items[0]).toMatchObject({
       failureReason: 'modelFailure'
     })
     expect(
       parseSceneGenerationHistoryResult({
         code: ErrorCodes.success,
         msg: '场景历史已读取',
-        data: [{ ...summary, legacy: true }]
+        data: { items: [{ ...summary, legacy: true }], unfinished: [] }
       })
     ).toBeNull()
     expect(
       parseSceneGenerationHistoryResult({
         code: ErrorCodes.success,
         msg: '场景历史已读取',
-        data: [{ ...summary, category: 'sdk', causeName: 'APIError' }]
+        data: { items: [{ ...summary, category: 'sdk', causeName: 'APIError' }], unfinished: [] }
       })
     ).toBeNull()
     expect(
       parseSceneGenerationHistoryResult({
         code: ErrorCodes.success,
         msg: '场景历史已读取',
-        data: [{ ...summary, failureReason: 'raw reason' }]
+        data: { items: [{ ...summary, failureReason: 'raw reason' }], unfinished: [] }
       })
     ).toBeNull()
   })

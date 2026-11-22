@@ -172,7 +172,6 @@ describe('GenerationInputSummaryView 启动前', () => {
   it('未消费的动画、特效不计入输入统计', () => {
     const html = view(mixedCards)
 
-    /* 文档、图片、音频、视频、提示词共 5 项；动画和特效只作字段绑定。 */
     expect(html).toContain('画布输入共 5 项')
     expect(html).toContain('字段绑定')
     expect(html).toContain('2 项 · 未用于本轮生成')
@@ -216,7 +215,6 @@ describe('GenerationInputSummaryView 启动后', () => {
     expect(html).toContain('提示词')
     expect(html).toContain('关联')
     expect(html).toContain('已确认控制')
-    /* 甜甜圈图例已经是唯一计数来源，不再渲染第二组快照计数块。 */
     expect(html).not.toContain('wb-gen-summary__snapshot-grid')
   })
 
@@ -227,7 +225,6 @@ describe('GenerationInputSummaryView 启动后', () => {
     expect(html).not.toContain('角色、地点与人物关系')
     expect(html).not.toContain('setAnimation')
     expect(html).not.toContain('从左侧入场')
-    /* 快照没有明细时也不占位渲染明细块。 */
     expect(html).not.toContain('wb-gen-summary__details')
   })
 

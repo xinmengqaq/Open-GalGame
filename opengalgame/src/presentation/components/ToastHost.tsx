@@ -6,10 +6,6 @@ import { Toaster } from 'sonner'
 import { feedbackToastTarget, subscribeFeedbackToastTarget } from '../feedback/toastHostTarget'
 import styles from './ToastHost.module.css'
 
-/**
- * 应用级唯一轻提示宿主。工作台挂载时通过壳层反馈槽位登记目标，
- * 同一 Toaster 迁入安全区；其他页面保持右上角默认位置，不并存第二个宿主。
- */
 export function ToastHost(): ReactElement {
   const target = useSyncExternalStore(subscribeFeedbackToastTarget, feedbackToastTarget, () => null)
   const embedded = target !== null

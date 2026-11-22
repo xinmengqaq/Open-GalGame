@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type {
   SceneGenerationFailureReasonVO,
+  SceneGenerationForkVO,
   SceneGenerationHistoryBoundary,
+  SceneGenerationHistoryDetailVO,
   SceneGenerationHistorySummaryVO,
   SceneGenerationRenderStage
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
@@ -19,6 +21,20 @@ import {
   historyClock,
   historyDetailViewOf,
   historyFailureReasonLabel,
+  historyForkCreateAgainAction,
+  historyForkCreatedActiveHint,
+  historyForkCreatedHint,
+  historyForkCreatedMessage,
+  historyForkCreatedTitle,
+  historyForkFeedbackOf,
+  historyForkRefreshAction,
+  historyForkRecheckAction,
+  historyForkRecheckingAction,
+  historyForkUnconfirmedMessage,
+  historyForkUnconfirmedStatusCopy,
+  historyForkUnconfirmedTitle,
+  historyForkUnknownBannerTitle,
+  historyForkViewListAction,
   historyFullTime,
   historyHasMore,
   historyPageSize,
@@ -32,8 +48,13 @@ import {
   mergeHistoryPage,
   nextHistoryCursor,
   type HistoryBoundaryTone,
+  type HistoryForkFeedback,
   type HistoryViewState
 } from '@presentation/pages/workbench/drawer/generation/generationHistoryPresentation'
+import type {
+  ForkUnknownController,
+  ForkUnknownEntry
+} from '@presentation/pages/workbench/drawer/generation/useForkUnknownRegistry'
 
 const historyController = vi.hoisted(() => ({
   current: null as null | Record<string, unknown>
@@ -69,28 +90,87 @@ function controller(items: SceneGenerationHistorySummaryVO[]): Record<string, un
     loadingMore: false,
     error: null,
     hasMore: false,
-    reload: vi.fn(),
+    reload: vi.fn(async () => ({ ok: true as const })),
     retry: vi.fn(),
     loadMore: vi.fn()
   }
 }
 
-function renderList(items: SceneGenerationHistorySummaryVO[]): string {
+function forkEntry(overrides: Partial<ForkUnknownEntry> = {}): ForkUnknownEntry {
+  return {
+    key: 'key-1',
+    projectId: 'project-1',
+    sceneId: 'scene-1',
+    threadId: 'thread-1',
+    branchId: 'branch-1',
+    checkpointId: 'checkpoint-1',
+    sourceSummary: '来源记录',
+    message: '与主进程通信失败',
+    status: 'unknown',
+    failureMessage: null,
+    requestId: 1,
+    ...overrides
+  }
+}
+
+function forkUnknownController(
+  entries: ForkUnknownEntry[] = []
+): ForkUnknownController {
+  return {
+    entries,
+    find: () => null,
+    markUnknown: vi.fn(),
+    acknowledge: vi.fn(),
+    recheck: vi.fn(async () => undefined)
+  }
+}
+
+function renderList(
+  items: SceneGenerationHistorySummaryVO[],
+  unknownEntries: ForkUnknownEntry[] = []
+): string {
   historyController.current = controller(items)
   return renderToStaticMarkup(
     createElement(GenerationHistory, {
       client: {} as SceneGenerationClient,
+      forkFromHistory: async () => ({ kind: 'busy' as const }),
+      forkUnknown: forkUnknownController(unknownEntries),
+      onForked: () => undefined,
+      onRefreshDiscovery: async () => ({ ok: true as const }),
       projectId: 'project-1',
       sceneId: 'scene-1'
     })
   )
 }
 
-function renderDetail(record: SceneGenerationHistorySummaryVO): string {
+function renderDetail(
+  record: SceneGenerationHistorySummaryVO,
+  overrides: {
+    detail?: SceneGenerationHistoryDetailVO | null
+    detailLoading?: boolean
+    detailError?: string | null
+    forking?: boolean
+    forkFeedback?: HistoryForkFeedback | null
+  } = {}
+): string {
+  const blockedDetail: SceneGenerationHistoryDetailVO = {
+    ...record,
+    canFork: false,
+    forkReason: '原记录的副作用结果尚未确认'
+  }
   return renderToStaticMarkup(
     createElement(HistoryDetail, {
       backRef: { current: null },
+      detail: overrides.detail === undefined ? blockedDetail : overrides.detail,
+      detailError: overrides.detailError ?? null,
+      detailLoading: overrides.detailLoading ?? false,
+      forkFeedback: overrides.forkFeedback ?? null,
+      forking: overrides.forking ?? false,
       onBack: () => undefined,
+      onFork: () => undefined,
+      onRecheckFork: () => undefined,
+      onRefreshHistory: () => undefined,
+      onRetryDetail: () => undefined,
       record
     })
   )
@@ -274,9 +354,13 @@ describe('AI 历史失败原因', () => {
 })
 
 describe('AI 历史待核对中断', () => {
-  const pendingMessages = ['提交结果待核对', '候选或基线冲突，需要重新核对'] as const
+  const pendingMessages = [
+    '提交结果待核对',
+    '候选写入结果待核对',
+    '候选或基线冲突，需要重新核对'
+  ] as const
 
-  it('两条固定安全摘要显示为待核对，不冒充失败', () => {
+  it('固定安全摘要显示为待核对，不冒充失败', () => {
     for (const message of pendingMessages) {
       const record = summary({ boundary: 'failed', stage: 'failed', message })
       const row = historyRowViewOf(record)
@@ -352,11 +436,266 @@ describe('AI 历史行与详情渲染', () => {
     expect(html).not.toContain('耗时')
     expect(html).not.toContain('重试')
     expect(html).not.toContain('恢复')
-    expect(html).not.toContain('分叉')
+    expect(html).toContain('不能从这里分叉')
+    expect(html).toContain('原记录的副作用结果尚未确认')
+    expect(html).not.toContain('wb-hist__fork-action')
     expect(html).not.toContain('wb-candidate')
     expect(html).not.toContain('wb-hist__more')
     expect((html.match(/<button/g) ?? []).length).toBe(1)
     expect(html).toContain('返回列表')
+  })
+
+  it('可复制记录显示分叉入口，不展示操作、线程或检查点标识', () => {
+    const record = summary()
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, { detail })
+
+    expect(html).toContain('从这里分叉')
+    expect(html).toContain('wb-hist__fork-action')
+    expect(html).toContain('原记录、原分支和正式作品都保持不变')
+    expect(html).toContain('返回列表')
+    for (const identity of [
+      record.operationId,
+      record.threadId,
+      record.branchId,
+      record.checkpointId
+    ]) {
+      expect(html).not.toContain(identity)
+    }
+  })
+
+  it('复制资格读取中只显示核对状态，不提前显示可点入口', () => {
+    const html = renderDetail(summary(), { detail: null, detailLoading: true })
+
+    expect(html).toContain('正在核对这条记录的复制资格')
+    expect(html).not.toContain('wb-hist__fork-action')
+    expect(html).not.toContain('不能从这里分叉')
+  })
+
+  it('复制资格读取失败显示结构化警报和重新核对', () => {
+    const html = renderDetail(summary(), {
+      detail: null,
+      detailError: '后端暂时没有读出复制资格'
+    })
+
+    expect(html).toContain('role="alert"')
+    expect(html).toContain('分叉资格没有读出来')
+    expect(html).toContain('后端暂时没有读出复制资格')
+    expect(html).toContain('重新核对')
+    expect(html).not.toContain('wb-hist__fork-action')
+  })
+
+  it('分叉失败保留来源元信息并显示内联警报', () => {
+    const record = summary({
+      boundary: 'waitingReview',
+      stage: 'waitingReview',
+      message: '候选已发布，等待审阅'
+    })
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, {
+      detail,
+      forkFeedback: {
+        kind: 'failed',
+        message: '来源对话仍有未结束操作，不能开始分叉'
+      }
+    })
+
+    expect(html).toContain('role="alert"')
+    expect(html).toContain('来源对话仍有未结束操作，不能开始分叉')
+    expect(html).toContain('原记录和分支保持不变')
+    expect(html).toContain('可以直接重试')
+    expect(html).toContain('候选已发布，等待审阅')
+    expect(html).toContain('从这里分叉')
+    expect(html).toContain('返回列表')
+  })
+
+  it('结果未明时不显示普通分叉入口，只保留重新核对和查看列表', () => {
+    const record = summary()
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, {
+      detail,
+      forkFeedback: {
+        kind: 'unconfirmed',
+        message: '与主进程通信失败',
+        checkStatus: 'unknown',
+        failureMessage: null
+      }
+    })
+
+    expect(html).toContain('role="status"')
+    expect(html).toContain(historyForkUnconfirmedTitle)
+    expect(html).toContain('与主进程通信失败')
+    expect(html).toContain(historyForkUnconfirmedMessage)
+    expect(html).toContain(historyForkRecheckAction)
+    expect(html).toContain(historyForkViewListAction)
+    expect(html).not.toContain('从这里分叉')
+    expect(html).not.toContain('可以直接重试')
+    expect(html).not.toContain('wb-hist__fork-error')
+  })
+
+  it('核对读取中只显示进行中，不提前宣称已重新读取', () => {
+    const record = summary()
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, {
+      detail,
+      forkFeedback: {
+        kind: 'unconfirmed',
+        message: '与主进程通信失败',
+        checkStatus: 'checking',
+        failureMessage: null
+      }
+    })
+
+    expect(html).toContain(historyForkUnconfirmedTitle)
+    expect(html).toContain(historyForkRecheckingAction)
+    expect(html).toContain('disabled=""')
+    expect(html).not.toContain(historyForkUnconfirmedStatusCopy('rechecked', null))
+    expect(html).not.toContain('从这里分叉')
+  })
+
+  it('核对读取失败时保留未知并可重试，不冒充完成', () => {
+    const record = summary()
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, {
+      detail,
+      forkFeedback: {
+        kind: 'unconfirmed',
+        message: '与主进程通信失败',
+        checkStatus: 'failed',
+        failureMessage: '场景已切换，发现没有刷新'
+      }
+    })
+
+    expect(html).toContain(historyForkUnconfirmedTitle)
+    expect(html).toContain('失败')
+    expect(html).toContain('重试')
+    expect(html).toContain('场景已切换，发现没有刷新')
+    expect(html).toContain(historyForkRecheckAction)
+    expect(html).not.toContain('从这里分叉')
+    expect(html).not.toContain(historyForkUnconfirmedStatusCopy('rechecked', null))
+  })
+
+  it('两个来源的未知横幅分别显示，互不覆盖', () => {
+    const html = renderList(
+      [summary()],
+      [
+        forkEntry({ key: 'key-a', checkpointId: 'checkpoint-a', sourceSummary: '来源 A' }),
+        forkEntry({
+          key: 'key-b',
+          checkpointId: 'checkpoint-b',
+          threadId: 'thread-b',
+          branchId: 'branch-b',
+          sourceSummary: '来源 B',
+          status: 'checking'
+        })
+      ]
+    )
+
+    expect(html).toContain(historyForkUnknownBannerTitle)
+    expect(html).toContain('来源 A')
+    expect(html).toContain('来源 B')
+    expect(html).toContain('2 项')
+    expect(html).toContain(historyForkRecheckingAction)
+    expect(html).toContain(historyForkRecheckAction)
+    expect((html.match(/我已核对/g) ?? []).length).toBe(2)
+  })
+
+  it('结果未明核对完成后仍保留未知语义，不转成成功或可重试失败', () => {
+    const record = summary()
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, {
+      detail,
+      forkFeedback: {
+        kind: 'unconfirmed',
+        message: '与主进程通信失败',
+        checkStatus: 'rechecked',
+        failureMessage: null
+      }
+    })
+
+    expect(html).toContain(historyForkUnconfirmedTitle)
+    expect(html).toContain('已重新读取 AI 历史与待处理发现')
+    expect(html).toContain(historyForkRecheckAction)
+    expect(html).toContain(historyForkViewListAction)
+    expect(html).not.toContain('从这里分叉')
+    expect(html).not.toContain('可以直接重试')
+    expect(html).not.toContain(historyForkCreatedTitle)
+  })
+
+  it('分支已创建且仍在处理时不提供重复创建入口', () => {
+    const record = summary()
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, {
+      detail,
+      forkFeedback: { kind: 'created', branchActive: true }
+    })
+
+    expect(html).toContain('role="status"')
+    expect(html).toContain(historyForkCreatedTitle)
+    expect(html).toContain(historyForkCreatedMessage)
+    expect(html).toContain(historyForkCreatedActiveHint)
+    expect(html).toContain(historyForkRefreshAction)
+    expect(html).not.toContain(historyForkCreateAgainAction)
+    expect(html).not.toContain('从这里分叉')
+    expect(html).not.toContain('可以直接重试')
+  })
+
+  it('分支已创建且已结束时仍保留明确的新意图入口', () => {
+    const record = summary()
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, {
+      detail,
+      forkFeedback: { kind: 'created', branchActive: false }
+    })
+
+    expect(html).toContain(historyForkCreatedTitle)
+    expect(html).toContain(historyForkCreatedHint)
+    expect(html).toContain(historyForkCreateAgainAction)
+    expect(html).not.toContain('从这里分叉')
+    expect(html).not.toContain('可以直接重试')
+  })
+
+  it('分叉结果投影保留创建事实，失败与未明按原契约', () => {
+    const activeFork = {
+      status: { operationId: 'operation-fork', state: 'running' },
+      source: { summary: '来源记录' }
+    } as unknown as SceneGenerationForkVO
+    const terminalFork = {
+      status: { operationId: 'operation-fork', state: 'failed' },
+      source: { summary: '来源记录' }
+    } as unknown as SceneGenerationForkVO
+
+    expect(
+      historyForkFeedbackOf({ kind: 'forked', fork: activeFork, viewSwitched: true })
+    ).toBeNull()
+    expect(
+      historyForkFeedbackOf({ kind: 'forked', fork: activeFork, viewSwitched: false })
+    ).toEqual({ kind: 'created', branchActive: true })
+    expect(
+      historyForkFeedbackOf({ kind: 'forked', fork: terminalFork, viewSwitched: false })
+    ).toEqual({ kind: 'created', branchActive: false })
+    expect(
+      historyForkFeedbackOf({ kind: 'failed', message: '来源不可分叉', unverified: false })
+    ).toEqual({ kind: 'failed', message: '来源不可分叉' })
+    expect(
+      historyForkFeedbackOf({ kind: 'failed', message: '通信失败', unverified: true })
+    ).toEqual({
+      kind: 'unconfirmed',
+      message: '通信失败',
+      checkStatus: 'unknown',
+      failureMessage: null
+    })
+    expect(historyForkFeedbackOf({ kind: 'busy' })).toBeNull()
+  })
+
+  it('分叉提交中显示就近忙态并禁用重复点击', () => {
+    const record = summary()
+    const detail: SceneGenerationHistoryDetailVO = { ...record, canFork: true }
+    const html = renderDetail(record, { detail, forking: true })
+
+    expect(html).toContain('正在创建分支')
+    expect(html).toContain('aria-busy="true"')
+    expect(html).toContain('disabled=""')
   })
 
   it('历史详情按记录自身显示旧 operation 终态，不读取实时状态', () => {

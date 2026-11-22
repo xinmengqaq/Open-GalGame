@@ -1,4 +1,3 @@
-/** 旧执行文档仍可能带有的用途字段；新事实只使用素材类别。 */
 export type SceneAssetPurpose =
   'background' | 'cg' | 'characterImage' | 'avatar' | 'music' | 'soundEffect' | 'voice' | 'video'
 

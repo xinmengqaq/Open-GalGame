@@ -1,6 +1,5 @@
 import { useId, type ReactElement } from 'react'
 
-/** 聚光里的浮尘：横坐标、纵坐标、半径、透明度。只做轻微漂移，不承载信息。 */
 const MOTES: readonly (readonly [number, number, number, number])[] = [
   [138, 92, 1.2, 0.42],
   [168, 86, 0.9, 0.32],
@@ -20,10 +19,6 @@ const MOTES: readonly (readonly [number, number, number, number])[] = [
   [152, 202, 0.9, 0.18]
 ]
 
-/**
- * 空态的中性主视觉：空舞台、聚光、帷幕和浮尘，纯内联 SVG、无远程资源，不指向具体场景，
- * 也不冒充画布缩略图。`animated` 只让聚光轻微呼吸、浮尘缓慢漂移。
- */
 export function SceneArt({
   animated = false,
   className = ''

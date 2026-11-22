@@ -14,7 +14,6 @@ const rendererUrl =
     ? process.env['ELECTRON_RENDERER_URL']
     : pathToFileURL(join(__dirname, '../renderer/index.html')).href
 
-/** 建立主窗口，配置安全偏好并拦截外部链接与跨文档跳转。 */
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,

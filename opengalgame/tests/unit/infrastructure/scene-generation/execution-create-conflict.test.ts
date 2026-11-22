@@ -70,6 +70,83 @@ describe('创建执行记录时的场景生成守卫', () => {
       repo.createExecution(execution(second))
     ).resolves.toMatchObject({ operationId: 'operation-2' })
   })
+
+  it('等待来源的检查点或候选在创建分叉时已变化则拒绝', async () => {
+    const repo = await repository()
+    await repo.createExecution(
+      execution({ state: 'waiting', checkpointId: 'checkpoint-1', candidateSnapshotId: 'snapshot-1' })
+    )
+    const fork = execution({
+      operationId: 'fork-1',
+      branchId: 'branch-fork',
+      state: 'pending',
+      mode: undefined,
+      candidateSnapshotId: 'snapshot-1',
+      fork: {
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        threadId: 'thread-1',
+        branchId: 'branch-1',
+        checkpointId: 'checkpoint-1',
+        sourceOperationId: 'operation-1',
+        candidateSnapshotId: 'snapshot-1'
+      },
+      forkRequest: {
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        threadId: 'thread-1',
+        branchId: 'branch-1',
+        checkpointId: 'checkpoint-1',
+        operationId: 'fork-1',
+        policy: { maxCorrections: 1 }
+      }
+    })
+    await expect(
+      repo.createExecution({
+        ...fork,
+        fork: { ...fork.fork!, checkpointId: 'checkpoint-old' }
+      })
+    ).rejects.toMatchObject({
+      code: ErrorCodes.operationConflict,
+      message: '来源历史已变化，不能分叉'
+    })
+    await expect(repo.createExecution(fork)).resolves.toMatchObject({ operationId: 'fork-1' })
+    await expect(repo.listSceneExecutions(sceneRequest())).resolves.toHaveLength(2)
+
+    const pendingRepo = await repository()
+    const source = execution({
+      state: 'waiting',
+      checkpointId: 'checkpoint-1',
+      candidateSnapshotId: 'snapshot-1'
+    })
+    await pendingRepo.createExecution(source)
+    await pendingRepo.writeExecution({
+      ...source,
+      pendingReply: {
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        threadId: 'thread-1',
+        branchId: 'branch-1',
+        operationId: 'operation-1',
+        interactionId: 'interaction-1',
+        checkpointId: 'checkpoint-1',
+        candidateSnapshotId: 'snapshot-1',
+        replyId: 'reply-1',
+        reply: { kind: 'accept' }
+      }
+    })
+    await expect(
+      pendingRepo.createExecution({
+        ...fork,
+        operationId: 'fork-pending',
+        branchId: 'branch-pending'
+      })
+    ).rejects.toMatchObject({
+      code: ErrorCodes.operationConflict,
+      message: '来源历史已变化，不能分叉'
+    })
+    await expect(pendingRepo.listSceneExecutions(sceneRequest())).resolves.toHaveLength(1)
+  })
 })
 
 function sceneRequest(): { projectId: string; sceneId: string; limit: number } {

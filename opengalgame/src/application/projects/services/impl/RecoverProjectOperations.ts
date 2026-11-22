@@ -14,10 +14,6 @@ interface ProjectRecoveryDependencies {
 export class RecoverProjectOperations implements ProjectRecoveryApplicationService {
   constructor(private readonly deps: ProjectRecoveryDependencies) {}
 
-  /**
-   * 在后台任务边界逐项恢复，单项失败不阻断后续操作。
-   * @returns 本次未能恢复的操作数量。
-   */
   recoverIncompleteOperations(): Promise<number> {
     return this.deps.execution.executeProjectOperation(async () => {
       let failures = 0

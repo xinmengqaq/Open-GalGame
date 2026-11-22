@@ -168,17 +168,12 @@ export class ScenePreviewController {
     )
   }
 
-  /** 订阅候选舞台事件。只由 IPC 注册时建立，释放由调用方负责。 */
   subscribeCandidateEvents(
     listener: (event: SceneGenerationCandidatePreviewEventVO) => void
   ): () => void {
     return this.candidateEvents.subscribeCandidatePreviewEvents(listener)
   }
 
-  /**
-   * 补投候选会话最后一条真实舞台事实。
-   * 只返回与请求项目、场景和会话一致的事件；没有事件时返回 null。
-   */
   readCandidateEvent(
     input: unknown,
     access: IpcRequestAccess

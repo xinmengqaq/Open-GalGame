@@ -16,20 +16,12 @@ import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/P
 
 const SOURCE_MODULE = 'project-files'
 
-/**
- * 经版本应用服务发布工程文件。
- * 工程文件仍决定路径、目录版本和用户词汇；操作身份由版本服务生成。
- */
 export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGateway {
   constructor(
     private readonly versioning: ProjectVersioningApplicationService,
     private readonly readCatalogVersion: (project: VerifiedProjectReadLocation) => Promise<string>
   ) {}
 
-  /**
-   * 准备版本身份后提交声明路径。
-   * 请求里的 operationId 是工程文件协议留下的调用方标识，不当作版本身份。
-   */
   async publish(request: {
     project: VerifiedProjectReadLocation
     operationId: string
@@ -130,7 +122,6 @@ export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGat
     }
   }
 
-  /** 按已绑定的版本身份核对。没有关联或证据矛盾时保持不能放开。 */
   async readOperation(
     project: VerifiedProjectReadLocation,
     operationId: string
@@ -202,7 +193,6 @@ export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGat
     return this.versioning.recoverProject(project.projectId, SOURCE_MODULE)
   }
 
-  /** 在版本服务的短提交边界内重读目录，并拒绝占用已有路径的新增。 */
   private async requirePublishPreconditions(request: {
     project: VerifiedProjectReadLocation
     changes: readonly PreparedProjectFileChange[]
@@ -219,7 +209,6 @@ export class LocalProjectWorkVersionGatewayImpl implements ProjectWorkVersionGat
   }
 }
 
-/** 恢复层已确认证据冲突时保留技术错误，不再降级成“结果不明”。 */
 function proofConflictOf(error: unknown): AppException | null {
   if (!(error instanceof AppException)) return null
   const cause = 'cause' in error ? error.cause : undefined
@@ -229,10 +218,6 @@ function proofConflictOf(error: unknown): AppException | null {
     : null
 }
 
-/**
- * 只把已经在内存或来源文件里的字节交给版本内容端口。
- * 没有字节时不能把路径伪装成已准备引用或候选引用。
- */
 async function inlineFileChanges(
   changes: readonly PreparedProjectFileChange[]
 ): Promise<VersionFileChange[]> {

@@ -32,10 +32,6 @@ export interface PreviewPageProps {
   readonly onSavedVersion?: (saved: PreviewSavedVersion) => void
 }
 
-/**
- * 当前场景试玩预览：左侧编辑台词正文，右侧真实 WebGAL 舞台。
- * 页面只消费用户接口层客户端；舞台准备、位置和保存结果都以真实返回为准。
- */
 export function PreviewPage({
   client,
   projectId,

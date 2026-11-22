@@ -9,9 +9,6 @@ import {
   type SceneCanvasArrangementDocument
 } from './documents/SceneCanvasArrangementDocument'
 
-/**
- * 当前 v5 存储文档转唯一当前业务模型。字段逐项保留，不补默认值。
- */
 export function currentDocumentToModel(
   document: SceneCanvasArrangementDocument
 ): SceneCanvasArrangement {
@@ -25,9 +22,6 @@ export function currentDocumentToModel(
   }
 }
 
-/**
- * 唯一当前业务模型转当前 v5 存储文档。真实字段逐项落盘。
- */
 export function modelToCurrentDocument(
   arrangement: SceneCanvasArrangement
 ): SceneCanvasArrangementDocument {

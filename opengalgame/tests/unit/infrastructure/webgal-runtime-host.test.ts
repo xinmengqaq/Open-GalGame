@@ -430,4 +430,28 @@ describe('真实 WebGAL 运行时承载', () => {
       await host.dispose()
     }
   }, 20_000)
+
+  it('只有显式打开自动开始时才在扩展地址里携带 start=1', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'opengalgame-webgal-runtime-autostart-'))
+    directories.push(root)
+    await mkdir(join(root, 'game'), { recursive: true })
+    await writeFile(join(root, 'game', 'start.txt'), '旁白:自动开始;\n', 'utf8')
+    const startHost = new WebgalRuntimeHostImpl({
+      projectRoot: root,
+      engineRoot: join(process.cwd(), 'node_modules', 'webgal-engine'),
+      engineExtension: { autoStart: true }
+    })
+    const handle = await startHost.start()
+    try {
+      const html = await (await fetch(`${handle.baseUrl}/index.html`)).text()
+      const tagStart = html.indexOf(`<script src="${ENGINE_EXTENSION_SCRIPT_PATH}?`)
+      if (tagStart < 0) throw new Error('入口没有注入扩展脚本')
+      const srcStart = tagStart + '<script src="'.length
+      const srcEnd = html.indexOf('"', srcStart)
+      const injectedScriptUrl = html.slice(srcStart, srcEnd)
+      expect(new URL(injectedScriptUrl, handle.baseUrl).searchParams.get('start')).toBe('1')
+    } finally {
+      await startHost.dispose()
+    }
+  }, 20_000)
 })

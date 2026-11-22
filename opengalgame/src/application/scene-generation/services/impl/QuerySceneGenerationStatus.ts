@@ -13,10 +13,6 @@ export class QuerySceneGenerationStatus implements SceneGenerationStatusQuerySer
     private readonly deps: SceneGenerationDependencies,
     private readonly coordinator: SceneGenerationCoordinator
   ) {}
-  /**
-   * 读取持久状态，旧运行状态只标记可显式恢复。
-   * @throws {AppException} 操作不存在或状态、检查点读取失败。
-   */
   async getSceneGenerationStatus(
     request: SceneGenerationScopeDTO
   ): Promise<SceneGenerationStatusVO> {
@@ -25,6 +21,13 @@ export class QuerySceneGenerationStatus implements SceneGenerationStatusQuerySer
       execution,
       this.coordinator.activeExecutions.has(operationKey(request))
     )
+    if (!this.deps.workflow.capabilities().resume && status.canResume) {
+      return {
+        ...status,
+        canResume: false,
+        resumeReason: '当前构建尚未启用继续执行'
+      }
+    }
     if (
       status.canResume &&
       execution.checkpointId &&

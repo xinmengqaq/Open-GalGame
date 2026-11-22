@@ -9,13 +9,8 @@ import {
   type SystemPathErrorCode
 } from '@domain/system-path/errors/SystemPathErrorCodes'
 
-/** 系统打开一个路径；成功返回空字符串，失败返回错误文本。 */
 export type OpenPathWithSystem = (absolutePath: string) => Promise<string>
 
-/**
- * 打开本机绝对目录。
- * 先校验路径是存在的绝对目录，再交给宿主；不拼接命令，也不接受额外参数。
- */
 export class LocalDirectoryOpenGateway implements DirectoryOpenGateway {
   constructor(private readonly openPath: OpenPathWithSystem) {}
 

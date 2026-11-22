@@ -40,7 +40,6 @@ export const PromptInput = ({ className, onSubmit, children, ...props }: PromptI
         await onSubmit({ text })
         form.reset()
       } catch {
-        // 提交失败时保留原文，调用方据此保留草稿。
       }
     },
     [onSubmit]

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { SceneGenerationExecution } from '@application/scene-generation/models/SceneGenerationExecution'
+import { toRenderStatusVO } from '@application/scene-generation/mapping/SceneGenerationRenderProjection'
 import { SceneGenerationVersionConflict } from '@application/scene-generation/errors/SceneGenerationVersionConflict'
 import { SCENE_GENERATION_START_CONFLICT_MESSAGE } from '@application/scene-generation/policies/SceneGenerationStartConflict'
 import type { SceneGenerationRenderDependencies } from '@application/scene-generation/services/impl/SceneGenerationRenderDependencies'
@@ -30,7 +31,6 @@ const arrangement: SceneCanvasArrangementVO = {
   relations: []
 }
 
-/** 只提供启动用例走到生成服务所需的编排事实，不接真实画布或预览。 */
 function renderDependencies(): SceneGenerationRenderDependencies {
   return {
     canvasVersions: {
@@ -75,7 +75,6 @@ function launchService(f: SceneGenerationTestFixture): LaunchSceneGeneration {
   )
 }
 
-/** 先创建一条真实生成记录，再改成测试需要的状态或模式。 */
 async function seedExecution(
   f: SceneGenerationTestFixture,
   overrides: Partial<SceneGenerationExecution>
@@ -131,7 +130,6 @@ describe('启动场景生成时的并发拦截', () => {
   it('分叉记录没有 generate 模式，不阻塞新的生成', async () => {
     const f = createSceneGenerationFixture()
     const seeded = await seedExecution(f, { state: 'running' })
-    // 分叉执行不写 mode；这里显式清空以模拟分叉记录。
     f.executions.set(seeded.operationId, { ...seeded, mode: undefined })
 
     const status = await launchService(f).startSceneGeneration(startRequest)
@@ -148,6 +146,23 @@ describe('启动场景生成时的并发拦截', () => {
 
     expect(f.executions.size).toBe(2)
     expect(f.executions.get(status.operationId)?.mode).toBe('generate')
+  })
+})
+
+describe('启动前状态投影', () => {
+  it('只为非终态 generate 投影阻断新生成，其他模式与终态不占位', async () => {
+    const f = createSceneGenerationFixture()
+    const seeded = await seedExecution(f, { state: 'pending', mode: 'generate' })
+
+    for (const state of ['pending', 'running', 'waiting', 'interrupted'] as const) {
+      expect(toRenderStatusVO({ ...seeded, state }).blocksNewGeneration).toBe(true)
+    }
+    for (const state of ['succeeded', 'failed', 'cancelled'] as const) {
+      expect(toRenderStatusVO({ ...seeded, state }).blocksNewGeneration).toBeUndefined()
+    }
+    for (const mode of ['repair', 'validate', undefined] as const) {
+      expect(toRenderStatusVO({ ...seeded, mode }).blocksNewGeneration).toBeUndefined()
+    }
   })
 })
 

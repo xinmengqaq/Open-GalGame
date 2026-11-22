@@ -48,10 +48,6 @@ export interface UsePreviewSessionLifecycleResult {
   readonly syncLockBasisRefs: () => void
 }
 
-/**
- * 预览会话身份、打开/关闭/重开的唯一所有者。
- * 草稿、保存和舞台只通过本 hook 暴露的 ref 与重置回调协作，不各自保存会话。
- */
 export function usePreviewSessionLifecycle({
   client,
   projectId,

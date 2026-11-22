@@ -39,7 +39,6 @@ import { FileConfigurationGatewayImpl } from '@infrastructure/config/FileConfigu
 import { PinoLoggerGatewayImpl } from '@infrastructure/logging/PinoLoggerGatewayImpl'
 import { diagnosticReference } from '../sceneGenerationFailureFacts'
 import { GitCandidatePreviewGatewayImpl } from '@infrastructure/scene-generation/preview/GitCandidatePreviewGatewayImpl'
-import { createBrowserStageTrustedInput } from '@infrastructure/webgal/compatibility/BrowserStageTrustedInput'
 import { WebgalRuntimeHostImpl } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
 import type { SecretCipher } from '@infrastructure/security/SecretCipher'
 import { ConnectionSettingsController } from '@interfaces/ipc/controllers/ConnectionSettingsController'
@@ -65,16 +64,13 @@ export interface DevFileBackend {
     input: unknown,
     publish: (event: SceneGenerationRenderProgressEventVO) => void
   ): Promise<{ result: AjaxResult<null>; stop: () => void }>
-  /** 开发浏览器没有 IPC 推送，用 SSE 转发预览运行时事件。 */
   subscribeScenePreviewEvents(publish: (event: PreviewRuntimeEventVO) => void): () => void
-  /** 候选就绪、失败和失效事件与正式运行时分开推送。 */
   subscribeCandidatePreviewEvents(
     publish: (event: SceneGenerationCandidatePreviewEventVO) => void
   ): () => void
   close(): Promise<void>
 }
 
-/** 开发后端没有 Electron shell，用系统命令打开已定位的工程文件。 */
 export function openPathWithSystem(absolutePath: string): Promise<string> {
   const command =
     process.platform === 'win32'
@@ -124,7 +120,7 @@ export async function createDevFileBackend(
     Date.now,
     undefined,
     undefined,
-    { trustedInput: createBrowserStageTrustedInput(), logger }
+    { logger }
   )
   const candidateEventSinks = new Set<(event: SceneGenerationCandidatePreviewEventVO) => void>()
   const stopCandidateEvents = candidatePreviewGateway.subscribeCandidatePreviewEvents((event) => {
@@ -248,21 +244,19 @@ export async function createDevFileBackend(
     return generationController
   }
 
-  /**
-   * 浏览器开发服务复用与桌面端相同的预览装配：真实宿主、真实控制桥和正式读取。
-   * 只在页面首次请求预览时创建，避免开发模式空转 HTTP 运行时。
-   */
   async function ensurePreview(): Promise<ScenePreviewController> {
     if (previewController) return previewController
     const requireFromDevBackend = createRequire(import.meta.url)
     const engineRoot = dirname(requireFromDevBackend.resolve('webgal-engine/package.json'))
-    const host = new WebgalRuntimeHostImpl({ engineRoot })
+    const host = new WebgalRuntimeHostImpl({
+      engineRoot,
+      engineExtension: { autoStart: true }
+    })
     const previewServices = createScenePreview({
       userDirectory,
       versioning: services.versioning,
       sessionLookup: candidatePreviewGateway,
-      host,
-      trustedInput: createBrowserStageTrustedInput()
+      host
     })
     previewHost = host
     previewController = new ScenePreviewController(
@@ -275,11 +269,13 @@ export async function createDevFileBackend(
       userDirectory,
       logger,
       versioning: services.versioning,
-      sources: previewServices.currentScene.sources
+      sources: previewServices.currentScene.sources,
+      chooseDirectory: pickDirectoryWithSystem
     })
     exportController = new SceneExportController(
       exportServices.exportSavedScene,
-      exportServices.latestPreviewSave,
+      exportServices.latestSavedSceneVersion,
+      exportServices.chooseDestination,
       exceptions
     )
     return previewController
@@ -293,7 +289,6 @@ export async function createDevFileBackend(
     return exportController
   }
 
-  /** 通用打开目录能力：真实文件模式下才存在，复用现有系统打开实现。 */
   function ensureSystemPath(): SystemPathController {
     if (!systemPathController) {
       systemPathController = new SystemPathController(
@@ -395,8 +390,10 @@ export async function createDevFileBackend(
       (await ensurePreview()).readCandidateEvent(input, access),
     exportSavedScene: async (input, access) =>
       (await ensureExport()).exportSavedScene(input, access),
-    readLatestPreviewSave: async (input, access) =>
-      (await ensureExport()).readLatestPreviewSave(input, access),
+    readLatestSavedSceneVersion: async (input, access) =>
+      (await ensureExport()).readLatestSavedSceneVersion(input, access),
+    chooseSceneExportDirectory: async (input, access) =>
+      (await ensureExport()).chooseSceneExportDirectory(input, access),
     openDirectory: async (input, access) => ensureSystemPath().openDirectory(input, access),
     getSettingsSummary: async (input, access) =>
       (await ensureConnections()).getSettingsSummary(input, access),
@@ -421,6 +418,8 @@ export async function createDevFileBackend(
       (await ensureGeneration()).listHistory(input, access),
     readSceneGenerationCheckpoint: async (input, access) =>
       (await ensureGeneration()).readCheckpoint(input, access),
+    forkSceneGeneration: async (input, access) =>
+      (await ensureGeneration()).fork(input, access),
     openSceneGenerationPreview: async (input, access) =>
       (await ensureGeneration()).openPreview(input, access),
     closeSceneGenerationPreview: async (input, access) =>
@@ -495,7 +494,6 @@ export async function createDevFileBackend(
 
 let singleton: Promise<DevFileBackend> | undefined
 
-/** Vite 开发服务只在本机回环上复用这一份与桌面端相同的用户目录。 */
 export function loadDevFileBackend(): Promise<DevFileBackend> {
   const directory = assertUserDirectory(
     process.env.OPENGALGAME_DEV_USER_DIRECTORY || join(homedir(), '.opengalgame')
@@ -514,7 +512,6 @@ class NodeProjectFileDialogGateway implements ProjectFileDialogGateway {
   }
 
   async chooseSaveLocation(): Promise<ProjectLocation | null> {
-    // 浏览器验收无法操作系统目录选择器时，用开发环境变量提供保存位置；不参与产品运行时。
     const preset = process.env.OPENGALGAME_DEV_SAVE_LOCATION?.trim()
     if (preset) {
       const directory = await realpath(preset)

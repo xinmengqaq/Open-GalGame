@@ -11,7 +11,6 @@ interface InputCatalogBreadcrumbsProps {
   onOpen: (folderId: CatalogFolderId) => void
 }
 
-/** 子目录显示祖先导航；根目录不重复占用一行。 */
 export function InputCatalogBreadcrumbs({
   folders,
   currentFolderId,

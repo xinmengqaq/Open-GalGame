@@ -22,6 +22,15 @@ type UseGenerationHistoryOptions = {
   refreshKey?: string
 }
 
+export type GenerationHistoryReloadResult =
+  | { ok: true }
+  | { ok: false; message: string; cancelled?: boolean }
+
+type PendingHistoryReload = {
+  scope: string
+  resolve: (result: GenerationHistoryReloadResult) => void
+}
+
 export type GenerationHistoryController = {
   items: readonly SceneGenerationHistorySummaryVO[]
   view: HistoryViewState
@@ -29,16 +38,12 @@ export type GenerationHistoryController = {
   loadingMore: boolean
   error: string | null
   hasMore: boolean
-  reload: () => void
+  /** 重新读取第一页；完成后解析结果，失败/取消不会冒充成功。 */
+  reload: () => Promise<GenerationHistoryReloadResult>
   retry: () => void
   loadMore: () => void
 }
 
-/**
- * 场景级 AI 历史的分页读取。只使用后端摘要 VO；游标取上一页最后一条
- * `checkpointId`，后端不返回 nextCursor，也不虚构总数。工程或场景变化时清空重读，
- * 读取失败保留已加载条目。
- */
 export function useGenerationHistory({
   client,
   projectId,
@@ -61,6 +66,7 @@ export function useGenerationHistory({
   const loadedScopeRef = useRef('')
   const requestGeneration = useRef(0)
   const loadingMoreRef = useRef(false)
+  const pendingReloads = useRef<PendingHistoryReload[]>([])
 
   useEffect(() => {
     scopeRef.current = scope
@@ -79,10 +85,50 @@ export function useGenerationHistory({
   }, [cursor])
 
   useEffect(() => {
+    return () => {
+      const pending = pendingReloads.current
+      pendingReloads.current = []
+      for (const item of pending) {
+        item.resolve({
+          ok: false,
+          message: '历史读取已取消，请重试。',
+          cancelled: true
+        })
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     const key = `${projectId}|${sceneId}`
     let cancelled = false
 
+    const settle = (result: GenerationHistoryReloadResult): void => {
+      const remaining: PendingHistoryReload[] = []
+      for (const pending of pendingReloads.current) {
+        if (pending.scope === key) pending.resolve(result)
+        else remaining.push(pending)
+      }
+      pendingReloads.current = remaining
+    }
+
+    const cancelOtherScopes = (): void => {
+      const remaining: PendingHistoryReload[] = []
+      for (const pending of pendingReloads.current) {
+        if (pending.scope === key) {
+          remaining.push(pending)
+          continue
+        }
+        pending.resolve({
+          ok: false,
+          message: '场景已切换，历史读取已取消。',
+          cancelled: true
+        })
+      }
+      pendingReloads.current = remaining
+    }
+
     const load = async (): Promise<void> => {
+      cancelOtherScopes()
       if (!projectId || !sceneId) {
         requestGeneration.current += 1
         scopeRef.current = key
@@ -97,6 +143,7 @@ export function useGenerationHistory({
         setLoadingMore(false)
         setLoading(false)
         setError(null)
+        settle({ ok: false, message: '当前场景不可用。', cancelled: true })
         return
       }
 
@@ -121,11 +168,13 @@ export function useGenerationHistory({
         if (cancelled || generation !== requestGeneration.current || scopeRef.current !== key)
           return
         if (result.code !== ErrorCodes.success || result.data === undefined) {
+          const message = result.msg || loadFailed
           setLoading(false)
-          setError(result.msg || loadFailed)
+          setError(message)
+          settle({ ok: false, message })
           return
         }
-        const page = result.data
+        const page = result.data.items
         const merged = mergeHistoryPage([], page, { projectId, sceneId })
         loadedScopeRef.current = key
         itemsRef.current = merged
@@ -135,10 +184,12 @@ export function useGenerationHistory({
         setHasMore(historyHasMore(page.length))
         setCursor(nextHistoryCursor(page))
         setLoading(false)
+        settle({ ok: true })
       } catch {
         if (cancelled || generation !== requestGeneration.current) return
         setLoading(false)
         setError(loadFailed)
+        settle({ ok: false, message: loadFailed })
       }
     }
 
@@ -149,9 +200,12 @@ export function useGenerationHistory({
     }
   }, [client, projectId, refreshKey, reloadNonce, sceneId])
 
-  const reload = useCallback((): void => {
+  const reload = useCallback((): Promise<GenerationHistoryReloadResult> => {
+    const pending = Promise.withResolvers<GenerationHistoryReloadResult>()
+    pendingReloads.current.push({ scope, resolve: pending.resolve })
     setReloadNonce((nonce) => nonce + 1)
-  }, [])
+    return pending.promise
+  }, [scope])
 
   const loadMore = useCallback((): void => {
     const currentCursor = cursorRef.current
@@ -174,7 +228,7 @@ export function useGenerationHistory({
           setError(result.msg || moreFailed)
           return
         }
-        const page = result.data
+        const page = result.data.items
         const merged = mergeHistoryPage(itemsRef.current, page, { projectId, sceneId })
         itemsRef.current = merged
         hasMoreRef.current = historyHasMore(page.length)
@@ -197,7 +251,7 @@ export function useGenerationHistory({
       loadMore()
       return
     }
-    reload()
+    void reload()
   }, [hasMore, items.length, loadMore, reload])
 
   return {

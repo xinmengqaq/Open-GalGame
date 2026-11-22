@@ -3,16 +3,9 @@ import type { SceneGenerationExecution } from '@application/scene-generation/mod
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 
-/**
- * 当前执行文档版本。当前产品只读写版本 7；旧信封版本、旧输入字段与阶段映射
- * 只由执行记录迁移模块读取，不在这里提供回退解析。
- * repairContext 是版本 6 内的纯可选增量，缺字段保持缺失，不升版本。
- * 缺失素材诊断字段（reference/line/nearest*）同样是版本 7 内的纯可选增量，缺字段保持缺失。
- */
 export const SCENE_GENERATION_EXECUTION_DOCUMENT_VERSION = 7
 
 const text = z.string().min(1)
-/** 生成侧校验报告；执行记录与修复上下文共用。 */
 const validationReportSchema = z.object({
   issues: z
     .array(
@@ -196,7 +189,6 @@ const operationState = z.enum([
   'failed',
   'cancelled'
 ])
-/** 业务步骤：只描述进行到哪一步，终态以 state 为权威，不携带业务 step。 */
 const operationStep = z.enum([
   'preparing',
   'generating',
@@ -347,7 +339,6 @@ export const executionDocumentSchema = z.object({
     })
     .optional(),
   repairInputSnapshotId: text.optional(),
-  /** 修复来源上下文为可选增量，不升版本；旧记录缺失时保持缺失。 */
   repairContext: z
     .object({
       sourceOperationId: text,
@@ -388,7 +379,12 @@ export const executionDocumentSchema = z.object({
     .optional(),
   replies: z.array(acceptedReply),
   pendingReply: acceptedReply.optional(),
-  fork: checkpoint.optional(),
+  fork: checkpoint
+    .extend({
+      sourceOperationId: text.optional(),
+      candidateSnapshotId: text.optional()
+    })
+    .optional(),
   forkRequest: checkpoint
     .extend({
       operationId: text,
@@ -456,9 +452,12 @@ export const executionDocumentSchema = z.object({
     .optional(),
   rollbackCommitId: text.optional(),
   workspaceCleanupPending: z.boolean().optional(),
+  pauseBoundaryCleanupPending: z.boolean().optional(),
   requiresCleanup: z.boolean().optional(),
   cancellationRequested: z.boolean().optional(),
-  interruptReason: z.enum(['paused', 'candidateConflict', 'commitUnknown']).optional(),
+  interruptReason: z
+    .enum(['paused', 'candidateConflict', 'commitUnknown', 'writeUnknown', 'readInterrupted'])
+    .optional(),
   pauseRequested: z.boolean().optional(),
   timeline: z
     .array(
@@ -485,12 +484,21 @@ export const executionDocumentSchema = z.object({
     )
     .max(64)
     .optional(),
+  /** 已发布候选修订；v7 内的纯可选增量，旧记录缺字段时保持缺失。 */
+  publishedCandidates: z
+    .array(
+      z.object({
+        candidateSnapshotId: text,
+        checkpointId: text,
+        artifactValidation: validationReportSchema
+      })
+    )
+    .optional(),
   artifactValidation: validationReportSchema.optional(),
   resumeReason: z.string().optional()
 })
 export type SceneGenerationExecutionDocument = z.infer<typeof executionDocumentSchema>
 
-/** 在持久化信任边界只按当前格式校验并保留约定字段，排除凭据和运行对象。 */
 export function executionFromDocument(value: unknown): SceneGenerationExecution {
   if (hasLegacyExecutionFields(value))
     throw new AppException({
@@ -507,10 +515,6 @@ export function executionFromDocument(value: unknown): SceneGenerationExecution 
   return parsed.data
 }
 
-/**
- * 当前读取边界拒绝旧执行内容：旧 phase、素材用途和提示词引用角色只能由
- * 迁移模块转换，不能在检查点读取时静默丢失。
- */
 function hasLegacyExecutionFields(value: unknown): boolean {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const record = value as Record<string, unknown>

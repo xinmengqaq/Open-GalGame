@@ -10,9 +10,7 @@ const PROMPT_FLUSH_DELAY_MS = 450
 
 export interface WorkbenchPromptEdits {
   editPromptBody(cardId: string, body: string): void
-  /** 立即发送已排队草稿；没有草稿时只取消排程。 */
   flush(): Promise<void>
-  /** 丢弃尚未排程发送的草稿；不发送，也不等待在途请求。 */
   discardPending(): void
   dispose(): void
 }
@@ -24,10 +22,6 @@ interface WorkbenchPromptEditDeps {
   noteServerResult(): void
 }
 
-/**
- * 提示词正文草稿的延迟合并：首次输入开启 450ms 窗口，窗口内同一卡片只保留最新正文；
- * 撤销、历史写和销毁会丢弃未发送草稿。
- */
 export function createWorkbenchPromptEdits(deps: WorkbenchPromptEditDeps): WorkbenchPromptEdits {
   const store = useWorkbenchSessionStore
   const pendingCards = new Set<string>()

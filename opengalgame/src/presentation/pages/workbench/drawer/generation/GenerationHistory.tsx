@@ -3,6 +3,7 @@ import {
   ChevronRight,
   CircleAlert,
   Clock3,
+  GitBranch,
   History,
   LockKeyhole,
   RefreshCw
@@ -11,33 +12,75 @@ import { useEffect, useRef, useState, type ReactElement, type RefObject } from '
 import { toast } from 'sonner'
 
 import type {
+  SceneGenerationForkVO,
+  SceneGenerationHistoryDetailVO,
   SceneGenerationHistorySummaryVO,
   SceneGenerationRenderStatusVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
+import { Button } from '@presentation/components/ui/button'
 import type { SceneGenerationClient } from '@interfaces/scene-generation/client/SceneGenerationClient'
 import {
   activeHistoryRowViewOf,
+  historyClock,
   historyDetailViewOf,
+  historyForkAcknowledgeAction,
+  historyForkCreateAgainAction,
+  historyForkCreatedActiveHint,
+  historyForkCreatedHint,
+  historyForkCreatedMessage,
+  historyForkCreatedTitle,
+  historyForkFeedbackOf,
+  historyForkRefreshAction,
+  historyForkRecheckAction,
+  historyForkRecheckingAction,
+  historyForkUnconfirmedMessage,
+  historyForkUnconfirmedStatusCopy,
+  historyForkUnconfirmedTitle,
+  historyForkUnknownBannerStatusCopy,
+  historyForkUnknownBannerTitle,
+  historyForkViewListAction,
   historyRowViewOf,
-  type HistoryBoundaryTone
+  unfinishedOperationRowViewOf,
+  type HistoryBoundaryTone,
+  type HistoryForkFeedback
 } from './generationHistoryPresentation'
+import type { HistoryForkSource } from './generationPresentation'
+import type { ForkFromHistoryOutcome } from './useGenerationActions'
 import { useGenerationHistory } from './useGenerationHistory'
+import { useGenerationHistoryDetail } from './useGenerationHistoryDetail'
+import type {
+  DiscoveryRefreshResult,
+  ForkUnknownController,
+  ForkUnknownEntry,
+  ForkUnknownSource
+} from './useForkUnknownRegistry'
 import './generationHistory.css'
 
 interface GenerationHistoryProps {
   client: SceneGenerationClient
   projectId: string
   sceneId: string
-  /** 当前操作进入终态或重新打开子标签时变化，用于重新读取第一页。 */
   refreshKey?: string
-  /** 只读运行状态：在列表顶部显示进行中行，不写成历史记录。 */
   activeStatus?: SceneGenerationRenderStatusVO | null
-  /** 进行中行是否显示取消入口；由调用方按现有状态动作决定。 */
+  /** 没有检查点的未完成操作；它们不是历史条目，选择只切换当前视图。 */
+  unfinished?: readonly SceneGenerationRenderStatusVO[]
+  /** 选择未完成操作；调用方只应用安全状态，不恢复。 */
+  onSelectUnfinished?: (operationId: string) => void
   canCancel?: boolean
   cancelBusy?: boolean
   onCancel?: () => void
-  /** 切到抽屉的当前运行视图。 */
   onOpenRun?: () => void
+  /** 从历史创建新分支；`viewSwitched` 说明页面是否已采纳新操作。 */
+  forkFromHistory: (source: HistoryForkSource) => Promise<ForkFromHistoryOutcome>
+  /** 新分支状态已写入页面；调用方负责切换到当前运行标签。 */
+  onForked: (fork: SceneGenerationForkVO) => void
+  /**
+   * 刷新页面级场景发现。创建成功但视图未切换时，没有检查点的新分支
+   * 只能通过这次重读进入“需要处理的操作”；未知核对必须等待它完成。
+   */
+  onRefreshDiscovery: () => Promise<DiscoveryRefreshResult>
+  /** 页面级未知分叉登记；跨历史标签与抽屉卸载保留，按工程/场景/来源隔离。 */
+  forkUnknown: ForkUnknownController
 }
 
 function HistoryStatusBadge({
@@ -91,16 +134,207 @@ function HistoryEmpty(): ReactElement {
   )
 }
 
+function HistoryForkSection({
+  detail,
+  loading,
+  error,
+  forking,
+  forkFeedback,
+  onFork,
+  onRefreshHistory,
+  onRecheckFork,
+  onBackToList,
+  onRetryDetail,
+  actionRef
+}: {
+  detail: SceneGenerationHistoryDetailVO | null
+  loading: boolean
+  error: string | null
+  forking: boolean
+  forkFeedback: HistoryForkFeedback | null
+  onFork: () => void
+  onRefreshHistory: () => void
+  onRecheckFork: () => void
+  onBackToList: () => void
+  onRetryDetail: () => void
+  actionRef: RefObject<HTMLButtonElement | null>
+}): ReactElement {
+  if (error !== null) {
+    return (
+      <div className="wb-hist__fork wb-hist__fork--error" role="alert">
+        <p className="wb-hist__fork-title">
+          <CircleAlert aria-hidden="true" />
+          分叉资格没有读出来
+        </p>
+        <p className="wb-hist__fork-copy">{error}</p>
+        <Button className="wb-gen-secondary" onClick={onRetryDetail} type="button">
+          <RefreshCw aria-hidden="true" />
+          重新核对
+        </Button>
+      </div>
+    )
+  }
+
+  if (forkFeedback?.kind === 'unconfirmed') {
+    return (
+      <div className="wb-hist__fork wb-hist__fork--unconfirmed" role="status">
+        <p className="wb-hist__fork-title">
+          <CircleAlert aria-hidden="true" />
+          {historyForkUnconfirmedTitle}
+        </p>
+        <p className="wb-hist__fork-copy">{forkFeedback.message}</p>
+        <p className="wb-hist__fork-copy">{historyForkUnconfirmedMessage}</p>
+        <p className="wb-hist__fork-copy wb-hist__fork-copy--quiet">
+          {historyForkUnconfirmedStatusCopy(
+            forkFeedback.checkStatus,
+            forkFeedback.failureMessage
+          )}
+        </p>
+        <div className="wb-hist__fork-actions">
+          <Button
+            className="wb-gen-primary wb-hist__fork-action"
+            disabled={forkFeedback.checkStatus === 'checking'}
+            onClick={onRecheckFork}
+            ref={actionRef}
+            type="button"
+          >
+            <RefreshCw aria-hidden="true" />
+            {forkFeedback.checkStatus === 'checking'
+              ? historyForkRecheckingAction
+              : historyForkRecheckAction}
+          </Button>
+          <button className="wb-hist__fork-retry" onClick={onBackToList} type="button">
+            {historyForkViewListAction}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (forkFeedback?.kind === 'created') {
+    return (
+      <div className="wb-hist__fork wb-hist__fork--created" role="status">
+        <p className="wb-hist__fork-title">
+          <GitBranch aria-hidden="true" />
+          {historyForkCreatedTitle}
+        </p>
+        <p className="wb-hist__fork-copy">{historyForkCreatedMessage}</p>
+        <Button
+          className="wb-gen-primary wb-hist__fork-action"
+          onClick={onRefreshHistory}
+          ref={actionRef}
+          type="button"
+        >
+          <RefreshCw aria-hidden="true" />
+          {historyForkRefreshAction}
+        </Button>
+        <p className="wb-hist__fork-copy wb-hist__fork-copy--quiet">
+          {forkFeedback.branchActive
+            ? historyForkCreatedActiveHint
+            : historyForkCreatedHint}
+        </p>
+        {forkFeedback.branchActive ? null : (
+          <button className="wb-hist__fork-retry" onClick={onFork} type="button">
+            {historyForkCreateAgainAction}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  if (loading || detail === null) {
+    return (
+      <div aria-live="polite" className="wb-hist__fork">
+        <p className="wb-hist__fork-loading" role="status">
+          正在核对这条记录的复制资格…
+        </p>
+      </div>
+    )
+  }
+
+  if (!detail.canFork) {
+    return (
+      <div className="wb-hist__fork wb-hist__fork--blocked">
+        <p className="wb-hist__fork-title">
+          <LockKeyhole aria-hidden="true" />
+          不能从这里分叉
+        </p>
+        <p className="wb-hist__fork-copy">{detail.forkReason ?? '这条记录不能分叉。'}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="wb-hist__fork">
+      <p className="wb-hist__fork-title">
+        <GitBranch aria-hidden="true" />
+        从这里分叉
+      </p>
+      <p className="wb-hist__fork-copy">
+        会把这条记录的候选复制到新分支；原记录、原分支和正式作品都保持不变。
+      </p>
+      <Button
+        aria-busy={forking}
+        className="wb-gen-primary wb-hist__fork-action"
+        disabled={forking}
+        onClick={onFork}
+        ref={actionRef}
+        type="button"
+      >
+        {forking ? (
+          <>
+            <span aria-hidden="true" className="wb-gen-spinner" />
+            正在创建分支…
+          </>
+        ) : (
+          <>
+            <GitBranch aria-hidden="true" />
+            从这里分叉
+          </>
+        )}
+      </Button>
+      {forkFeedback?.kind === 'failed' ? (
+        <div className="wb-hist__fork-error" role="alert">
+          <CircleAlert aria-hidden="true" />
+          <div>
+            <p>{forkFeedback.message}</p>
+            <p>原记录和分支保持不变，可以直接重试。</p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function HistoryDetail({
   backRef,
   onBack,
-  record
+  record,
+  detail,
+  detailLoading,
+  detailError,
+  forking,
+  forkFeedback,
+  onFork,
+  onRefreshHistory,
+  onRecheckFork,
+  onRetryDetail
 }: {
   backRef: RefObject<HTMLButtonElement | null>
   onBack: () => void
   record: SceneGenerationHistorySummaryVO
+  detail: SceneGenerationHistoryDetailVO | null
+  detailLoading: boolean
+  detailError: string | null
+  forking: boolean
+  forkFeedback: HistoryForkFeedback | null
+  onFork: () => void
+  onRefreshHistory: () => void
+  onRecheckFork: () => void
+  onRetryDetail: () => void
 }): ReactElement {
-  const detail = historyDetailViewOf(record)
+  const detailView = historyDetailViewOf(record)
+  const forkActionRef = useRef<HTMLButtonElement | null>(null)
   return (
     <div className="wb-hist__detail wb-hist-page">
       <div className="wb-hist__detail-bar">
@@ -123,35 +357,48 @@ export function HistoryDetail({
           <span aria-hidden="true" className="wb-hist__detail-node" />
           <p className="wb-hist__detail-kicker">
             <Clock3 aria-hidden="true" />
-            {detail.clock}
+            {detailView.clock}
           </p>
-          <h2 className="wb-hist__detail-title">{detail.summary}</h2>
+          <h2 className="wb-hist__detail-title">{detailView.summary}</h2>
           <div className="wb-hist__detail-badges">
-            <HistoryStatusBadge label={detail.boundary} tone={detail.tone} />
+            <HistoryStatusBadge label={detailView.boundary} tone={detailView.tone} />
           </div>
           <dl className="wb-hist__meta">
             <div>
               <dt>记录时间</dt>
-              <dd>{detail.time}</dd>
+              <dd>{detailView.time}</dd>
             </div>
             <div>
               <dt>操作边界</dt>
-              <dd>{detail.boundary}</dd>
+              <dd>{detailView.boundary}</dd>
             </div>
             <div>
               <dt>所处阶段</dt>
-              <dd>{detail.stage}</dd>
+              <dd>{detailView.stage}</dd>
             </div>
-            {detail.failureReason !== null ? (
+            {detailView.failureReason !== null ? (
               <div data-tone="danger">
                 <dt>失败原因</dt>
-                <dd>{detail.failureReason}</dd>
+                <dd>{detailView.failureReason}</dd>
               </div>
             ) : null}
           </dl>
+          <HistoryForkSection
+            actionRef={forkActionRef}
+            detail={detail}
+            error={detailError}
+            forkFeedback={forkFeedback}
+            forking={forking}
+            loading={detailLoading}
+            onBackToList={onBack}
+            onFork={onFork}
+            onRecheckFork={onRecheckFork}
+            onRefreshHistory={onRefreshHistory}
+            onRetryDetail={onRetryDetail}
+          />
           <p className="wb-hist__note">
             <LockKeyhole aria-hidden="true" />
-            {detail.readonlyNote}
+            {detailView.readonlyNote}
           </p>
         </div>
       </div>
@@ -160,8 +407,146 @@ export function HistoryDetail({
 }
 
 /**
+ * 每条历史一个实例；检查点键重挂载会自然清空分叉忙态与反馈，
+ * 不需要在 effect 内同步重置状态。创建成功且已切走时只切页和刷新列表；
+ * 创建成功但视图未切换时保留创建事实和找回入口，不写成可重试失败。
+ */
+function HistoryDetailLoader({
+  backRef,
+  client,
+  forkFromHistory,
+  onBack,
+  onForked,
+  onHistoryReload,
+  onRefreshDiscovery,
+  unknownFork,
+  onUnknownFork,
+  onRecheckFork,
+  record
+}: {
+  backRef: RefObject<HTMLButtonElement | null>
+  client: SceneGenerationClient
+  forkFromHistory: (source: HistoryForkSource) => Promise<ForkFromHistoryOutcome>
+  onBack: () => void
+  onForked: (fork: SceneGenerationForkVO) => void
+  onHistoryReload: () => void
+  /** 刷新页面级场景发现；未知核对只在它真正结束后才更新状态。 */
+  onRefreshDiscovery: () => Promise<DiscoveryRefreshResult>
+  /** 这条记录仍有未确认的分叉结果；重开后继续保持未知，不回到普通分叉入口。 */
+  unknownFork: ForkUnknownEntry | null
+  onUnknownFork: (
+    source: ForkUnknownSource,
+    sourceSummary: string,
+    message: string
+  ) => void
+  onRecheckFork: (source: ForkUnknownSource) => void
+  record: SceneGenerationHistorySummaryVO
+}): ReactElement {
+  const detail = useGenerationHistoryDetail({ client, record })
+  const [forking, setForking] = useState(false)
+  const [forkFeedback, setForkFeedback] = useState<HistoryForkFeedback | null>(null)
+  const forkGuard = useRef(false)
+  const reloadDetail = detail.reload
+
+  const retryDetail = (): void => {
+    setForkFeedback(null)
+    reloadDetail()
+  }
+
+  /** 已创建但未切换：先把新分支读进页面发现，再回列表让作者自己找。 */
+  const refreshAfterFork = (): void => {
+    onHistoryReload()
+    void onRefreshDiscovery()
+    onBack()
+  }
+
+  /** 通信未知的核对由页面级登记执行；这里只触发，不猜测结果。 */
+  const recheckFork = (): void => {
+    onRecheckFork(record)
+  }
+
+  const fork = async (): Promise<void> => {
+    if (!detail.detail?.canFork || forkGuard.current) return
+    forkGuard.current = true
+    setForking(true)
+    setForkFeedback(null)
+    try {
+      const outcome = await forkFromHistory({
+        projectId: record.projectId,
+        sceneId: record.sceneId,
+        threadId: record.threadId,
+        branchId: record.branchId,
+        checkpointId: record.checkpointId
+      })
+      if (outcome.kind === 'forked') {
+        const source = outcome.fork.source
+        const label =
+          source.createdAt === undefined
+            ? source.summary
+            : `${historyClock(source.createdAt)} · ${source.summary}`
+        if (outcome.viewSwitched) {
+          onHistoryReload()
+          toast.success(`已从「${label}」创建新分支`, {
+            id: 'generation-fork-success',
+            description: '原记录和正式作品保持不变，已切换到新分支。',
+            duration: 8000
+          })
+          onForked(outcome.fork)
+          return
+        }
+        toast.success(`已从「${label}」创建新分支`, {
+          id: 'generation-fork-success',
+          description:
+            '原记录和正式作品保持不变；没有自动切换视图，新分支可从 AI 历史找到。',
+          duration: 8000
+        })
+        /* 只刷新发现列表，不抢当前视图；作者回到 AI 历史即可看到新分支。 */
+        void onRefreshDiscovery()
+      }
+      const feedback = historyForkFeedbackOf(outcome)
+      if (feedback === null) return
+      if (feedback.kind === 'unconfirmed') {
+        onUnknownFork(record, record.message, feedback.message)
+      }
+      setForkFeedback(feedback)
+    } finally {
+      forkGuard.current = false
+      setForking(false)
+    }
+  }
+
+  const feedback: HistoryForkFeedback | null =
+    unknownFork === null
+      ? forkFeedback
+      : {
+          kind: 'unconfirmed',
+          message: unknownFork.message,
+          checkStatus: unknownFork.status,
+          failureMessage: unknownFork.failureMessage
+        }
+
+  return (
+    <HistoryDetail
+      backRef={backRef}
+      detail={detail.detail}
+      detailError={detail.error}
+      detailLoading={detail.loading}
+      forkFeedback={feedback}
+      forking={forking}
+      onBack={onBack}
+      onFork={() => void fork()}
+      onRecheckFork={recheckFork}
+      onRefreshHistory={refreshAfterFork}
+      onRetryDetail={retryDetail}
+      record={record}
+    />
+  )
+}
+
+/**
  * AI 历史：当前场景的真实操作摘要列表与标签内只读详情。记录字段只来自
- * `SceneGenerationHistorySummaryVO`；不展示操作标识、路径、候选或分叉入口。
+ * `SceneGenerationHistorySummaryVO`；详情按需读取后端证明的分叉资格。
+ * 不展示操作标识、路径或检查点内部。
  */
 export function GenerationHistory({
   client,
@@ -169,10 +554,16 @@ export function GenerationHistory({
   sceneId,
   refreshKey,
   activeStatus = null,
+  unfinished = [],
+  onSelectUnfinished,
   canCancel = false,
   cancelBusy = false,
   onCancel,
-  onOpenRun
+  onOpenRun,
+  forkFromHistory,
+  onForked,
+  onRefreshDiscovery,
+  forkUnknown
 }: GenerationHistoryProps): ReactElement {
   const history = useGenerationHistory({ client, projectId, sceneId, refreshKey })
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -184,11 +575,17 @@ export function GenerationHistory({
       ? null
       : (history.items.find((item) => item.checkpointId === selectedId) ?? null)
   const detailId = selected?.checkpointId ?? null
+  const selectedUnknownFork =
+    selected === null ? null : forkUnknown.find(selected)
   const historyError = history.error
   const historyCount = history.items.length
   const retryHistory = history.retry
   const activeRow = activeHistoryRowViewOf(activeStatus)
-  const showEmptyState = history.view === 'empty' && activeRow === null
+  const visibleUnfinished = unfinished.filter(
+    (operation) => operation.operationId !== activeStatus?.operationId
+  )
+  const showEmptyState =
+    history.view === 'empty' && activeRow === null && visibleUnfinished.length === 0
 
   useEffect(() => {
     if (detailId !== null) {
@@ -214,8 +611,30 @@ export function GenerationHistory({
     toast.dismiss('generation-history-error')
   }, [historyError, historyCount, retryHistory])
 
+  const recheckUnknownFork = (source: ForkUnknownSource): void => {
+    void forkUnknown.recheck(source, {
+      history: history.reload,
+      discovery: onRefreshDiscovery
+    })
+  }
+
   if (selected) {
-    return <HistoryDetail backRef={backRef} onBack={() => setSelectedId(null)} record={selected} />
+    return (
+      <HistoryDetailLoader
+        backRef={backRef}
+        client={client}
+        forkFromHistory={forkFromHistory}
+        key={selected.checkpointId}
+        onBack={() => setSelectedId(null)}
+        onForked={onForked}
+        onHistoryReload={history.reload}
+        onRecheckFork={recheckUnknownFork}
+        onRefreshDiscovery={onRefreshDiscovery}
+        onUnknownFork={forkUnknown.markUnknown}
+        record={selected}
+        unknownFork={selectedUnknownFork}
+      />
+    )
   }
 
   return (
@@ -243,6 +662,100 @@ export function GenerationHistory({
         role="region"
         tabIndex={0}
       >
+        {forkUnknown.entries.length > 0 ? (
+          <section
+            aria-label={historyForkUnknownBannerTitle}
+            className="wb-hist__fork-unknown"
+            role="status"
+          >
+            <div className="wb-hist__fork-unknown-head">
+              <CircleAlert aria-hidden="true" />
+              <p className="wb-hist__fork-unknown-title">
+                {historyForkUnknownBannerTitle}
+              </p>
+              <span className="wb-hist__count">{forkUnknown.entries.length} 项</span>
+            </div>
+            <ul className="wb-hist__fork-unknown-list">
+              {forkUnknown.entries.map((entry) => (
+                <li className="wb-hist__fork-unknown-item" key={entry.key}>
+                  <p className="wb-hist__fork-unknown-copy">
+                    来源「{entry.sourceSummary}」：{entry.message}
+                  </p>
+                  <p className="wb-hist__fork-unknown-copy">
+                    {historyForkUnknownBannerStatusCopy(
+                      entry.status,
+                      entry.failureMessage
+                    )}
+                  </p>
+                  <div className="wb-hist__fork-unknown-actions">
+                    <button
+                      className="wb-hist__fork-unknown-recheck"
+                      disabled={entry.status === 'checking'}
+                      onClick={() => recheckUnknownFork(entry)}
+                      type="button"
+                    >
+                      <RefreshCw aria-hidden="true" />
+                      {entry.status === 'checking'
+                        ? historyForkRecheckingAction
+                        : historyForkRecheckAction}
+                    </button>
+                    <button
+                      className="wb-hist__fork-unknown-ack"
+                      onClick={() => forkUnknown.acknowledge(entry)}
+                      type="button"
+                    >
+                      {historyForkAcknowledgeAction}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {visibleUnfinished.length > 0 ? (
+          <section aria-label="需要处理的操作" className="wb-hist__unfinished">
+            <div className="wb-hist__unfinished-head">
+              <span className="wb-hist__unfinished-title">需要处理的操作</span>
+              <span className="wb-hist__count">{visibleUnfinished.length} 项</span>
+            </div>
+            <p className="wb-hist__unfinished-note">
+              会阻止新生成的进行中记录也能从这里打开；没有检查点的遗留可以继续，
+              写入或提交回执不明的记录可以重新核对。选择只切换当前视图，不会自动继续或调用模型。
+            </p>
+            <ol className="wb-hist__unfinished-list">
+              {visibleUnfinished.map((operation) => {
+                const row = unfinishedOperationRowViewOf(operation)
+                return (
+                  <li className="wb-hist__unfinished-item" key={operation.operationId}>
+                    <button
+                      className="wb-hist__unfinished-row"
+                      disabled={onSelectUnfinished === undefined}
+                      onClick={() => onSelectUnfinished?.(operation.operationId)}
+                      title={row.message}
+                      type="button"
+                    >
+                      <span className="wb-hist__time">{row.time}</span>
+                      <span className="wb-hist__main">
+                        <HistoryStatusBadge label={row.status} tone={row.tone} />
+                        <span className="wb-hist__message">{row.message}</span>
+                        {row.canResume ? (
+                          <span className="wb-hist__unfinished-flag">可继续</span>
+                        ) : row.canVerify ? (
+                          <span className="wb-hist__unfinished-flag" data-tone="wait">
+                            待核对
+                          </span>
+                        ) : null}
+                      </span>
+                      <ChevronRight aria-hidden="true" className="wb-hist__chevron" />
+                    </button>
+                  </li>
+                )
+              })}
+            </ol>
+          </section>
+        ) : null}
+
         {activeRow !== null ? (
           <div className="wb-hist__active" data-tone={activeRow.tone}>
             <div className="wb-hist__active-main">

@@ -12,7 +12,6 @@
   font-size: 14px;
 }
 
-/* 工作台嵌入态：半透明浮层 + 状态点，不使用 Sonner 默认白卡、边框和左侧色条。 */
 .host.embedded[data-sonner-toaster] {
   --normal-bg: transparent;
   --normal-border: transparent;
@@ -83,7 +82,6 @@
   font-weight: 500;
 }
 
-/* 关闭键落在右上角外侧，不压状态点。 */
 .host.embedded [data-sonner-toast][data-styled='true'] [data-close-button] {
   top: 0;
   right: 0;

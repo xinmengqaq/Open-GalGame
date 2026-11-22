@@ -51,7 +51,6 @@ interface InputSourceContextMenuProps {
   onClose: () => void
 }
 
-/** 文件、文件夹和空白区域菜单。限制在窗口内，点击外部或 Escape 关闭。 */
 export function InputSourceContextMenu({
   menu,
   targetName,

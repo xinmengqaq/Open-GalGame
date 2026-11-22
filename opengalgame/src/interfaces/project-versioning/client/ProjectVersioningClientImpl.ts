@@ -18,10 +18,6 @@ import {
 } from '../contracts/ProjectVersioningResponseSchema'
 import type { ProjectVersioningClient } from './ProjectVersioningClient'
 
-/**
- * 把未知桥接结果收成已校验响应。传输中断或结构不符时返回通信失败。
- * @returns 校验后的响应，或安全通信失败。
- */
 async function readVersioningResult<T>(
   action: () => Promise<unknown>,
   parse: (value: unknown) => AjaxResult<T> | null
@@ -35,9 +31,6 @@ async function readVersioningResult<T>(
 }
 
 export class ProjectVersioningClientImpl implements ProjectVersioningClient {
-  /**
-   * @param bridge - 与主进程通信的固定桥接。
-   */
   constructor(private readonly bridge: DesktopBridge) {}
 
   listHistory(request: ListVersionHistoryDTO): Promise<AjaxResult<VersionHistoryPageVO>> {

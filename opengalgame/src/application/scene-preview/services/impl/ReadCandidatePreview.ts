@@ -24,7 +24,6 @@ export interface SceneCandidatePreviewApplicationDependencies {
   readonly compatibility: SceneCompatibilityGateway
 }
 
-/** 只读编排固定候选。不缓存，不回退正式工程，不扩展播放定位。 */
 export class ReadCandidatePreview implements SceneCandidatePreviewApplicationService {
   constructor(private readonly deps: SceneCandidatePreviewApplicationDependencies) {}
 

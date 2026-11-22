@@ -6,6 +6,7 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 import type { VersionTransactionFact } from '@domain/project-versioning/models/VersionTransactionFact'
 import { requireOperationId } from '@domain/project-versioning/services/versionProtocolGuards'
+import { assertRepositoryPaths, requireCommitScope } from './versionCommitScope'
 
 import { bindPreparedOperation } from '@domain/project-versioning/services/bindPreparedOperation'
 import { resolveCommitTransition } from '@domain/project-versioning/services/resolveCommitTransition'
@@ -68,7 +69,6 @@ const SYSTEM_HISTORY_KEEP = 100
 const SCOPE_FINGERPRINT = 'scope'
 const CHANGED_AT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u
 
-/** 应用服务的端口依赖。身份生成由启动装配注入。 */
 export interface ProjectVersioningApplicationDependencies {
   readonly transactions: VersionTransactionGateway
   readonly records: VersionOperationRecordGateway
@@ -77,14 +77,9 @@ export interface ProjectVersioningApplicationDependencies {
   readonly nextId: () => string
 }
 
-/**
- * 编排基线、提交、结算、回退和用户历史。
- * 只依赖端口和纯领域规则，不读取作品文件，也不保存权威操作状态。
- */
 export class ManageProjectVersioning implements ProjectVersioningApplicationService {
   constructor(private readonly deps: ProjectVersioningApplicationDependencies) {}
 
-  /** @throws {AppException} 范围不合法或仓库不能建立基线。 */
   async initializeBaseline(request: InitializeWorkBaselineDTO): Promise<WorkBaselineVO> {
     requireText(request.projectId, '工程身份不正确')
     assertDeclaredPaths('baseline-scope', request.initialPaths, [])
@@ -94,13 +89,11 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     })
   }
 
-  /** @throws {AppException} 工程身份不合法或基线无法读取。 */
   async readWorkBaseline(projectId: string): Promise<WorkBaselineVO | null> {
     requireText(projectId, '工程身份不正确')
     return this.deps.transactions.readBaseline(projectId)
   }
 
-  /** @throws {AppException} 没有可靠基线、范围不合法或准备事实不能持久化。 */
   async prepareOperation(request: PrepareVersionOperationDTO): Promise<PreparedVersionOperationVO> {
     requireText(request.projectId, '工程身份不正确')
     requireText(request.sourceModule, '来源模块不正确')
@@ -128,7 +121,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     }
   }
 
-  /** @throws {AppException} 调用方身份改绑工程、来源、目标或声明范围。 */
   async bindCallerOperation(request: BindCallerVersionOperationDTO): Promise<void> {
     requireText(request.projectId, '工程身份不正确')
     requireText(request.sourceModule, '来源模块不正确')
@@ -145,7 +137,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     })
   }
 
-  /** 按工程读取调用方关联。没有记录时返回 null，不表示可以重提。 */
 
   async readCallerOperation(
     request: ReadCallerVersionOperationDTO
@@ -159,7 +150,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     )
   }
 
-  /** 调用方没有工程时按来源查找。多个工程归属矛盾时失败。 */
 
   async findCallerOperation(
     request: FindCallerVersionOperationDTO
@@ -201,7 +191,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     }
   }
 
-  /** 读取已经准备好的操作。不存在或工程不符时失败，不生成新身份。 */
   async readPreparedOperation(
     request: ReadVersionOperationDTO
   ): Promise<PreparedVersionOperationVO> {
@@ -214,7 +203,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     }
   }
 
-  /** @throws {AppException} 身份冲突、基线变化、前置条件拒绝、确定失败或结果不明。 */
   async commitOperation(
     request: CommitVersionOperationDTO,
     requirePreconditions: () => void | Promise<void>
@@ -272,11 +260,17 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
         baselineRef: record.baselineRef,
         contentFingerprint: fingerprint,
         changes: retentions,
+        scopeBaseline: request.scopeBaseline,
         backupBeforeRestore: record.sourceModule === 'project-files',
         verify: async (observation) => {
           if (
-            observation.baseline.baselineRef !== record.baselineRef ||
-            observation.baseline.revisionRef !== record.revisionRef ||
+            request.scopeBaseline === undefined &&
+            (observation.baseline.baselineRef !== record.baselineRef ||
+              observation.baseline.revisionRef !== record.revisionRef)
+          ) {
+            fail(ErrorCodes.operationConflict, '作品基线或目标文件已变化，已拒绝写入')
+          }
+          if (
             observation.subsequentPaths.some(
               (path) => record.changePaths.includes(path) || record.watchedPaths.includes(path)
             )
@@ -318,7 +312,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     }
   }
 
-  /** 按技术 WAL 恢复指定来源模块的未完成操作。 */
   recoverProject(projectId: string, sourceModule: string): Promise<void> {
     requireText(projectId, '工程身份不正确')
     requireText(sourceModule, '来源模块不正确')
@@ -380,7 +373,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     )
   }
 
-  /** @throws {AppException} 操作身份不合法或结算证据无法读取。 */
   async readOperationSettlement(request: ReadVersionOperationDTO): Promise<VersionSettlementVO> {
     requireText(request.projectId, '工程身份不正确')
     resolveVersionSettlement(null, request.operationId)
@@ -404,7 +396,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     )
   }
 
-  /** @throws {AppException} 证据不足、后续修改冲突、确定失败或回退结果不明。 */
   async rollbackOperation(request: RollbackVersionOperationDTO): Promise<VersionRollbackVO> {
     requireText(request.projectId, '工程身份不正确')
     const record = await this.requireRecord(request.projectId, request.operationId)
@@ -460,7 +451,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     }
   }
 
-  /** @throws {AppException} 筛选不合法，或历史投影不能修复。 */
   async listHistory(request: ListVersionHistoryDTO): Promise<VersionHistoryPageVO> {
     requireText(request.projectId, '工程身份不正确')
     if (!Number.isInteger(request.pageSize) || request.pageSize < 1) {
@@ -478,7 +468,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     )
   }
 
-  /** @throws {AppException} 历史不存在、已清理，或对应回退不能完成。 */
   async undoHistoryEntry(request: UndoVersionHistoryDTO): Promise<VersionHistoryUndoVO> {
     requireText(request.projectId, '工程身份不正确')
     requireText(request.historyId, '历史条目不正确')
@@ -492,7 +481,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     return { historyId: request.historyId, state: '已回退' }
   }
 
-  /** @throws {AppException} 边界不属于工程，或清理决定不能持久化。 */
   async clearHistory(request: ClearVersionHistoryDTO): Promise<VersionHistoryClearVO> {
     requireText(request.projectId, '工程身份不正确')
     const entries = await this.loadHistory(request.projectId)
@@ -510,7 +498,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     return { clearedCount: selected.length }
   }
 
-  /** @throws {AppException} 超额历史的清理决定不能持久化。释放失败留到下次维护。 */
   async pruneOperationRecords(request: PruneVersionRecordsDTO): Promise<void> {
     requireText(request.projectId, '工程身份不正确')
     await this.loadHistory(request.projectId)
@@ -526,11 +513,18 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
     requireSaveMode(request.saveMode)
     requireContentSource(request.contentSource)
     if (request.input.kind === 'files') {
+      if (request.scopeBaseline !== undefined) {
+        fail(ErrorCodes.invalidRequest, '合并提交只用于不可变候选')
+      }
       for (const change of request.input.changes) requireFileChange(change)
       return
     }
     if (request.input.kind === 'candidate') {
       requireText(request.input.candidateRef, '候选引用不正确')
+      requireCommitScope(
+        request.scopeBaseline,
+        request.input.changes.map((change) => change.relativePath)
+      )
       return
     }
     fail(ErrorCodes.invalidRequest, '提交内容不正确')
@@ -747,7 +741,6 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
           record.commitIntent.retentions.map((retention) => ({ ...retention, retentionRef: null }))
         )
       } catch {
-        // 释放失败保留原凭据，下次维护再试，不改已经可靠的结算。
       }
     }
   }
@@ -774,13 +767,11 @@ export class ManageProjectVersioning implements ProjectVersioningApplicationServ
       try {
         await this.deps.history.markIncomplete(projectId)
       } catch {
-        // 投影连失效标记都写不进去时，下次读取仍按不完整事实处理。
       }
     }
   }
 }
 
-/** 显式回退把可靠已提交视为待回退；未提交、无变更和待核对仍交给领域规则拒绝。 */
 function toRollbackFact(view: VersionTransactionView | null): VersionTransactionFact | null {
   if (!view) return null
   return {
@@ -925,21 +916,6 @@ function assertDeclaredPaths(
   })
   assertRepositoryPaths(changePaths)
   assertRepositoryPaths(watchedPaths)
-}
-
-function assertRepositoryPaths(paths: readonly string[]): void {
-  for (const path of paths) {
-    if (path.startsWith('/') || path.startsWith('\\') || /^[A-Za-z]:/u.test(path)) {
-      fail(ProjectVersioningErrorCodes.pathOutOfScope, '路径必须位于工程内')
-    }
-    if (
-      path
-        .split('/')
-        .some((part) => part === '' || part === '.' || part === '..' || part === '.git')
-    ) {
-      fail(ProjectVersioningErrorCodes.pathOutOfScope, '路径必须位于工程内')
-    }
-  }
 }
 
 function copyTarget(target: VersionTarget): VersionTarget {

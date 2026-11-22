@@ -34,7 +34,6 @@ export type PreviewDialogueServiceDependencies = {
   readonly sessions: ScenePreviewSessionStore
 }
 
-/** 编排草稿覆盖、选句与前后句播放。 */
 export class PreviewDialogueService {
   constructor(private readonly deps: PreviewDialogueServiceDependencies) {}
 

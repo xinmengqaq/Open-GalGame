@@ -8,12 +8,6 @@ import type {
   ConnectionExtension
 } from '@domain/connections/models/ConnectionSettings'
 
-/**
- * 按供应商取允许写入 SDK 的键。
- * 两组目前相同，是 OpenAI 与 Anthropic 都能接受的交集。
- * 自定义 `User-Agent` 可以放在 `defaultHeaders`，但 LangChain 只会把前缀拼在前面，不能完全替换。
- * 后续供应商分叉时只改对应列表。
- */
 const allowedProviderOptionKeys = {
   'openai-compatible': [
     'defaultHeaders',
@@ -29,10 +23,6 @@ const allowedProviderOptionKeys = {
   ] as const satisfies readonly (keyof AnthropicClientOptions)[]
 }
 
-/**
- * 这些键属于 SDK 类型，但会被 LangChain 覆盖、由应用控制，或不能用 JSON 表达。
- * 保留在表里，是为了 SDK 改名时让这里编译失败。
- */
 const rejectedProviderOptionKeys = [
   'timeout',
   'maxRetries',
@@ -53,10 +43,6 @@ type AllowedProviderOptionKey =
   | (typeof allowedProviderOptionKeys)['openai-compatible'][number]
   | (typeof allowedProviderOptionKeys.anthropic)[number]
 
-/**
- * 按当前供应商校验扩展对象。允许键从该供应商的表读取，不使用两边的并集。
- * @throws {AppException} 键未知、不会生效，或值不是该键要求的 JSON 形状。消息不含值。
- */
 export function validateProviderOptions(
   providerId: ConnectionAccess['providerId'],
   extension: ConnectionExtension
@@ -69,7 +55,6 @@ export function validateProviderOptions(
   }
 }
 
-/** 按键检查值形状。未知键在进入这里之前已经拒绝。 */
 function validateAllowedValue(key: AllowedProviderOptionKey, value: unknown): void {
   if (key === 'defaultHeaders' || key === 'defaultQuery') {
     requireStringRecord(value, key)
@@ -84,7 +69,6 @@ function validateAllowedValue(key: AllowedProviderOptionKey, value: unknown): vo
     throw invalidValue(key)
 }
 
-/** 键必须非空，值必须是字符串。 */
 function requireStringRecord(value: unknown, key: string): void {
   if (!isPlainObject(value)) throw invalidValue(key)
   for (const [entryKey, entryValue] of Object.entries(value)) {
@@ -92,10 +76,6 @@ function requireStringRecord(value: unknown, key: string): void {
   }
 }
 
-/**
- * `fetchOptions` 只接受 JSON 可表达的普通对象，拒绝函数、dispatcher 等运行时对象。
- * @throws {AppException} 出现非 JSON 值或危险键。
- */
 function rejectNonJson(value: unknown, key: string, seen = new Set<unknown>()): void {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return
   if (typeof value === 'number') {
@@ -118,14 +98,12 @@ function rejectNonJson(value: unknown, key: string, seen = new Set<unknown>()): 
   }
 }
 
-/** 数组、null 和带自定义原型的对象都不是普通 JSON 对象。 */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const prototype = Object.getPrototypeOf(value)
   return prototype === Object.prototype || prototype === null
 }
 
-/** 点名被拒绝的键，不带用户填写的值。 */
 function rejectedKey(key: string, knownIneffective = false): AppException {
   return new AppException({
     code: ConnectionErrorCodes.invalidConnectionConfig,
@@ -135,7 +113,6 @@ function rejectedKey(key: string, knownIneffective = false): AppException {
   })
 }
 
-/** 点名形状不对的键，不回显值。 */
 function invalidValue(key: string): AppException {
   return new AppException({
     code: ConnectionErrorCodes.invalidConnectionConfig,

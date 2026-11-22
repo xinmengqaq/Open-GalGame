@@ -10,7 +10,6 @@ export interface CandidateReadFact {
   readonly end: number
   readonly version: string
   readonly digest: string
-  /** 该范围最近一次读取的判定。未变化后重复读取仍为 unchanged。 */
   readonly repeat: CandidateReadRepeat
 }
 
@@ -59,7 +58,6 @@ export function candidateReadFacts(budget: ExecutionBudget): readonly CandidateR
   return ledgers.get(budget)?.facts ?? []
 }
 
-/** 最近 5 条回读事实，每行 `- <path> <start>-<end>`，未变化行追加 `（已读，内容未变）`。 */
 export function readLedgerBlock(budget: ExecutionBudget): string {
   const facts = candidateReadFacts(budget)
   if (facts.length === 0) return ''

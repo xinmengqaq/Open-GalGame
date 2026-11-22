@@ -13,7 +13,6 @@ interface PreviewSaveNoticeProps {
   readonly onCheckSettlement: () => void
 }
 
-/** 保存失败和待确认都留在编辑任务附近，不藏进浮层。 */
 export function PreviewSaveNotice({
   state,
   blockedReason,

@@ -12,9 +12,6 @@ import type {
   ProjectInputSourceSummary
 } from '@domain/project-files/models/ProjectInputSource'
 
-/**
- * @returns 不带来源正文的摘要。
- */
 export function toProjectInputSourceSummaryVO(
   summary: ProjectInputSourceSummary,
   parentFolderId: string | null
@@ -38,11 +35,6 @@ export function toProjectInputSourceSummaryVO(
   }
 }
 
-/**
- * 把领域来源转换成应用结果。
- * 文档导入格式从领域的 importFormat 写成 importInfo.format。
- * @returns 不含本机路径和媒体字节的来源详情。
- */
 export function toProjectInputSourceVO(source: ProjectInputSource): ProjectInputSourceVO {
   switch (source.contentKind) {
     case 'text':
@@ -61,9 +53,6 @@ export function toProjectInputSourceVO(source: ProjectInputSource): ProjectInput
   }
 }
 
-/**
- * @returns 不含卡片或生成策略的来源快照。
- */
 export function toProjectInputSourcesSnapshotVO(
   projectId: string,
   readVersion: string,

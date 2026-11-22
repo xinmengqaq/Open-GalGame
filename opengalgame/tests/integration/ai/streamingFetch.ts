@@ -1,4 +1,3 @@
-/** 把既有完成响应转换为真实 SSE 分块；非流式请求和错误响应保持原协议。 */
 export function streamingFetch(fetcher: typeof fetch): typeof fetch {
   return async (url, init) => {
     const response = await fetcher(url, init)

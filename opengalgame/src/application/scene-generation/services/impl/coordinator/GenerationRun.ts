@@ -1,8 +1,10 @@
 import type { SceneGenerationScopeDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type {
   SceneGenerationExecution,
+  SceneGenerationPublishedCandidate,
   SceneGenerationRuntime,
   SceneGenerationWorkflowOutcome,
+  SceneGenerationWorkflowProgress,
   SceneGenerationWorkspace
 } from '@application/scene-generation/models/SceneGenerationExecution'
 import {
@@ -21,12 +23,15 @@ import {
   operationKey,
   threadKey
 } from '@application/scene-generation/policies/SceneGenerationIdempotency'
+import { scheduleLongTimeout } from '@common/longTimeout'
 import type {
   SceneGenerationRenderProgressEventVO,
   SceneGenerationTimelineEntryVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { SceneGenerationWriteOutcomeUnknown } from '@application/scene-generation/errors/SceneGenerationWriteOutcomeUnknown'
+import { safeFailureWithDiagnosticRef } from '../SceneGenerationFailureFacts'
 import type {
   ActiveSceneGeneration,
   SceneGenerationDependencies
@@ -35,17 +40,17 @@ import type { GenerationCommit } from './GenerationCommit'
 import type { GenerationRecovery } from './GenerationRecovery'
 import type { ExecutionSerialQueue } from './ExecutionSerialQueue'
 
-/** Coordinator 提供给运行编排的稳定事实与公开编排面。 */
 export interface GenerationRunHost {
   readonly deps: SceneGenerationDependencies
   isActive(execution: SceneGenerationExecution): boolean
-  release(execution: SceneGenerationExecution): void
+  /** 当前活动表是否仍持有这一份运行；旧运行不能用同操作的新代次身份写回。 */
+  owns(active: ActiveSceneGeneration): boolean
+  release(active: ActiveSceneGeneration): void
   requireCurrentBaseline(
     execution: SceneGenerationExecution
   ): Promise<SceneGenerationExecution>
 }
 
-/** 提交与恢复协作者共用的持久化边界，执行状态只由运行编排原地推进。 */
 export interface GenerationRuntimePort {
   readonly deps: SceneGenerationDependencies
   updateExecution(
@@ -56,12 +61,20 @@ export interface GenerationRuntimePort {
     execution: SceneGenerationExecution
     canContinue: boolean | undefined
   }>
+  /**
+   * 提交门：与暂停受理共用同一串行段裁决。已受理暂停优先，保留边界与候选；
+   * 否则原子进入 committing，此后到达的暂停只能被拒绝。
+   * @returns 是否允许执行不可撤销的正式提交。
+   */
+  enterCommitGate(
+    active: ActiveSceneGeneration,
+    preview: SceneGenerationExecution['preview'],
+    signal: AbortSignal
+  ): Promise<boolean>
+  /** 正式作品提交完成后清除可提交结果的暂停边界。 */
+  clearPauseBoundary(execution: SceneGenerationExecution): Promise<void>
 }
 
-/**
- * 协调候选工作区、工作流、真实读取、提交及事务失败恢复；等待不持有执行预算或作品锁。
- * 时间线与状态写入归这里，活动操作表仍由 Coordinator 持有。
- */
 export class GenerationRun implements GenerationRuntimePort {
   readonly deps: SceneGenerationDependencies
 
@@ -74,43 +87,131 @@ export class GenerationRun implements GenerationRuntimePort {
     this.deps = host.deps
   }
 
-  /**
-   * @param active - 当前操作及直接取消信号。
-   * @throws {AppException} 执行失败，后续清理或回退失败同时保留在 cause。
-   */
   async execute(
     active: ActiveSceneGeneration,
     workflowExecution: (runtime: SceneGenerationRuntime) => Promise<SceneGenerationWorkflowOutcome>,
     restore: boolean
   ): Promise<void> {
+    // 迟到的旧运行不能再推进任何持久状态或提交。
+    if (!this.host.owns(active)) return
     const startedAt = this.deps.now()
     const previousElapsed = active.execution.budget.activeElapsedMs
-    const signal = active.controller.signal
+    const userSignal = active.controller.signal
+    // 活跃期限到期只中止本次执行，不冒充用户取消；恢复边界据用户信号区分终态。
+    const timeoutController = new AbortController()
+    const cancelActiveTimer =
+      this.deps.activeLimitMs === undefined
+        ? undefined
+        : scheduleLongTimeout(this.deps.activeLimitMs, () => {
+            timeoutController.abort(
+              new AppException({
+                code: ErrorCodes.invalidRequest,
+                msg: '活跃执行时间已用尽',
+                diagnosticCategory: 'context'
+              })
+            )
+          })
+    const signal = AbortSignal.any([userSignal, timeoutController.signal])
     try {
       signal.throwIfAborted()
       if (restore) {
         const inspected = await this.host.requireCurrentBaseline(active.execution)
         await this.updateExecution(active, { source: inspected.source })
       }
-      // 进入 running 时显式清空上一轮人工交互，避免继续运行时携带过期的审阅入口。
+      const repairInput = active.execution.repairSource
+      // 修复输入已准备好但首个候选写入前中断：先按不可变来源把输入修订写回执行记录，
+      // 让写入恢复门把它当作已证明输入而不是未归属候选；证据不足时仍交给恢复门判断。
+      let preparedRepairInput =
+        repairInput !== undefined && active.execution.candidateSnapshotId === undefined
+          ? await this.deps.workspace.proveRepairInput(active.execution, repairInput)
+          : undefined
+      if (preparedRepairInput !== undefined) {
+        await this.updateExecution(active, {
+          repairInputSnapshotId: preparedRepairInput.candidateSnapshotId,
+          mode: 'repair',
+          workspace: {
+            workspaceId: preparedRepairInput.workspaceId,
+            rootDirectory: preparedRepairInput.rootDirectory,
+            sceneDirectory: preparedRepairInput.sceneDirectory
+          }
+        })
+      }
+      // 重建或改写工作区之前，先按本操作账本、修订归属和实际工作区证明当前候选。
+      // 证据不完整时保留工作区、候选与账本，只进入待核对；不猜测写入结果。
+      const writeRecovery = await this.deps.writeRecovery.recoverCandidateWrite(
+        active.execution,
+        async (candidateSnapshotId) => {
+          if (active.execution.candidateSnapshotId === candidateSnapshotId) return
+          await this.updateExecution(active, { candidateSnapshotId })
+        }
+      )
+      if (writeRecovery.outcome === 'unprovable') {
+        const retainedCandidate =
+          writeRecovery.candidateSnapshotId ?? active.execution.candidateSnapshotId
+        await this.updateExecution(active, {
+          state: 'interrupted',
+          interruptReason: 'writeUnknown',
+          failure: safeFailureWithDiagnosticRef(
+            new SceneGenerationWriteOutcomeUnknown(writeRecovery.reason, writeRecovery.cause),
+            retainedCandidate === undefined
+              ? undefined
+              : {
+                  candidateSnapshotId: retainedCandidate,
+                  previewAuthorization: 'readOnly'
+                }
+          ),
+          live: undefined,
+          step: undefined,
+          interaction: undefined,
+          requiresCleanup: false,
+          ...(retainedCandidate === undefined
+            ? {}
+            : { candidateSnapshotId: retainedCandidate })
+        })
+        return
+      }
+      const carryReadingStage =
+        writeRecovery.outcome === 'proven' && writeRecovery.carryReadingStage
+      if (writeRecovery.outcome === 'proven') {
+        // 先把已证明的写入绑定到执行记录，再从该修订恢复工作区；
+        // 旧检查点不再对应本次候选时，按新候选重新判定，不重放已消费的回复或暂停边界。
+        const candidateChanged =
+          active.execution.candidateSnapshotId !== writeRecovery.candidateSnapshotId
+        if (candidateChanged || writeRecovery.checkpointSuperseded)
+          await this.updateExecution(active, {
+            ...(candidateChanged
+              ? { candidateSnapshotId: writeRecovery.candidateSnapshotId }
+              : {}),
+            ...(writeRecovery.checkpointSuperseded
+              ? {
+                  checkpointId: undefined,
+                  forkRequest: undefined,
+                  step: undefined
+                }
+              : {})
+          })
+      }
+      // 进入 running 时清空上一轮人工交互；写后读取边界必须保留可证明的 reading 阶段，
+      // 否则工作流会把同一检查点误当成缺少暂停依据。
       await this.updateExecution(active, {
         state: 'running',
-        step: 'preparing',
+        ...(carryReadingStage
+          ? { step: 'reading' as const, interruptReason: 'readInterrupted' as const }
+          : { step: 'preparing' as const, interruptReason: undefined }),
         interaction: undefined
       })
       let workspace: SceneGenerationWorkspace
       let addedRevision: string | undefined
-      const repairInput = active.execution.repairSource
       if (repairInput && !active.execution.candidateSnapshotId) {
-        const materialized = await this.deps.workspace.materializeRepairInput(
-          active.execution,
-          repairInput
-        )
-        workspace = materialized
-        addedRevision = materialized.candidateSnapshotId
+        // 已证明的修复输入直接复用；未证明时才按来源物化，仍由工作区网关保证不清理无证据现场。
+        if (preparedRepairInput === undefined)
+          preparedRepairInput = await this.deps.workspace.materializeRepairInput(
+            active.execution,
+            repairInput
+          )
+        workspace = preparedRepairInput
+        addedRevision = preparedRepairInput.candidateSnapshotId
       } else if (restore || active.execution.candidateSnapshotId) {
-        // 恢复标记来自持久记录时，工作区可能已随重启丢失；已有候选修订仍按不可变修订恢复，
-        // 不能新建同名目录，也不能把未确认写入当作可继续的历史。
         const restored = await this.deps.workspace.restoreWorkspace(
           active.execution,
           active.execution.candidateSnapshotId
@@ -135,20 +236,32 @@ export class GenerationRun implements GenerationRuntimePort {
       const outcome = await workflowExecution({
         execution: structuredClone(active.execution),
         signal,
-        userAbortSignal: active.controller.signal,
-        activeTimeoutSignal: AbortSignal.any([]),
+        userAbortSignal: userSignal,
+        activeTimeoutSignal: timeoutController.signal,
         publishProgress: async (progress) => {
+          if (!this.host.owns(active)) return structuredClone(active.execution)
           if (isTerminal(active.execution)) return structuredClone(active.execution)
-          // 终态进度事件不带业务 step，表示工作流已结算的终态预算。
           const settled = isTerminal(active.execution)
           const terminalProgress = progress.step === undefined
           const { artifactValidation, ...rest } = progress
+          const publishedCandidates = publishCandidateRecord(
+            active.execution.publishedCandidates,
+            progress
+          )
           await this.updateExecution(active, {
             ...rest,
             ...(artifactValidation ? { artifactValidation } : {}),
+            ...(publishedCandidates === undefined ? {} : { publishedCandidates }),
+            // 新等待与交互、检查点和候选是同一条持久转换：启动本轮的回复已被消费，
+            // 不能留给下一次等待当作授权重放；暂停意图到达等待边界即失效。
+            ...(rest.state === 'waiting'
+              ? {
+                  pendingReply: undefined,
+                  ...(active.execution.pauseRequested === true ? { pauseRequested: false } : {})
+                }
+              : {}),
             budget: retainedBudget(active.execution.budget, {
               ...progress.budget,
-              // 终态进度携带工作流结算后的预算，检查点与执行记录必须使用同一份。
               activeElapsedMs:
                 terminalProgress && !settled
                   ? progress.budget.activeElapsedMs
@@ -160,19 +273,22 @@ export class GenerationRun implements GenerationRuntimePort {
           return structuredClone(active.execution)
         },
         recordCandidateRevision: async (revision) => {
-          // 候选已写入的事实不能因取消结算先到达而丢失。
+          if (!this.host.owns(active)) return structuredClone(active.execution)
           await this.updateExecution(active, {
             candidateSnapshotId: revision.candidateSnapshotId
           })
           return structuredClone(active.execution)
         },
         recordFailure: async (failure) => {
-          // 先落失败事实，终态阶段由工作流在副作用结算后统一发布。
+          if (!this.host.owns(active)) return structuredClone(active.execution)
           await this.updateExecution(active, { failure })
           return structuredClone(active.execution)
         }
       })
+      // 旧运行的结果不能覆盖新代次，也不能触发提交。
+      if (!this.host.owns(active)) return
       signal.throwIfAborted()
+      const waiting = outcome.state === 'waiting'
       await this.updateExecution(active, {
         checkpointId: outcome.checkpointId,
         ...(active.execution.repairSource && !active.execution.checkpointId
@@ -183,69 +299,155 @@ export class GenerationRun implements GenerationRuntimePort {
           activeElapsedMs: previousElapsed + this.deps.now() - startedAt
         }),
         live: undefined,
-        pendingReply: undefined,
-        interaction: undefined,
-        forkRequest: undefined
+        // 暂停时保留尚未执行完的修改/整组回答，显式继续后按原回复边界续做；
+        // 接受回复由 reviewAccepted 承接，避免恢复时被当成新的接受请求。
+        pendingReply:
+          outcome.state === 'interrupted' &&
+          outcome.interruptReason === 'paused' &&
+          (active.execution.pendingReply?.reply.kind === 'revise' ||
+            active.execution.pendingReply?.reply.kind === 'answers')
+            ? active.execution.pendingReply
+            : undefined,
+        // 需作者决定的等待必须与状态、完整交互、检查点和候选一次写入；
+        // 工作流已发布的等待进度在这里只补同一份权威事实。暂停请求同时消费。
+        ...(waiting
+          ? {
+              state: 'waiting' as const,
+              step: undefined,
+              interaction: outcome.interaction,
+              ...(active.execution.pauseRequested === true ? { pauseRequested: false } : {})
+            }
+          : { interaction: undefined }),
+        forkRequest: undefined,
+        // 写后读取成功或进入新的审阅/修正后，旧中断事实必须被消费；
+        // 后续真正的暂停/待核对分支会写回权威原因。
+        interruptReason: undefined,
+        failure: undefined
       })
       const unsafeInterrupt =
         outcome.state === 'interrupted' &&
         (outcome.interruptReason === 'commitUnknown' ||
-          outcome.interruptReason === 'candidateConflict')
+          outcome.interruptReason === 'candidateConflict' ||
+          outcome.interruptReason === 'writeUnknown')
       if (unsafeInterrupt) {
         await this.updateExecution(active, {
           state: 'interrupted',
-          interruptReason: outcome.interruptReason
+          interruptReason: outcome.interruptReason,
+          step: undefined
         })
-      } else if (active.execution.pauseRequested || outcome.state === 'interrupted') {
-        const paused =
-          active.execution.pauseRequested === true ||
-          (outcome.state === 'interrupted' && outcome.interruptReason === 'paused')
+      } else if (outcome.state === 'interrupted') {
+        // 工作流只在持久化安全边界后返回暂停；本次暂停请求已由中断消费。
         await this.updateExecution(active, {
           state: 'interrupted',
-          ...(paused ? { interruptReason: 'paused' as const } : {}),
-          ...(outcome.state === 'waiting'
-            ? { interaction: outcome.interaction, step: undefined }
-            : {})
+          interruptReason: 'paused',
+          pauseRequested: false
         })
-      } else if (outcome.state === 'waiting') {
-        await this.updateExecution(active, {
-          state: 'waiting',
-          step: undefined,
-          interaction: outcome.interaction
-        })
-      } else {
+      } else if (outcome.state !== 'waiting') {
+        // 等待状态、交互、检查点与候选已在上一次权威更新中一起写入，不再分两次发布。
         await this.commit.commitGeneration(this, active, signal)
       }
     } catch (error) {
+      // 被新代次接管的旧运行不能改写当前记录或回退当前工作区。
+      if (!this.host.owns(active)) return
       if (isTerminal(active.execution)) throw error
       await this.recovery.recoverFailure(
         this,
         active,
         error,
-        active.controller.signal.aborted,
+        // 取消受理后旧运行可能由持久事实拒绝，而不是内存信号中止；两者都按取消结算。
+        active.controller.signal.aborted ||
+          active.execution.cancellationRequested === true ||
+          active.execution.state === 'cancelling',
         true
       )
     } finally {
-      this.host.release(active.execution)
+      cancelActiveTimer?.()
+      this.host.release(active)
     }
   }
 
   /**
-   * 在线程短串行段内持久更新进度序号，随后通知调用方。
-   * @throws {AppException} 状态持久记录失败。
+   * 提交与暂停的资格在同一个串行段内裁决：已受理暂停保留持久边界、候选与校验结论，
+   * 不写正式作品；没有暂停时原子进入 committing，之后到达的暂停由暂停入口拒绝。
+   * @returns 是否允许执行不可撤销提交。
+   * @throws {AppException} 状态写入失败或调用方已失去该运行。
    */
+  enterCommitGate(
+    active: ActiveSceneGeneration,
+    preview: SceneGenerationExecution['preview'],
+    signal: AbortSignal
+  ): Promise<boolean> {
+    return this.queue.serialize(threadKey(active.execution), async () => {
+      if (!this.host.owns(active)) return false
+      if (isTerminal(active.execution)) return false
+      signal.throwIfAborted()
+      // 已受理取消优先于不可撤销提交：按持久事实拒绝，不依赖旧调用方是否看过信号。
+      if (
+        active.execution.state === 'cancelling' ||
+        active.execution.cancellationRequested === true
+      )
+        throw new AppException({ code: ErrorCodes.operationConflict, msg: '场景生成已取消' })
+      if (active.execution.pauseRequested === true) {
+        const recorded = await this.writeExecution({
+          ...active.execution,
+          preview,
+          state: 'interrupted',
+          interruptReason: 'paused',
+          step: undefined,
+          interaction: undefined,
+          pendingReply: undefined,
+          pauseRequested: false,
+          live: undefined,
+          sequence: active.execution.sequence + 1
+        })
+        active.execution = recorded.execution
+        return false
+      }
+      const recorded = await this.writeExecution({
+        ...active.execution,
+        preview,
+        state: 'committing',
+        step: 'committing',
+        sequence: active.execution.sequence + 1
+      })
+      active.execution = recorded.execution
+      return true
+    })
+  }
+
+  /**
+   * 正式作品提交后清除可提交结果留下的暂停边界。
+   * 清理失败必须上抛给提交收尾登记为待处理，不能静默吞掉。
+   */
+  async clearPauseBoundary(execution: SceneGenerationExecution): Promise<void> {
+    const control = this.deps.workflowControl
+    if (control) await control.clearPauseBoundary(execution)
+  }
+
   updateExecution(
     active: ActiveSceneGeneration,
     patch: Partial<SceneGenerationExecution>
   ): Promise<void> {
     return this.queue.serialize(threadKey(active.execution), async () => {
+      // 旧运行已释放或被新代次替换时，迟到的写入必须丢弃。
+      if (!this.host.owns(active)) return
       if (isTerminal(active.execution) && patch.state && patch.state !== active.execution.state)
         return
+      // 取消已受理是持久事实：旧运行不能把状态改回等待/运行，也不能重新建立
+      // 交互或待执行回复。只允许结算清理事实；冲突时抛出，由本次运行统一按取消收尾。
+      if (revokesAcceptedCancellation(active.execution, patch))
+        throw new AppException({ code: ErrorCodes.operationConflict, msg: '场景生成已取消' })
       const previousSnapshot = active.execution.candidateSnapshotId
       const previousCheckpoint = active.execution.checkpointId
       const nextSnapshot = patch.candidateSnapshotId
       const nextCheckpoint = patch.checkpointId
-      const updated = { ...active.execution, ...patch, sequence: active.execution.sequence + 1 }
+      // 校验结论绑定候选修订：新修订落盘时旧报告立即失效，不能借用上一版的通过结论。
+      const candidateChanged = nextSnapshot !== undefined && nextSnapshot !== previousSnapshot
+      const nextPatch =
+        candidateChanged && patch.artifactValidation === undefined
+          ? { ...patch, artifactValidation: undefined }
+          : patch
+      const updated = { ...active.execution, ...nextPatch, sequence: active.execution.sequence + 1 }
       const recorded = (await this.writeExecution(updated)).execution
       active.execution = recorded
       if (
@@ -265,11 +467,6 @@ export class GenerationRun implements GenerationRuntimePort {
     })
   }
 
-  /**
-   * 持久写入状态后发布安全阶段文案，通知适配必须自行隔离故障。
-   * 只有已暂停且有检查点时才读取 canContinue；读取失败不撤销已写入记录，也不发布未知事件。
-   * @throws {AppException} 操作状态写入失败。
-   */
   async writeExecution(
     execution: SceneGenerationExecution
   ): Promise<{ execution: SceneGenerationExecution; canContinue: boolean | undefined }> {
@@ -282,7 +479,13 @@ export class GenerationRun implements GenerationRuntimePort {
     const canContinue = await renderCanContinue(this.deps, recorded)
     if (canContinue !== undefined) {
       for (const listener of progressListeners.get(operationKey(recorded)) ?? []) {
-        listener(toRenderProgressEvent(recorded, canContinue))
+        listener(
+          toRenderProgressEvent(
+            recorded,
+            canContinue,
+            this.deps.workflow.capabilities()
+          )
+        )
       }
     }
     return { execution: recorded, canContinue }
@@ -290,9 +493,58 @@ export class GenerationRun implements GenerationRuntimePort {
 }
 
 /**
- * 可恢复中断才读取检查点。取消、失败和提交不明直接不可继续。
- * 读取失败返回 undefined，不能用 false 表示未知。
+ * 已受理取消只能向终态或待核对结算，不能被旧运行的迟到进度改回活动/等待，
+ * 也不能重新写入交互或待执行回复。取消清理本身仍可写 cancelled/interrupted。
  */
+function revokesAcceptedCancellation(
+  execution: SceneGenerationExecution,
+  patch: Partial<SceneGenerationExecution>
+): boolean {
+  if (execution.state !== 'cancelling' && execution.cancellationRequested !== true) return false
+  const resumes =
+    patch.state === 'pending' ||
+    patch.state === 'running' ||
+    patch.state === 'waiting' ||
+    patch.state === 'committing' ||
+    (patch.state === 'interrupted' && patch.interruptReason === 'paused')
+  return resumes || patch.interaction !== undefined || patch.pendingReply !== undefined
+}
+
+/**
+ * 只有同时带检查点、候选修订和“无问题”校验结论的进度才登记为已发布候选。
+ * 旧修订保留在列表中，供按原检查点只读预览；不根据任意 Git 对象补造。
+ */
+function publishCandidateRecord(
+  previous: readonly SceneGenerationPublishedCandidate[] | undefined,
+  progress: SceneGenerationWorkflowProgress
+): readonly SceneGenerationPublishedCandidate[] | undefined {
+  const report = progress.artifactValidation
+  if (
+    !report ||
+    report.issues.length > 0 ||
+    progress.candidateSnapshotId === undefined ||
+    progress.checkpointId === undefined
+  )
+    return undefined
+  const entry: SceneGenerationPublishedCandidate = {
+    candidateSnapshotId: progress.candidateSnapshotId,
+    checkpointId: progress.checkpointId,
+    artifactValidation: report
+  }
+  const records = previous ?? []
+  const index = records.findIndex(
+    (record) => record.candidateSnapshotId === entry.candidateSnapshotId
+  )
+  if (index < 0) return [...records, entry]
+  const current = records[index]
+  if (
+    current.checkpointId === entry.checkpointId &&
+    JSON.stringify(current.artifactValidation) === JSON.stringify(entry.artifactValidation)
+  )
+    return undefined
+  return records.map((record, position) => (position === index ? entry : record))
+}
+
 async function renderCanContinue(
   deps: SceneGenerationDependencies,
   execution: SceneGenerationExecution
@@ -301,6 +553,7 @@ async function renderCanContinue(
     execution.state !== 'interrupted' ||
     execution.interruptReason === 'commitUnknown' ||
     execution.interruptReason === 'candidateConflict' ||
+    execution.interruptReason === 'writeUnknown' ||
     !execution.checkpointId
   ) {
     return false
@@ -308,7 +561,6 @@ async function renderCanContinue(
   try {
     return await checkpointCanContinue(deps, execution)
   } catch (error) {
-    // Node 后台没有注入 logger；保留 console 作为明确例外，读取失败仍返回 undefined。
     console.warn('暂停进度的检查点继续资格未能读取', {
       errorCode: error instanceof AppException ? error.code : ErrorCodes.internalError
     })
@@ -316,10 +568,6 @@ async function renderCanContinue(
   }
 }
 
-/**
- * 只读取检查点视图的 canContinue。没有检查点时为 false，不把内部文档交给渲染。
- * 状态查询仍把读取失败原样抛出。
- */
 export async function checkpointCanContinue(
   deps: SceneGenerationDependencies,
   execution: SceneGenerationExecution
@@ -335,15 +583,11 @@ export async function checkpointCanContinue(
   return checkpoint.view.canContinue
 }
 
-/**
- * 进度监听按操作跨协调器实例共享；模型执行、提交和恢复的写入都通知同一订阅表。
- */
 const progressListeners = new Map<
   string,
   Set<(event: SceneGenerationRenderProgressEventVO) => void>
 >()
 
-/** 订阅当前操作的安全进度；退订只移除本次回调。 */
 export function subscribeProgress(
   scope: SceneGenerationScopeDTO,
   publish: (event: SceneGenerationRenderProgressEventVO) => void
@@ -388,7 +632,8 @@ function appendTimeline(
   const kind: SceneGenerationTimelineEntryVO['kind'] =
     execution.failure ||
     execution.interruptReason === 'commitUnknown' ||
-    execution.interruptReason === 'candidateConflict'
+    execution.interruptReason === 'candidateConflict' ||
+    execution.interruptReason === 'writeUnknown'
       ? 'failure'
       : execution.interaction
         ? execution.interaction.kind === 'decision'

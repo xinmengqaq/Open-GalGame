@@ -14,7 +14,6 @@ import {
   type SceneGenerationSelectionFact
 } from '../validateSceneGenerationReply'
 
-/** 场景生成领域规则的无状态实现。 */
 export class SceneGenerationDomainServiceImpl implements SceneGenerationDomainService {
   validateArtifact(
     artifact: SceneGenerationArtifact,

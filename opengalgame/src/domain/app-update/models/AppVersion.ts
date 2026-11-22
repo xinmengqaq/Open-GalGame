@@ -7,12 +7,6 @@ export class InvalidAppVersionError extends Error {
   }
 }
 
-/**
- * 比较三段式应用版本。
- * 只接受非负整数段，不支持预发布标记或构建元数据；参数非法时抛出，不把未知格式当成相等。
- * @returns current 小于 candidate 为 -1，相等为 0，大于为 1。
- * @throws {InvalidAppVersionError} 任一侧不是三段非负整数。
- */
 export function compareAppVersion(current: string, candidate: string): -1 | 0 | 1 {
   const currentSegments = parseVersionSegments(current)
   const candidateSegments = parseVersionSegments(candidate)
@@ -23,7 +17,6 @@ export function compareAppVersion(current: string, candidate: string): -1 | 0 | 
   return 0
 }
 
-/** 去掉前导零后按位数和字典序比较，避免超出安全整数范围的版本段失真。 */
 function parseVersionSegments(version: string): [string, string, string] {
   const match = APP_VERSION_PATTERN.exec(version)
   if (!match) throw new InvalidAppVersionError()

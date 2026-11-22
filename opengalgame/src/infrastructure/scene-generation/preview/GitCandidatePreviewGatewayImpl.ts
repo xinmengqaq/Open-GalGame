@@ -32,9 +32,7 @@ import { WebgalPreviewRuntimeAdapter } from '@infrastructure/webgal/preview/Webg
 import {
   CandidateStageFeed,
   confirmCandidateGame,
-  selectCandidateStartSupport,
-  type CandidateTrustedInput,
-  type CandidateTrustedInputSource
+  selectCandidateStartSupport
 } from '@infrastructure/webgal/compatibility/candidateGameStart'
 import { WEBGAL_COMPATIBILITY_PROFILE } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
 import { WebgalRuntimeHostImpl } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
@@ -63,17 +61,11 @@ type PreviewSession = {
   stageResult?: Promise<void>
 }
 
-/**
- * 从已发布候选裸 Git 修订建立独立只读预览。
- * 不读取可变工作区，也不在修订缺失时回退正式工程。
- * 页面地址只证明宿主已启动；就绪必须是目标入口的真实游戏状态。
- */
 export class GitCandidatePreviewGatewayImpl
   implements SceneCandidatePreviewGateway, CandidatePreviewSessionLookup
 {
   private readonly sessions: Record<string, PreviewSession> = {}
   private readonly listeners = new Set<SceneGenerationCandidatePreviewListener>()
-  /** 会话释放后仍保留最后事实，供稍后订阅的渲染端补投。 */
   private readonly lastEvents = new Map<string, SceneGenerationCandidatePreviewEventVO>()
 
   constructor(
@@ -83,7 +75,6 @@ export class GitCandidatePreviewGatewayImpl
     private readonly engineRoot = dirname(require.resolve('webgal-engine/package.json')),
     private readonly stageTimeoutMs = 12_000,
     private readonly start: {
-      readonly trustedInput?: CandidateTrustedInputSource
       readonly sessionTtlMs?: number
       readonly logger?: LoggerGateway
     } = {}
@@ -114,7 +105,11 @@ export class GitCandidatePreviewGatewayImpl
     )
     const sessionId = randomUUID()
     const root = join(this.stateRoot, 'scene-generation', 'previews', sessionId)
-    const host = new WebgalRuntimeHostImpl({ projectRoot: root, engineRoot: this.engineRoot })
+    const host = new WebgalRuntimeHostImpl({
+      projectRoot: root,
+      engineRoot: this.engineRoot,
+      engineExtension: { autoStart: true }
+    })
     const adapter = new WebgalPreviewRuntimeAdapter({ host, timeoutMs: this.stageTimeoutMs })
     const stage = new AbortController()
     try {
@@ -145,20 +140,14 @@ export class GitCandidatePreviewGatewayImpl
         eventSequence: 0,
         stage
       }
-      const stageInput = this.start.trustedInput?.({
-        stageUrl: `${handle.baseUrl}/`,
-        signal: stage.signal
-      })
-      const stageResult = this.observeStage(sessionId, session, stageInput ?? null)
+      const stageResult = this.observeStage(sessionId, session)
       session.stageResult = stageResult
       this.sessions[sessionId] = session
       return {
         preview: {
           previewSessionId: sessionId,
           candidateSnapshotId: request.candidateSnapshotId,
-          url:
-            stageInput?.stagePageUrl ??
-            `${handle.baseUrl}/?session=${encodeURIComponent(sessionId)}`,
+          url: `${handle.baseUrl}/?session=${encodeURIComponent(sessionId)}`,
           expiresAt: new Date(expiresAt).toISOString()
         },
         stage: stageResult
@@ -235,10 +224,6 @@ export class GitCandidatePreviewGatewayImpl
     }
   }
 
-  /**
-   * 返回会话最后一个真实舞台事实。
-   * 打开返回后、渲染端订阅前到达的事件也保留；没有事件时返回 undefined。
-   */
   readCandidatePreviewEvent(
     previewSessionId: string
   ): SceneGenerationCandidatePreviewEventVO | undefined {
@@ -363,16 +348,7 @@ export class GitCandidatePreviewGatewayImpl
     }
   }
 
-  /**
-   * 标题、语言和注册快照都不能就绪。公开协议没有候选启动命令时，
-   * 只有可信输入之后的真实游戏快照才发布 ready。
-   * 运行到期或关闭会中止等待，迟到结果不再发布。
-   */
-  private observeStage(
-    sessionId: string,
-    session: PreviewSession,
-    stageInput: CandidateTrustedInput | null
-  ): Promise<void> {
+  private observeStage(sessionId: string, session: PreviewSession): Promise<void> {
     const adapter = session.adapter
     const signal = session.stage?.signal
     if (!adapter || !signal) return Promise.resolve()
@@ -403,26 +379,10 @@ export class GitCandidatePreviewGatewayImpl
           support: selectCandidateStartSupport({
             packageVersion,
             commands: WEBGAL_COMPATIBILITY_PROFILE.previewCommands
-          }),
-          input: stageInput
+          })
         })
         const current = this.sessions[sessionId]
         if (!current || current !== session || current.state !== 'active' || signal.aborted) return
-        // 可信输入只负责开始游戏，标题层的进入游戏标志仍为 false；
-        // 引擎只在 isEnterGame 为真时播放 BGM，就绪前补上这个界面标志。
-        // 降级：该标志只影响 BGM 演出，设置失败不阻断候选就绪，但必须留下诊断。
-        try {
-          await adapter.setComponentVisibility({ isEnterGame: true }, timeout.signal)
-        } catch (error: unknown) {
-          this.start.logger?.warn('候选预览进入游戏标志设置失败，BGM 不会自动播放', {
-            operationId: session.operationId,
-            projectId: session.projectId,
-            stage: 'candidate-preview-enter-game',
-            errorCode: error instanceof AppException ? error.code : ErrorCodes.internalError,
-            ...(error instanceof Error ? { errorName: error.name } : {})
-          })
-        }
-        if (signal.aborted) return
         this.publish(sessionId, session, { type: 'ready', message: '游戏已就绪' })
       } catch (error: unknown) {
         const current = this.sessions[sessionId]
@@ -488,7 +448,6 @@ export class GitCandidatePreviewGatewayImpl
       try {
         listener(payload)
       } catch {
-        // 单个监听失败不阻止其余订阅，也不把技术错误带回舞台。
       }
     }
   }

@@ -32,10 +32,6 @@ import {
 
 const LOCK_PATH = '.opengalgame/scene-locks.json'
 
-/**
- * 预览保存自己的提交域。
- * 只调用通用版本边界，不调用生成版本网关，也不使用生成提交身份。
- */
 export class LocalPreviewSaveVersionGateway implements PreviewSaveVersionGateway {
   constructor(
     private readonly userDirectory: string,
@@ -412,12 +408,6 @@ export class LocalPreviewSaveVersionGateway implements PreviewSaveVersionGateway
     }
   }
 
-  /**
-   * 读取已结算保存的内容依据。
-   * 提交后确认失败时记录可能缺 `contentDigest`，结算查询按当前工程文件重新核对：
-   * 只有场景文件字节的 sha256 仍等于记录的 `revisionDigest` 才补写内容依据；
-   * 内容已变返回冲突，读取或解析失败保持待核对，都不伪造摘要。
-   */
   private async settledContentBasis(
     root: string,
     request: ReadDialogueSaveSettlementDTO,
@@ -463,7 +453,6 @@ export class LocalPreviewSaveVersionGateway implements PreviewSaveVersionGateway
       await writePreviewSaveRecord(root, { ...record, contentDigest: contentBasis.digest })
       return { ok: true, contentBasis }
     } catch (error) {
-      // Node 预览保存没有注入 logger；保留 console 作为明确例外，失败仍返回待核对。
       console.warn('预览保存结算无法补读内容依据，保持待核对', {
         projectId: request.projectId,
         sceneId: request.sceneId,

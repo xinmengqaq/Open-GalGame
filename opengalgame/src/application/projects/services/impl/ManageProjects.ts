@@ -66,7 +66,6 @@ interface ProjectApplicationDependencies {
 }
 
 export class ManageProjects implements ProjectApplicationService {
-  /** 注入项目端口、领域规则、提交服务和身份生成能力。 */
   constructor(private readonly deps: ProjectApplicationDependencies) {}
 
   async chooseSaveLocation(): Promise<ProjectSaveLocationVO | null> {
@@ -78,11 +77,6 @@ export class ManageProjects implements ProjectApplicationService {
     this.deps.dialogs.clearSaveLocation()
   }
 
-  /**
-   * 新建所选目录中的项目，同请求重放沿用原操作。
-   * @returns 完成结果，取消选择时返回取消状态。
-   * @throws {AppException} 请求身份冲突、项目不合法或提交失败。
-   */
   createProject(
     request: CreateProjectDTO,
     progress?: ProjectProgressListener
@@ -120,11 +114,6 @@ export class ManageProjects implements ProjectApplicationService {
     })
   }
 
-  /**
-   * 原位导入目录，无标识时初始化，同请求重放不再次选择目录。
-   * @returns 完成结果，取消选择时返回取消状态。
-   * @throws {AppException} 请求身份冲突、工程不合法或提交失败。
-   */
   importProject(
     request: ImportProjectDTO,
     progress?: ProjectProgressListener
@@ -169,11 +158,6 @@ export class ManageProjects implements ProjectApplicationService {
     })
   }
 
-  /**
-   * 读取一页本机已登记项目，只检查本页工程。
-   * @returns 包含可用或不可用条目的分页结果。
-   * @throws {AppException} 登记文件整体读取失败。
-   */
   async listProjects(request: ListProjectsDTO): Promise<ProjectListPageVO> {
     const [total, registrations] = await Promise.all([
       this.deps.listQuery.countRegistrations(),
@@ -185,18 +169,12 @@ export class ManageProjects implements ProjectApplicationService {
     return { entries, total, offset: request.offset, limit: request.limit }
   }
 
-  /**
-   * @throws {AppException} 项目未登记或工程不可用。
-   */
   async openProject(request: OpenProjectDTO): Promise<ProjectSummaryVO> {
     const project = await this.loadRegisteredProject(request.id)
     await this.deps.recoverProjectFiles(project.id)
     return toProjectSummaryVO(project)
   }
 
-  /**
-   * @throws {AppException} 项目未登记、工程不可用或新名称不合法。
-   */
   renameProject(request: RenameProjectDTO): Promise<ProjectSummaryVO> {
     return this.deps.execution.executeProjectOperation(async () => {
       const registration = await this.requireRegistration(request.id)
@@ -219,10 +197,6 @@ export class ManageProjects implements ProjectApplicationService {
     })
   }
 
-  /**
-   * 从本机列表移出登记，不删除工程文件。
-   * @throws {AppException} 项目未登记或登记写入失败。
-   */
   unregisterProject(request: UnregisterProjectDTO): Promise<UnregisterProjectVO> {
     return this.deps.execution.executeProjectOperation(async () => {
       const registration = await this.deps.listQuery.findRegistration(request.id)
@@ -233,7 +207,6 @@ export class ManageProjects implements ProjectApplicationService {
     })
   }
 
-  /** 只核对已登记工程，不在查询路径隐式初始化。 */
   ensureProjectWorkspace(request: EnsureProjectWorkspaceDTO): Promise<ProjectWorkspaceVO> {
     return this.deps.execution.executeProjectOperation(async () => {
       await this.requireRegistration(request.projectId)
@@ -241,7 +214,6 @@ export class ManageProjects implements ProjectApplicationService {
     })
   }
 
-  /** 只读检查已登记工程，不在查询路径补建。 */
   inspectProjectWorkspace(
     request: EnsureProjectWorkspaceDTO
   ): Promise<ProjectWorkspaceInspectionVO> {
@@ -266,7 +238,6 @@ export class ManageProjects implements ProjectApplicationService {
     })
   }
 
-  /** 已识别的单项失败转为不可用列表项，未知失败继续传播。 */
   private async readListEntry(
     registration: ProjectRegistrationRecord
   ): Promise<ProjectListEntryVO> {
@@ -292,7 +263,6 @@ export class ManageProjects implements ProjectApplicationService {
     }
   }
 
-  /** 幂等重放同一操作：续提交流程，请求内容不一致时拒绝。 */
   private async replay(
     operationId: string,
     fingerprint: string,

@@ -5,6 +5,8 @@ import { WEBGAL_COMPATIBILITY_PROFILE } from './WebgalCompatibilityProfile'
 /**
  * 固定 4.6.5 公开命令里没有“离开标题并开始候选入口”的命令。
  * `sync-scene` 只定位，`run-scene-content` 会替换运行内容，可见性命令只改界面标志。
+ * 预览宿主只在显式启用受限引擎扩展时，于页面内一次性激活真实控件并加载 start.txt；
+ * 应用侧只等待真实舞台快照，不发送坐标、不模拟点击、不注入剧情。
  */
 
 export type CandidateStartFailure =
@@ -17,46 +19,13 @@ export class CandidateStartError extends Error {
   }
 }
 
-export type CandidateStartSupport = 'trusted-input' | 'unsupported'
+export type CandidateStartSupport = 'host-autostart' | 'unsupported'
 
 export type CandidateStageSnapshot = {
   readonly sceneName: string
   readonly sentenceId: number
   readonly stageState: unknown
 }
-
-export type CandidateScreenButton = {
-  readonly text: string
-  readonly x: number
-  readonly y: number
-  readonly disabled: boolean
-}
-
-export type CandidateScreenFacts = {
-  readonly languageButtons: readonly CandidateScreenButton[]
-  readonly titleButtons: readonly CandidateScreenButton[]
-}
-
-/**
- * 宿主到引擎的真实输入。点击只表示输入已送达，不表示游戏已经开始。
- */
-export interface CandidateTrustedInput {
-  /** 浏览器舞台页地址。Electron 输入不提供，页面继续直接嵌入引擎。 */
-  readonly stagePageUrl?: string
-  readScreen(signal: AbortSignal): Promise<CandidateScreenFacts | null>
-  click(target: { readonly x: number; readonly y: number }): Promise<void>
-  /**
-   * 浏览器舞台只能点到真实按钮元素。坐标点击不能代替它。
-   * 没有实现时，语言和开始仍走 click。
-   */
-  activate?(button: CandidateScreenButton): Promise<void>
-  waitForLanguageDismissed(signal: AbortSignal): Promise<void>
-}
-
-export type CandidateTrustedInputSource = (target: {
-  readonly stageUrl: string
-  readonly signal: AbortSignal
-}) => CandidateTrustedInput | null
 
 export function selectCandidateStartSupport(input: {
   readonly packageVersion: string
@@ -71,13 +40,9 @@ export function selectCandidateStartSupport(input: {
   ) {
     return 'unsupported'
   }
-  return 'trusted-input'
+  return 'host-autostart'
 }
 
-/**
- * 注册快照和标题页会带上入口场景名，但舞台仍是初始空态。
- * 只有脚本已经留下可见事实，才算目标入口进入了真实游戏。
- */
 export function isCandidateGameState(snapshot: CandidateStageSnapshot, sceneName: string): boolean {
   if (sceneLabel(snapshot.sceneName) !== sceneName) return false
   if (!snapshot.stageState || typeof snapshot.stageState !== 'object') return false
@@ -144,135 +109,23 @@ export class CandidateStageFeed {
 }
 
 /**
- * 先确认公开协议不能启动，再按画面发送一次可信输入并等待真实状态变化。
- * 点击本身、注册快照和标题快照都不会返回。
+ * 预览宿主负责在页面内激活真实控件并加载 start.txt。
+ * 这里只接受目标入口的真实游戏快照；标题、语言、注册和点击本身都不算开始。
  */
 export async function confirmCandidateGame(options: {
   readonly sceneName: string
   readonly signal: AbortSignal
   readonly feed: CandidateStageFeed
   readonly support: CandidateStartSupport
-  readonly input: CandidateTrustedInput | null
 }): Promise<void> {
-  if (options.support !== 'trusted-input') {
+  if (options.support !== 'host-autostart') {
     throw new CandidateStartError('当前引擎不支持开始游戏')
   }
-  const first = await options.feed.next(options.signal)
-  if (!options.input) throw new CandidateStartError('宿主无法开始游戏')
-  if (options.signal.aborted) throw abortError(options.signal)
-  if (isCandidateGameState(first, options.sceneName)) return
-  options.feed.push(first)
-
-  const title = await readTitleScreen(
-    options.input,
-    options.signal,
-    options.feed,
-    options.sceneName
-  )
-  if (options.signal.aborted) throw abortError(options.signal)
-  if (title.status === 'started') return
-  let screen = title.screen
-
-  const language = preferredLanguageButton(screen.languageButtons)
-  if (language) {
-    await clickButton(options.input, language)
-    await options.input.waitForLanguageDismissed(options.signal)
-    const next = await readTitleScreen(
-      options.input,
-      options.signal,
-      options.feed,
-      options.sceneName
-    )
-    if (options.signal.aborted) throw abortError(options.signal)
-    if (next.status === 'started') return
-    screen = next.screen
-    if (screen.languageButtons.length > 0) {
-      throw new CandidateStartError('游戏没有离开当前画面')
-    }
-  }
-  options.feed.drain()
-  const start = screen.titleButtons.find(
-    (button) => !button.disabled && button.text.includes('开始游戏')
-  )
-  if (!start) throw new CandidateStartError('宿主无法开始游戏')
-  await clickButton(options.input, start)
   while (!options.signal.aborted) {
     const snapshot = await options.feed.next(options.signal)
     if (isCandidateGameState(snapshot, options.sceneName)) return
   }
   throw abortError(options.signal)
-}
-
-/**
- * 包装页可能先给出空屏。没有标题按钮时等到 signal 超时；
- * 期间若已收到目标游戏快照则直接成功。已有标题按钮但没有「开始游戏」才立即失败。
- * 读不到画面只表示继续等待，不能和已收到真实游戏快照混成同一种成功。
- */
-type TitleRead =
-  | { readonly status: 'started' }
-  | { readonly status: 'title'; readonly screen: CandidateScreenFacts }
-
-async function readTitleScreen(
-  input: CandidateTrustedInput,
-  signal: AbortSignal,
-  feed: CandidateStageFeed,
-  sceneName: string
-): Promise<TitleRead> {
-  let screen = await input.readScreen(signal)
-  while (!signal.aborted) {
-    const started = takeStarted(feed, sceneName)
-    if (started) return { status: 'started' }
-    if (screen && (screen.titleButtons.length > 0 || screen.languageButtons.length > 0)) {
-      return { status: 'title', screen }
-    }
-    await delay(150, signal)
-    screen = await input.readScreen(signal)
-  }
-  if (takeStarted(feed, sceneName)) return { status: 'started' }
-  throw abortError(signal)
-}
-
-function takeStarted(feed: CandidateStageFeed, sceneName: string): boolean {
-  const queued = feed.drain()
-  const started = queued.some((snapshot) => isCandidateGameState(snapshot, sceneName))
-  for (const snapshot of queued) feed.push(snapshot)
-  return started
-}
-
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.reject(abortError(signal))
-  const { promise, resolve, reject } = Promise.withResolvers<void>()
-  const timer = setTimeout(() => {
-    signal.removeEventListener('abort', onAbort)
-    resolve()
-  }, ms)
-  const onAbort = (): void => {
-    clearTimeout(timer)
-    reject(abortError(signal))
-  }
-  signal.addEventListener('abort', onAbort, { once: true })
-  return promise
-}
-
-async function clickButton(
-  input: CandidateTrustedInput,
-  button: CandidateScreenButton
-): Promise<void> {
-  if (input.activate) {
-    await input.activate(button)
-    return
-  }
-  if (!Number.isFinite(button.x) || !Number.isFinite(button.y)) {
-    throw new CandidateStartError('宿主无法开始游戏')
-  }
-  await input.click({ x: button.x, y: button.y })
-}
-
-function preferredLanguageButton(
-  buttons: readonly CandidateScreenButton[]
-): CandidateScreenButton | undefined {
-  const enabled = buttons.filter((button) => !button.disabled)
-  return enabled.find((button) => button.text.includes('简体中文')) ?? enabled[0]
 }
 
 function sceneLabel(sceneName: string): string {

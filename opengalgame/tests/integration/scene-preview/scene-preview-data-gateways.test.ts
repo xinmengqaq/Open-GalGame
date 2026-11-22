@@ -351,18 +351,20 @@ describe('首版预览数据适配', () => {
         } as SceneGenerationExecution
       })
     ) as {
-      assetBindings: {
-        category: string
-        commandReference: string
-      }[]
+      inputs: {
+        assets: {
+          category: string
+          commandReference: string
+        }[]
+      }
     }
-    const cue = assembled.assetBindings[0]?.commandReference
-    expect(assembled.assetBindings[0]).toMatchObject({
+    const cue = assembled.inputs.assets[0]?.commandReference
+    expect(assembled.inputs.assets[0]).toMatchObject({
       category: 'audio',
       commandReference: `${audioKey}/duck.ogg`
     })
-    expect(assembled.assetBindings[0]).not.toHaveProperty('defaultRuntimeDirectory')
-    expect(assembled.assetBindings[0]).not.toHaveProperty('purpose')
+    expect(assembled.inputs.assets[0]).not.toHaveProperty('defaultRuntimeDirectory')
+    expect(assembled.inputs.assets[0]).not.toHaveProperty('purpose')
     if (cue === undefined) throw new Error('绑定缺少命令引用')
 
     const world = await registeredScene({
@@ -843,9 +845,6 @@ interface PendingSaveSetup {
   readonly editsSnapshot: string
 }
 
-/**
- * 提交一次保存，并让提交后的确认读取失败，模拟记录缺少 contentDigest 而 git 已提交的结算死结。
- */
 async function savingPendingConfirmation(
   world: { userDirectory: string; projectRoot: string },
   options: { ids: readonly string[]; requestId: string; text: string }

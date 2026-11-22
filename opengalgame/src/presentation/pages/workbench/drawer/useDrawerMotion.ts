@@ -8,10 +8,6 @@ type DrawerMotionOptions = {
   tab: string
 }
 
-/**
- * 抽屉壳的入场和标签切换动效。Radix Sheet 负责滑入滑出，这里只编排头部
- * 与当前面板的淡入，避免和模态动画叠加。减少动态效果时只做短淡入。
- */
 export function useDrawerMotion(
   root: RefObject<HTMLElement | null>,
   { tab }: DrawerMotionOptions

@@ -1,4 +1,3 @@
-/* ---------- 空态 ---------- */
 .wb-gen-empty-host {
   justify-content: flex-start;
   gap: 0;
@@ -211,7 +210,6 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
-  /* 副标题在固定宽度内保持单行；更窄时按两行均衡换行，不留下单字孤行。 */
   text-wrap: balance;
 }
 
@@ -282,7 +280,6 @@
   color: var(--teal);
 }
 
-/* ---------- 结果气泡 ---------- */
 .wb-gen-result {
   display: flex;
   align-items: center;
@@ -389,7 +386,20 @@
   gap: 9px;
 }
 
-/* 已提交气泡多一行“按画布重新生成”，与上方结果行留出稳定间距。 */
+/* 启动被历史中的进行中生成挡住：原因与处理入口并排，不挤压主按钮。 */
+.wb-gen-result__blocked,
+.wb-gen-outcome__blocked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.wb-gen-outcome__blocked {
+  margin-top: 0;
+}
+
 .wb-gen-result__actions--completed {
   align-items: center;
   margin-top: 12px;
@@ -421,7 +431,6 @@
   height: 14px;
 }
 
-/* ---------- 暂停 / 失败 / 取消气泡 ---------- */
 .wb-gen-bubble--outcome[data-outcome='failed'] {
   background:
     radial-gradient(

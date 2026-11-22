@@ -12,6 +12,15 @@ import {
   injectEngineExtensionHtml
 } from '@infrastructure/webgal/runtime/engineExtension'
 
+interface ExtensionStartState {
+  readonly enabled: boolean
+  status: string
+  readonly clickedLanding: boolean
+  readonly clickedLanguage: boolean
+  readonly clickedStart: boolean
+  readonly clicks: readonly string[]
+}
+
 interface ExtensionState {
   readonly status: string
   readonly engineVersion: string
@@ -21,7 +30,86 @@ interface ExtensionState {
   readonly wantedCalls: number
   readonly installedAt: number | null
   readonly errors: readonly string[]
+  readonly start: ExtensionStartState
   disable(): void
+}
+
+interface FakeElement {
+  readonly className: string
+  readonly textContent: string
+  readonly style: Record<string, string>
+  readonly children: FakeElement[]
+  onclick: (() => void) | null
+  clickCount: number
+  click(): void
+}
+
+interface FakeAutoStartDom {
+  readonly document: Record<string, unknown>
+  readonly landing: FakeElement
+  readonly language: FakeElement
+  readonly start: FakeElement
+  readonly otherButtons: readonly FakeElement[]
+}
+
+function fakeElement(className: string, textContent: string): FakeElement {
+  return {
+    className,
+    textContent,
+    style: {},
+    children: [],
+    onclick: null,
+    clickCount: 0,
+    click(): void {
+      this.clickCount += 1
+      this.onclick?.()
+    }
+  }
+}
+
+/**
+ * @returns 只含自动开始所需真实控件的假页面；语言与标题可以分别消失。
+ */
+function fakeAutoStartDom(): FakeAutoStartDom {
+  const landing = fakeElement('html-body__title-enter', 'PRESS THE SCREEN TO START')
+  const language = fakeElement('_langSelectButton_1oupq_40', '简体中文')
+  const continueButton = fakeElement('_Title_button_1jbo0_8', '继续游戏继续游戏继续游戏')
+  const optionsButton = fakeElement('_Title_button_1jbo0_8', '选项选项选项')
+  const exitButton = fakeElement('_Title_button_1jbo0_8', '返回返回返回')
+  const start = fakeElement('_Title_button_1jbo0_8', '开始游戏开始游戏开始游戏')
+  const list = fakeElement('_Title_buttonList_1jbo0_8', '')
+  list.children.push(continueButton, optionsButton, start, exitButton)
+  let languageVisible = true
+  let titleVisible = true
+  landing.onclick = (): void => {
+    landing.style.display = 'none'
+  }
+  language.onclick = (): void => {
+    languageVisible = false
+  }
+  start.onclick = (): void => {
+    titleVisible = false
+  }
+  const document = {
+    baseURI: 'http://runtime/',
+    getElementsByTagName: (): readonly unknown[] => [],
+    querySelector(selector: string): FakeElement | null {
+      if (selector === '.html-body__title-enter') return landing
+      if (selector === '[class*="Title_buttonList"]') return titleVisible ? list : null
+      return null
+    },
+    querySelectorAll(selector: string): readonly FakeElement[] {
+      if (selector === '[class*="langSelectButton"]') return languageVisible ? [language] : []
+      return []
+    }
+  }
+  return {
+    document,
+    landing,
+    language,
+    start,
+    otherButtons: [continueButton, optionsButton, exitButton]
+  }
 }
 
 interface FakeAssetEntry {
@@ -42,20 +130,19 @@ const figureKey = 'texture:http://runtime/game/figure/a.png'
 const figureDependency = 'texture:http://runtime/game/figure/dependency.png'
 const backgroundKey = 'texture:http://runtime/game/background/b.jpg'
 
-/**
- * @param engineVersion - 脚本地址里上报的引擎版本。
- * @returns 供 `runInNewContext` 使用的脚本地址参数。
- */
-function scriptSrcOf(engineVersion: string): string {
-  return `http://runtime${ENGINE_EXTENSION_SCRIPT_PATH}?v=${ENGINE_EXTENSION_SCRIPT_VERSION}&engine=${engineVersion}&supported=${DEFAULT_SUPPORTED_ENGINE_VERSIONS.join(',')}`
+function scriptSrcOf(engineVersion: string, autoStart = false): string {
+  const query = `v=${ENGINE_EXTENSION_SCRIPT_VERSION}&engine=${engineVersion}&supported=${DEFAULT_SUPPORTED_ENGINE_VERSIONS.join(',')}`
+  return `http://runtime${ENGINE_EXTENSION_SCRIPT_PATH}?${query}${autoStart ? '&start=1' : ''}`
 }
 
-/**
- * 在独立 vm 上下文中加载扩展脚本，并暴露页面侧状态与可手动推进的定时器。
- * @param engineVersion - 脚本地址里上报的引擎版本。
- * @returns 页面 window、状态对象、定时器推进函数与警告收集。
- */
-function loadExtension(engineVersion = '4.6.5'): {
+function loadExtension(
+  engineVersion = '4.6.5',
+  options: {
+    readonly autoStart?: boolean
+    readonly document?: Record<string, unknown>
+    readonly window?: Record<string, unknown>
+  } = {}
+): {
   readonly window: Record<string, unknown>
   readonly state: ExtensionState
   readonly warnings: readonly string[]
@@ -63,12 +150,13 @@ function loadExtension(engineVersion = '4.6.5'): {
 } {
   const timers = new Map<number, () => void>()
   let nextTimerId = 0
-  const window: Record<string, unknown> = {}
+  const window: Record<string, unknown> = { ...options.window }
   const warnings: string[] = []
   const document = {
-    currentScript: { src: scriptSrcOf(engineVersion) },
+    currentScript: { src: scriptSrcOf(engineVersion, options.autoStart === true) },
     baseURI: 'http://runtime/',
-    getElementsByTagName: (): readonly unknown[] => []
+    getElementsByTagName: (): readonly unknown[] => [],
+    ...options.document
   }
   runInNewContext(ENGINE_EXTENSION_SCRIPT, {
     window,
@@ -102,9 +190,6 @@ function loadExtension(engineVersion = '4.6.5'): {
   }
 }
 
-/**
- * @returns 只含真实引擎资源管理器关键结构的假 app。
- */
 function fakeApp(): FakeAssetsApp {
   const entries = new Map<string, FakeAssetEntry>([
     [
@@ -144,6 +229,9 @@ describe('自制引擎扩展脚本', () => {
       supportedEngineVersions: ['4.6.5', '4.6.6']
     })
     expect(new URL(`http://runtime${custom}`).searchParams.get('supported')).toBe('4.6.5,4.6.6')
+    expect(new URL(`http://runtime${custom}`).searchParams.get('start')).toBeNull()
+    const autoStart = buildEngineExtensionScriptUrl({ engineVersion: '4.6.5', autoStart: true })
+    expect(new URL(`http://runtime${autoStart}`).searchParams.get('start')).toBe('1')
   })
 
   it('脚本标签使用与地址一致的 src', () => {
@@ -242,5 +330,82 @@ describe('自制引擎扩展脚本', () => {
     loaded.runTimers(50)
     expect(loaded.state.status).toBe('feature-missing')
     expect(loaded.warnings.join('\n')).toContain('超过 5000ms')
+  })
+
+  it('启用受限自动开始时依次点击落地页、语言和真实开始控件各一次', () => {
+    const dom = fakeAutoStartDom()
+    const loaded = loadExtension('4.6.5', {
+      autoStart: true,
+      document: dom.document,
+      window: { localStorage: { getItem: (): string => '0' } }
+    })
+    expect(loaded.state.start.enabled).toBe(true)
+    expect(dom.landing.clickCount).toBe(1)
+    expect(dom.language.clickCount).toBe(1)
+    expect(dom.start.clickCount).toBe(0)
+
+    loaded.runTimers(1)
+    expect(dom.start.clickCount).toBe(1)
+    expect(loaded.state.start.status).toBe('started')
+    expect(loaded.state.start.clicks).toEqual(['landing', 'language', 'start'])
+    expect(dom.otherButtons.map((button) => button.clickCount)).toEqual([0, 0, 0])
+
+    loaded.runTimers(5)
+    expect(dom.landing.clickCount).toBe(1)
+    expect(dom.language.clickCount).toBe(1)
+    expect(dom.start.clickCount).toBe(1)
+  })
+
+  it('标题页有多个按钮时只点击已核对的开始游戏控件', () => {
+    const dom = fakeAutoStartDom()
+    const loaded = loadExtension('4.6.5', {
+      autoStart: true,
+      document: dom.document,
+      window: { localStorage: { getItem: (): string => '0' } }
+    })
+    loaded.runTimers(3)
+    expect(dom.start.clickCount).toBe(1)
+    for (const button of dom.otherButtons) expect(button.clickCount).toBe(0)
+    expect(loaded.state.start.clicks).toEqual(['landing', 'language', 'start'])
+  })
+
+  it('未显式启用自动时不触碰页面控件', () => {
+    const dom = fakeAutoStartDom()
+    const loaded = loadExtension('4.6.5', {
+      document: dom.document,
+      window: { localStorage: { getItem: (): string => '0' } }
+    })
+    loaded.runTimers(5)
+    expect(dom.landing.clickCount).toBe(0)
+    expect(dom.language.clickCount).toBe(0)
+    expect(dom.start.clickCount).toBe(0)
+    expect(loaded.state.start.status).toBe('off')
+  })
+
+  it('未核对版本不执行自动开始', () => {
+    const dom = fakeAutoStartDom()
+    const loaded = loadExtension('4.6.6', {
+      autoStart: true,
+      document: dom.document,
+      window: { localStorage: { getItem: (): string => '0' } }
+    })
+    loaded.runTimers(5)
+    expect(loaded.state.start.status).toBe('unsupported')
+    expect(dom.landing.clickCount).toBe(0)
+    expect(dom.start.clickCount).toBe(0)
+    expect(loaded.warnings.join('\n')).toContain('已核对版本')
+  })
+
+  it('disable() 停止后续自动开始点击', () => {
+    const dom = fakeAutoStartDom()
+    const loaded = loadExtension('4.6.5', {
+      autoStart: true,
+      document: dom.document,
+      window: { localStorage: { getItem: (): string => '0' } }
+    })
+    loaded.state.disable()
+    loaded.runTimers(5)
+    expect(dom.start.clickCount).toBe(0)
+    expect(loaded.state.start.status).toBe('disabled')
   })
 })

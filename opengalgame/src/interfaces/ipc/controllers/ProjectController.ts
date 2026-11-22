@@ -34,19 +34,17 @@ export class ProjectController {
 
   /**
    * @param exceptions - 统一失败出口。
+   * @param onProjectOpened - 工程打开成功后的工程级恢复；失败不得回滚已打开事实，
+   *   回调方需自行隔离并记录，避免把打开响应改成失败。
    */
   constructor(
     private readonly projects: ProjectApplicationService,
-    private readonly exceptions: IpcExceptionHandler
+    private readonly exceptions: IpcExceptionHandler,
+    private readonly onProjectOpened?: (projectId: string) => Promise<void>
   ) {
     this.handle = createRequestHandler(exceptions)
   }
 
-  /**
-   * 为新建选择保存位置。成功提示随取消与否而变，不套用统一入口。
-   * @param input - 无参数请求。
-   * @returns 选中目录或取消。
-   */
   chooseSaveLocation(
     input: unknown,
     access: IpcRequestAccess
@@ -62,9 +60,6 @@ export class ProjectController {
     })
   }
 
-  /**
-   * @param input - 无参数请求。
-   */
   clearSaveLocation(input: unknown, access: IpcRequestAccess): Promise<AjaxResult<null>> {
     return this.handle(z.undefined(), input, access, '操作成功', () => {
       this.projects.clearSaveLocation()
@@ -72,7 +67,6 @@ export class ProjectController {
     })
   }
 
-  /** 创建请求入口。需在解析后补日志上下文，且成功提示随取消与否而变。 */
   createProject(
     input: unknown,
     access: IpcRequestAccess,
@@ -91,7 +85,6 @@ export class ProjectController {
     })
   }
 
-  /** 导入请求入口。需在解析后补日志上下文，且成功提示随取消与否而变。 */
   importProject(
     input: unknown,
     access: IpcRequestAccess,
@@ -117,9 +110,13 @@ export class ProjectController {
   }
 
   openProject(input: unknown, access: IpcRequestAccess): Promise<AjaxResult<ProjectSummaryVO>> {
-    return this.handle(openProjectSchema, input, access, '项目已打开', (request) =>
-      this.projects.openProject(request)
-    )
+    return this.handle(openProjectSchema, input, access, '项目已打开', async (request) => {
+      const summary = await this.projects.openProject(request)
+      // 正常打开工程的生命周期点：结算上次退出遗留的已受理取消。
+      // 回调负责隔离清理失败；打开结果不能被后台收尾改成失败。
+      await this.onProjectOpened?.(request.id)
+      return summary
+    })
   }
 
   renameProject(input: unknown, access: IpcRequestAccess): Promise<AjaxResult<ProjectSummaryVO>> {
@@ -137,7 +134,6 @@ export class ProjectController {
     )
   }
 
-  /** 核对已登记工程的默认场景和作品基线。 */
   ensureProjectWorkspace(
     input: unknown,
     access: IpcRequestAccess
@@ -147,7 +143,6 @@ export class ProjectController {
     )
   }
 
-  /** 只读检查已登记工程。不补建，响应不含路径或内部状态。 */
   inspectProjectWorkspace(
     input: unknown,
     access: IpcRequestAccess

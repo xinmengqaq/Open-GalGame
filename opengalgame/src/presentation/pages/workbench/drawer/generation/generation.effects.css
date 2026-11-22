@@ -1,4 +1,3 @@
-/* ---------- 中性的空舞台主视觉 ---------- */
 .wb-gen-art {
   position: relative;
   aspect-ratio: 4 / 3;
@@ -41,7 +40,6 @@
   animation: wb-gen-dust 9s ease-in-out infinite;
 }
 
-/* ---------- 动画 ---------- */
 @keyframes wb-gen-breathe {
   0%,
   100% {
@@ -100,7 +98,6 @@
     transition: none;
   }
 
-  /* 减少动态效果时不位移，只保留颜色/透明度变化。 */
   .wb-gen-primary:hover:not(:disabled),
   .wb-gen-primary:active:not(:disabled),
   .wb-gen-empty__primary:hover:not(:disabled),
@@ -110,14 +107,12 @@
   }
 }
 
-/* ---------- 窄窗口 ---------- */
 @media (max-width: 860px) {
   .wb-gen-summary__hero {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
 
-  /* 头部改两行：标题在上，Token 在下；模型、工具和最近活动只在运行详情里。 */
   .wb-gen-header {
     flex-wrap: wrap;
     align-items: flex-start;

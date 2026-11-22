@@ -17,7 +17,6 @@ interface PreviewIssuesPopoverProps {
   readonly onSelectDialogue: (dialogueId: string) => void
 }
 
-/** 读取提示按需展开；提示不阻断保存，也不进入主布局。 */
 export function PreviewIssuesPopover({
   issues,
   dialogues,

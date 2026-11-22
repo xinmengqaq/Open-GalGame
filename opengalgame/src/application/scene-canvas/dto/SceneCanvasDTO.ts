@@ -6,16 +6,13 @@ import type {
   SceneCanvasWebgalPresetVO
 } from '../vo/SceneCanvasArrangementVO'
 
-/** 一次编辑请求的公共身份与当前草稿。 */
 export type SceneCanvasEditRequest = {
   projectId: string
   sceneId: string
   canvasId: string
-  /** 画布会话内存中的当前编排。编辑规则以它为准，不读已落盘编排。 */
   arrangement: SceneCanvasArrangementVO
 }
 
-/** 保存原因。周期保存、保存按钮和生成前强制保存走同一用例。 */
 export type SceneCanvasSaveReason = 'periodic' | 'manual' | 'beforeGeneration'
 
 export type ReadSceneCanvasArrangementDTO = {
@@ -29,7 +26,6 @@ export type SaveSceneCanvasArrangementDTO = {
   sceneId: string
   canvasId: string
   reason: SceneCanvasSaveReason
-  /** 要落盘的整份编排，含布局与视口，不含选中状态和撤销栈。 */
   arrangement: SceneCanvasArrangementVO
 }
 

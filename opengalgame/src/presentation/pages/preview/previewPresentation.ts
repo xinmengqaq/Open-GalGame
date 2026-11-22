@@ -187,10 +187,6 @@ export function positionTextOf(
   return '位置待确认'
 }
 
-/**
- * 舞台状态以真实句位为准。引擎快照没有播放阶段时，已定位的台词仍是可核对事实；
- * 没有句位时只说明正在进入，不伪造播放、暂停或就绪。
- */
 export function phaseStatusOf(options: {
   readonly stage: 'preparing' | 'ready' | 'failed'
   readonly phase: PreviewPhase
@@ -447,7 +443,6 @@ export type SettlementQueryOutcome =
       >
     }
 
-/** 把一次「查看结果」的返回归成界面可用的结果；查询失败与仍在核对都要给用户可见反馈。 */
 export function settlementQueryOutcome(
   result: SettlementQueryResultVO,
   now: Date

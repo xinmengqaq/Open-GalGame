@@ -24,10 +24,6 @@ const recoveryFailure = {
 }
 const markerSchema = z.strictObject({ version: z.literal(1), sources: z.array(z.string()) })
 
-/**
- * 把仅尾随空白不同的旧开发目录并入规范目录。规范目录已有内容优先，已处理来源记入 marker。
- * @throws {AppException} 旧目录可读但恢复无法完成。
- */
 export async function recoverLegacyUserDirectory(
   canonicalDirectory: string
 ): Promise<DevUserDirectoryRecoveryResult> {

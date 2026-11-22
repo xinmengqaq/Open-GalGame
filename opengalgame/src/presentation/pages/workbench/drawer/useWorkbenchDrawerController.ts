@@ -24,7 +24,6 @@ export interface WorkbenchDrawerActions {
   readonly activateTab: (tab: DrawerTabId) => void
   readonly closeTab: (tab: DrawerTabId, options?: { worksBusy?: boolean }) => void
   readonly moveTab: (tab: DrawerTabId, toIndex: number) => void
-  /** 打开试玩预览时直接收起抽屉，不抢回触发按钮焦点。 */
   readonly closeForPreview: () => void
 }
 
@@ -38,7 +37,6 @@ export interface WorkbenchDrawerController {
   readonly setWorksBusy: (busy: WorkbenchDrawerBusy) => void
 }
 
-/** 工作台抽屉唯一所有者：开关、焦点归还、标签分区、忙碌事实与生成锁可见性。 */
 export function useWorkbenchDrawerController(
   options: WorkbenchDrawerControllerOptions
 ): WorkbenchDrawerController {
@@ -50,7 +48,6 @@ export function useWorkbenchDrawerController(
   const tabs = useDrawerTabs(scopeKey)
 
   const syncCandidate = tabs.syncCandidate
-  /* 每次生成状态更新都报告候选可用性；新范围第一份报告只建基线。 */
   useEffect(() => {
     syncCandidate(available, snapshotId)
   }, [available, snapshotId, sequence, syncCandidate])

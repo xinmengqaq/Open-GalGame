@@ -24,15 +24,9 @@ export type DirectorySnapshot = {
   members: readonly DirectoryMember[]
 }
 
-/** 共享文件读取的技术失败。调用方按自己的错误码转换。 */
 export class StableFileReadError extends Error {
   readonly absolutePath?: string
 
-  /**
-   * @param kind - 缺失、不是文件、读取变化、无法读取或文本编码非法。
-   * @param message - 技术说明，不直接给用户。
-   * @param cause - 原始失败。
-   */
   constructor(
     readonly kind: 'missing' | 'not-file' | 'changed' | 'unreadable' | 'invalid-text' | 'too-large',
     readonly relativePath: string,
@@ -46,11 +40,6 @@ export class StableFileReadError extends Error {
   }
 }
 
-/**
- * @returns 路径和文件状态；调用方决定缺失是否可接受。
- * @throws {StableFileReadError} 目标不是普通文件或无法读取。
- * @throws {AppException} 路径越界。
- */
 export async function observeProjectFile(
   root: string,
   relativePath: string
@@ -77,11 +66,6 @@ export async function observeProjectFile(
   }
 }
 
-/**
- * 确认路径每一段都是普通文件或目录，不跟随符号链接和目录联接。
- * @throws {StableFileReadError} 路径含链接或目标不是普通文件。
- * @throws {AppException} 路径越界。
- */
 export async function assertOrdinaryProjectFile(root: string, relativePath: string): Promise<void> {
   const safe = assertRelativePath(relativePath)
   let rootReal: string
@@ -122,7 +106,6 @@ export async function assertOrdinaryProjectFile(root: string, relativePath: stri
   }
 }
 
-/** 比较文件身份和精确时间，识别替换、写入和删除。 */
 export function sameFileStats(
   first: BigIntStats | undefined,
   second: BigIntStats | undefined
@@ -137,18 +120,10 @@ export function sameFileStats(
   )
 }
 
-/**
- * 严格解码 UTF-8，保留 BOM 和原始换行。
- * @throws {TypeError} 字节不是合法 UTF-8。
- */
 export function decodeStrictUtf8(bytes: Uint8Array): string {
   return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
 }
 
-/**
- * 流式计算文件摘要，结束或失败时关闭流。
- * @throws {StableFileReadError} 流读取失败。
- */
 export async function digestProjectFile(absolutePath: string): Promise<string> {
   const hash = createHash('sha256')
   const stream = createReadStream(absolutePath)
@@ -162,10 +137,6 @@ export async function digestProjectFile(absolutePath: string): Promise<string> {
   }
 }
 
-/**
- * 读取文件开头，不把整个媒体载入内存。
- * @throws {StableFileReadError} 文件无法打开或读取。句柄会关闭。
- */
 export async function readProjectFilePrefix(absolutePath: string, length: number): Promise<Buffer> {
   let handle: Awaited<ReturnType<typeof open>> | undefined
   try {
@@ -180,11 +151,6 @@ export async function readProjectFilePrefix(absolutePath: string, length: number
   }
 }
 
-/**
- * @returns 按名称排序的成员；目录不存在时为 null。
- * @throws {StableFileReadError} 目标不是目录或无法枚举。
- * @throws {AppException} 路径越界。
- */
 export async function captureProjectDirectory(
   root: string,
   relativePath: string
@@ -238,16 +204,12 @@ async function observeDirectoryMember(
   }
 }
 
-/** 按 UTF-16 码元比较，不使用本机语言环境。 */
 export function compareText(left: string, right: string): number {
   if (left < right) return -1
   if (left > right) return 1
   return 0
 }
 
-/**
- * @throws {StableFileReadError} 文件缺失、变化或无法读取。
- */
 export async function readStableProjectFile(
   root: string,
   relativePath: string,
@@ -292,11 +254,6 @@ export async function readStableProjectFile(
   return { observation, bytes }
 }
 
-/**
- * 确认文件仍是观察时的那个版本。
- * @param observation - 读取开始时的状态。缺失文件的观察没有 stats。
- * @throws {StableFileReadError} 路径或状态发生变化。
- */
 export async function assertSameObservation(
   root: string,
   observation: ObservedProjectFile

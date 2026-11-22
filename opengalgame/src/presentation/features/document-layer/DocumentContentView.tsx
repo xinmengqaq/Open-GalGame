@@ -27,10 +27,6 @@ interface DocumentContentViewProps {
   reloadLatest: () => void
 }
 
-/**
- * 文档正文与阅读侧栏。Markdown 文档可编辑并保存，纯文本保持只读；
- * 加载、失败与空正文分别呈现。
- */
 export function DocumentContentView({
   card,
   view,

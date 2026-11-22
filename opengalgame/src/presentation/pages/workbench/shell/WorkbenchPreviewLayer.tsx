@@ -2,12 +2,13 @@ import { useEffect, useRef, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 
 import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
+import type { SceneExportVersionReference } from '@application/scene-export/vo/SceneExportVO'
 import type { ScenePreviewClient } from '@interfaces/scene-preview/client/ScenePreviewClient'
 import { PreviewPage } from '@presentation/pages/preview/PreviewPage'
 import styles from '../WorkbenchPage.module.css'
 
 export type SavedSceneVersionFact = {
-  requestId: string
+  versionReference: SceneExportVersionReference
   contentBasis: SceneContentBasisVO
 }
 
@@ -22,10 +23,6 @@ interface WorkbenchPreviewLayerProps {
   onSavedVersion: (saved: SavedSceneVersionFact) => void
 }
 
-/**
- * 预览是工作台之上的独立层：挂到 body，遮住工作台并让工作台 inert。
- * 关闭后回到打开前的焦点；前后都不滚动工作台外壳。
- */
 export function WorkbenchPreviewLayer({
   client,
   projectId,
@@ -43,7 +40,6 @@ export function WorkbenchPreviewLayer({
     appRoot?.setAttribute('inert', '')
     const frame = requestAnimationFrame(() => layerRef.current?.focus({ preventScroll: true }))
 
-    // 保存等重渲染可能让聚焦按钮失效并把焦点丢回 body；没有预览内弹窗时拉回预览层。
     function restoreLayerFocus(): void {
       const active = document.activeElement
       if (active instanceof HTMLElement && layerRef.current?.contains(active)) return
@@ -103,7 +99,12 @@ export function WorkbenchPreviewLayer({
         projectName={projectName}
         sceneLabel={sceneLabel}
         onExit={onExit}
-        onSavedVersion={onSavedVersion}
+        onSavedVersion={(saved) =>
+          onSavedVersion({
+            versionReference: { kind: 'preview-save', requestId: saved.requestId },
+            contentBasis: saved.contentBasis
+          })
+        }
       />
     </div>,
     document.body

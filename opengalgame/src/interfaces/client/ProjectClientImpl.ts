@@ -30,9 +30,6 @@ import type {
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 
 export class ProjectClientImpl implements ProjectClient {
-  /**
-   * @param bridge - 与主进程通信的固定桥接。
-   */
   constructor(private readonly bridge: DesktopBridge) {}
   chooseSaveLocation(): Promise<AjaxResult<ProjectSaveLocationVO | null>> {
     return invokeAjaxResult(() => this.bridge.chooseSaveLocation())
@@ -73,24 +70,18 @@ export class ProjectClientImpl implements ProjectClient {
     return invokeAjaxResult(() => this.bridge.unregisterProject(request))
   }
 
-  /** 核对已登记工程的默认场景和作品基线。 */
   ensureProjectWorkspace(
     request: EnsureProjectWorkspaceDTO
   ): Promise<AjaxResult<ProjectWorkspaceVO>> {
     return invokeAjaxResult(() => this.bridge.ensureProjectWorkspace(request))
   }
 
-  /** 只读检查已登记工程的工作区，不补建。 */
   inspectProjectWorkspace(
     request: EnsureProjectWorkspaceDTO
   ): Promise<AjaxResult<ProjectWorkspaceInspectionVO>> {
     return invokeAjaxResult(() => this.bridge.inspectProjectWorkspace(request))
   }
 
-  /**
-   * @param operationId - 当前操作标识，用于只转发本操作的进度。
-   * @returns 操作结果，或通信失败结果。
-   */
   private async execute(
     operationId: string,
     action: () => Promise<AjaxResult<ProjectOperationVO>>,

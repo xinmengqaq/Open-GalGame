@@ -147,11 +147,6 @@
   padding: 16px 24px 22px;
 }
 
-/*
- * 工作台弹层：在视口中心浮起的柔光玻璃面板。
- * 只由 data-theme='workbench'（工作台 --wb-* 主题内、居中弹窗）命中；
- * 首页、项目页和右侧抽屉保留上方原有外观。
- */
 .dialog[data-theme='workbench'] {
   width: min(512px, calc(100vw - 48px));
   max-height: min(82dvh, 680px);
@@ -274,7 +269,6 @@
   box-shadow: var(--wb-focus);
 }
 
-/* 遮罩是一层淡紫灰纱 + 中心柔光，让弹窗浮在光池上，而不是压在暗幕上。 */
 .dialog[data-theme='workbench']::backdrop {
   background:
     radial-gradient(

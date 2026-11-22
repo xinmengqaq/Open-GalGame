@@ -11,9 +11,10 @@ import {
 import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { QuerySceneGenerationRender } from '@application/scene-generation/services/impl/QuerySceneGenerationRender'
 import {
-  generationFixture,
-  request
-} from '../../../../harness/acceptance/support/generationFixture'
+  blockedWriteFixture,
+  clarificationAnswerFixture
+} from './scene-generation-clarification-fixture'
+import { generationFixture, request } from '../../../../harness/acceptance/support/generationFixture'
 
 function question(index: number): {
   prompt: string
@@ -85,15 +86,27 @@ function statusBlock(text: string): string {
   return text.slice(start)
 }
 
-/** 只解析每轮注入的当前事实 JSON，不把记忆或运行状态块当成事实。 */
+/** Pi 把提示字符串包成文本块；只拼接文本块，不解释其他类型。 */
+function contentText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .flatMap((block) =>
+      block && typeof block === 'object' && 'text' in block && typeof block.text === 'string'
+        ? [block.text]
+        : []
+    )
+    .join('')
+}
+
 function agentFacts(
   bodies: readonly { messages: Array<{ role: string; content?: string }> }[]
 ): Array<Record<string, unknown>> {
   return bodies.flatMap((body) =>
     body.messages.flatMap((message) => {
-      if (message.role !== 'user' || typeof message.content !== 'string') return []
+      if (message.role !== 'user') return []
       try {
-        const parsed: unknown = JSON.parse(message.content)
+        const parsed: unknown = JSON.parse(contentText(message.content))
         return parsed !== null && typeof parsed === 'object' && 'mode' in parsed
           ? [parsed as Record<string, unknown>]
           : []
@@ -105,10 +118,7 @@ function agentFacts(
 }
 
 it('写前提问先停在决定边界，回答后继续生成并只在审阅处等待', async () => {
-  let clarifications = 0
-  const f = await generationFixture({
-    clarifyForWrite: () => (clarifications++ === 0 ? [question(1)] : undefined)
-  })
+  const f = await clarificationAnswerFixture([question(1)])
   const baseline = f.git('rev-parse', 'HEAD')
   await f.app.generation.generateScene({ ...request, reviewCandidate: true })
   await f.run()
@@ -134,7 +144,6 @@ it('写前提问先停在决定边界，回答后继续生成并只在审阅处�
   const candidate = await f.app.ports.artifacts.readCandidate(reviewed, review.candidateSnapshotId!)
   expect(candidate.candidateSnapshotId).toBe(review.candidateSnapshotId)
 
-  // 已回答的问题必须以服务端事实进入下一轮模型事实，而不只是停留在持久化记录里。
   const answeredFacts = agentFacts(f.bodies).filter(
     (facts) =>
       facts.mode === 'generate' &&
@@ -159,9 +168,7 @@ it('写前提问先停在决定边界，回答后继续生成并只在审阅处�
 })
 
 it('主动报告阻塞时等待修正并展示阻塞原因，不产生候选', async () => {
-  const f = await generationFixture({
-    blockForWrite: () => '缺少告别后去向的要求'
-  })
+  const f = await blockedWriteFixture('缺少告别后去向的要求')
   await f.app.generation.generateScene(request)
   await f.run()
 
@@ -211,9 +218,10 @@ it('写出后收尾优先于阻塞选项，按终态动作进入审阅而不是�
 })
 
 it('候选已写出时写后状态块列出权威路径，不显示未写出', async () => {
+  // Pi 写入后本轮立即结束；下一次模型往返只由自动修正开启，用它验证写后状态。
   const f = await generationFixture({
-    repeatReadBeforeWrite: 1,
-    postWriteResponses: 3
+    repair: true,
+    repeatReadBeforeWrite: 1
   })
   await f.app.generation.generateScene({ ...request, reviewCandidate: true })
   await f.run()
@@ -237,12 +245,10 @@ it('修正状态块列出已有权威候选，不因本轮账本重新开始而�
   const repairBodies = f.bodies.filter((body) =>
     body.messages.some(
       (message) =>
-        message.role === 'user' &&
-        typeof message.content === 'string' &&
-        message.content.includes('"mode":"repair"')
+        message.role === 'user' && contentText(message.content).includes('"mode":"repair"')
     )
   )
-  expect(repairBodies.length).toBeGreaterThan(1)
+  expect(repairBodies.length).toBeGreaterThan(0)
   const blocks = repairBodies.map((body) => statusBlock(systemBlock(body)))
   for (const block of blocks) {
     expect(block).toContain('候选：game/scene/start.txt')
@@ -250,9 +256,12 @@ it('修正状态块列出已有权威候选，不因本轮账本重新开始而�
   }
   expect(blocks[0]).toContain('本轮尚未写入：先改写候选')
   expect(blocks[0]).not.toContain('提交或报告阻塞')
-  expect(blocks.at(-1)).toContain('提交或报告阻塞')
-  expect(blocks.at(-1)).toContain('无提交工具时直接输出 JSON')
-  expect((await f.app.status.getSceneGenerationStatus(request)).state).toBe('succeeded')
+  // Pi 写入后本轮立即结束，由宿主读回、校验并进入审阅；不存在旧的收尾模型往返。
+  expect(finalizeRequestCount(f.bodies)).toBe(0)
+  const finalStatus = await f.app.status.getSceneGenerationStatus(request)
+  expect(finalStatus.state).toBe('waiting')
+  expect(finalStatus.interaction?.kind).toBe('review')
+  expect(finalStatus.candidateSnapshotId).toBeTruthy()
   expect(f.writes()).toBe(2)
 })
 
@@ -284,7 +293,6 @@ it('运行中操作在历史为空时仍可读取最近一次生成，取消后�
   await f.app.generation.generateScene({ ...request, reviewCandidate: true })
   const job = f.run()
 
-  // 运行中记录已经落盘，但没有检查点；历史读空时仍要能按场景恢复运行状态。
   const dependencies: SceneGenerationDependencies = {
     domain: new SceneGenerationDomainServiceImpl(),
     input: f.app.ports.input,
@@ -292,6 +300,9 @@ it('运行中操作在历史为空时仍可读取最近一次生成，取消后�
     workspace: f.app.ports.workspace,
     artifacts: f.app.ports.artifacts,
     versions: f.app.ports.versions,
+    writeRecovery: {
+      recoverCandidateWrite: async () => ({ outcome: 'notApplicable' as const })
+    },
     workflow: f.app.ports.workflow,
     history: f.app.ports.history,
     memory: f.app.ports.memory,
@@ -339,7 +350,6 @@ it('运行中操作在历史为空时仍可读取最近一次生成，取消后�
     state: 'cancelled',
     canCancel: false
   })
-  // 取消会生成取消边界的检查点（既有语义）；确认历史里不会写入运行中那条伪造记录。
   const historyAfterCancel = await f.app.history.listSceneGenerationHistoryForScene({
     ...scope,
     limit: 1

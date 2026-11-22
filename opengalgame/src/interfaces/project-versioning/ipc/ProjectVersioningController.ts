@@ -14,14 +14,9 @@ import {
   undoVersionHistorySchema
 } from './ProjectVersioningRequestSchema'
 
-/** 只转发用户历史用例，不组合版本步骤，也不解释历史内容。 */
 export class ProjectVersioningController {
   private readonly handle: IpcRequestHandler
 
-  /**
-   * @param versioning - 版本应用服务。
-   * @param exceptions - 统一失败出口。
-   */
   constructor(
     private readonly versioning: ProjectVersioningApplicationService,
     exceptions: IpcExceptionHandler

@@ -1,5 +1,3 @@
-/* 左栏保存提示：失败与待确认留在编辑路径上，不自动消失。 */
-
 .notice {
   display: flex;
   flex: none;

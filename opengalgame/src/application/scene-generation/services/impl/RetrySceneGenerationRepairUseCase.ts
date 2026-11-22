@@ -70,6 +70,6 @@ export class RetrySceneGenerationRepairUseCase {
         msg: '修复重跑没有绑定已保存编排版本'
       })
     }
-    return toRenderStatusVO(execution)
+    return toRenderStatusVO(execution, false, this.context.deps.workflow.capabilities(), true)
   }
 }

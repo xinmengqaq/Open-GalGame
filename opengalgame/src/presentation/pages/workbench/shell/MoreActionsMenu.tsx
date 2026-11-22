@@ -17,7 +17,6 @@ interface MoreActionsMenuProps {
   actions: readonly WorkbenchToolbarAction[]
 }
 
-/** 紧凑区的唯一动作入口：只转发注册表里的动作，不复制业务实现。 */
 export function MoreActionsMenu({ actions }: MoreActionsMenuProps): ReactElement | null {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)

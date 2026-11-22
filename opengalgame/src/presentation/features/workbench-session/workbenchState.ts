@@ -7,18 +7,12 @@ import { CONTENT_DAMAGED_CODE, UNSUPPORTED_FORMAT_CODE } from '../../feedback/pr
 import { useWorkbenchSessionStore } from './workbenchSession.store'
 import type { WorkspaceLoadStatus } from './workbenchSession.types'
 
-/**
- * 工作台全局读取状态。空画布、读取失败与编排损坏是三件事：
- * 空画布可以开始编排，读取失败可以重试，损坏需要检查工程而不是假装修复。
- */
 export type WorkbenchStateKind = 'ready' | 'reading' | 'read-failed' | 'damaged' | 'empty'
 
-/** 状态属于哪个对象。顶栏用它说明“哪一部分没有读到”。 */
 export type WorkbenchStateScope = 'workspace' | 'catalog' | 'arrangement'
 
 export type WorkbenchStateTone = 'ready' | 'reading' | 'empty' | 'warning' | 'danger'
 
-/** 状态视图可映射到既有动作，不在状态模型里保存回调。 */
 export type WorkbenchStateIntent = 'reload' | 'inspect'
 
 export type WorkbenchStateAction = {
@@ -27,22 +21,15 @@ export type WorkbenchStateAction = {
   emphasis: 'primary' | 'secondary'
 }
 
-/** 只含状态视图需要的字段，不持有目录、卡片或关系对象。 */
 export type WorkbenchState = {
   kind: WorkbenchStateKind
   scope: WorkbenchStateScope
   tone: WorkbenchStateTone
-  /** 对象：工程与画布 / 画布编排 / 来源目录。 */
   subject: string
-  /** 当前状态。 */
   title: string
-  /** 失败原因，没有失败时为 null。 */
   detail: string | null
-  /** 下一步可以做什么，不做没有实现的能力。 */
   nextStep: string
-  /** 按呈现顺序排列的动作意图，空数组表示不提供动作。 */
   actions: readonly WorkbenchStateAction[]
-  /** 领域失败码，仅用于诊断与状态签名；不从消息文本猜测状态。 */
   failureCode: number | null
 }
 
@@ -51,18 +38,9 @@ export type WorkbenchStateInput = {
   catalogError: FailureState | null
   arrangementStatus: WorkspaceLoadStatus
   arrangementError: FailureState | null
-  /**
-   * 已加载画布的卡片数。ready/empty 按它归一化；
-   * 不传时保持只看 arrangementStatus 的旧语义。
-   */
   arrangementCardCount?: number
 }
 
-/**
- * 是否属于“内容/格式已经不能按当前版本读取”，需要检查工程而不是重试。
- * 只按失败码判断，不读取失败消息。
- * @param code - 失败码。
- */
 export function isDamagedFailureCode(code: number | null | undefined): boolean {
   return (
     code === CONTENT_DAMAGED_CODE ||
@@ -72,11 +50,6 @@ export function isDamagedFailureCode(code: number | null | undefined): boolean {
   )
 }
 
-/**
- * 从真实的目录与画布读取状态推导一个全局状态。
- * 画布失败优先于目录失败，失败优先于读取中，读取中优先于空态。
- * @param input - 目录与画布的读取状态。
- */
 export function workbenchStateOf(input: WorkbenchStateInput): WorkbenchState {
   if (input.arrangementStatus === 'failed' || input.arrangementError !== null) {
     return arrangementStateOf(input.arrangementStatus, input.arrangementError)
@@ -102,11 +75,6 @@ export function workbenchStateOf(input: WorkbenchStateInput): WorkbenchState {
   return readyStateOf('workspace')
 }
 
-/**
- * 画布状态面使用的唯一映射；读取失败与损坏不会回落到空画布。
- * @param status - 画布读取状态。
- * @param error - 画布读取失败。
- */
 export function arrangementStateOf(
   status: WorkspaceLoadStatus,
   error: FailureState | null
@@ -117,11 +85,6 @@ export function arrangementStateOf(
   return readyStateOf('arrangement')
 }
 
-/**
- * 目录面板使用的唯一映射；空目录是可导入素材的空态，不是读取失败。
- * @param status - 目录读取状态。
- * @param error - 目录读取失败。
- */
 export function catalogStateOf(
   status: WorkspaceLoadStatus,
   error: FailureState | null
@@ -132,7 +95,6 @@ export function catalogStateOf(
   return readyStateOf('catalog')
 }
 
-/** 订阅会话读取字段和卡片数，供顶栏状态视图直接使用；不新建全局 store。 */
 export function useWorkbenchState(): WorkbenchState {
   const catalogStatus = useWorkbenchSessionStore((state) => state.catalogStatus)
   const catalogError = useWorkbenchSessionStore((state) => state.catalogError)

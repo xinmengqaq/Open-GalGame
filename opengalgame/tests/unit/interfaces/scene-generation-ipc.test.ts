@@ -108,7 +108,6 @@ interface ControllableWindow {
   destroy: () => void
 }
 
-/** 可独立销毁的窗口，用来观察多窗口进度订阅与销毁释放。 */
 function controllableWindow(id: number): ControllableWindow {
   const destroyed = { value: false }
   const destroyListeners: (() => void)[] = []
@@ -187,11 +186,22 @@ function services(): GenerationServiceFixture {
       retrySceneGenerationRepair: vi.fn(async () => {
         calls.push('retryRepair')
         return status(2)
+      }),
+      forkSceneGeneration: vi.fn(async () => {
+        calls.push('fork')
+        return {
+          status: status(3),
+          source: {
+            summary: '候选已发布，等待审阅',
+            createdAt: '2026-10-21T10:24:00.000Z'
+          }
+        }
       })
     },
     renderQuery: {
       getSceneGenerationRenderStatus: vi.fn(async () => status(4)),
       findLatestSceneGeneration: vi.fn(async () => status(4)),
+      listUnfinishedSceneGenerations: vi.fn(async () => ({ items: [] })),
       subscribeSceneGenerationProgress: vi.fn((_request, publish) => {
         calls.push('subscribe')
         const unsubscribe = vi.fn(() => calls.push('unsubscribe'))
@@ -217,7 +227,14 @@ function services(): GenerationServiceFixture {
     control: {
       pauseSceneGeneration: vi.fn(async () => status()),
       resumeSceneGeneration: vi.fn(async () => status()),
-      cancelSceneGeneration: vi.fn(async () => status())
+      resumeUnfinishedSceneGeneration: vi.fn(async () => status()),
+      retrySceneGenerationCleanup: vi.fn(async () => status()),
+      cancelSceneGeneration: vi.fn(async () => status()),
+      verifyUnknownResult: vi.fn(async () => ({
+        outcome: 'stillPending' as const,
+        message: '证据仍不足，结果保持待核对',
+        status: status()
+      }))
     },
     history: {
       listSceneGenerationHistory: vi.fn(),
@@ -242,6 +259,19 @@ function services(): GenerationServiceFixture {
         },
         canView: true,
         canContinue: true
+      })),
+      readSceneGenerationHistoryDetail: vi.fn(async () => ({
+        projectId: 'project-1',
+        sceneId: 'scene-1',
+        operationId: 'operation-1',
+        threadId: 'thread-1',
+        branchId: 'branch-1',
+        checkpointId: 'checkpoint-1',
+        boundary: 'waitingReview' as const,
+        stage: 'waitingReview' as const,
+        message: '候选已发布，等待审阅',
+        createdAt: '2026-10-21T10:24:00.000Z',
+        canFork: true
       })),
       listSceneGenerationHistoryForScene: vi.fn(
         async (): Promise<readonly SceneGenerationHistorySummaryVO[]> => [
@@ -346,6 +376,11 @@ describe('场景生成用户接口', () => {
     }
     const projected = await sceneGeneration.readCheckpoint(checkpoint, access)
     expect(projected.code).toBe(ErrorCodes.success)
+    expect(projected.data).toMatchObject({
+      checkpointId: 'checkpoint-1',
+      canFork: true,
+      boundary: 'waitingReview'
+    })
     expect(JSON.stringify(projected)).not.toMatch(/say:|filePath|entryFile|game[/\\]/)
     const history: ListSceneGenerationHistoryForSceneDTO = {
       projectId: 'project-1',
@@ -354,7 +389,10 @@ describe('场景生成用户接口', () => {
     }
     await expect(sceneGeneration.listHistory(history, access)).resolves.toMatchObject({
       code: ErrorCodes.success,
-      data: [{ checkpointId: 'checkpoint-1', boundary: 'waitingReview' }]
+      data: {
+        items: [{ checkpointId: 'checkpoint-1', boundary: 'waitingReview' }],
+        unfinished: []
+      }
     })
     const reply: ReplySceneGenerationInteractionDTO = {
       ...checkpoint,
@@ -367,6 +405,36 @@ describe('场景生成用户接口', () => {
       code: ErrorCodes.success,
       data: { stage: 'generating', sequence: 4 }
     })
+  })
+
+  it('历史分叉只接受来源身份和策略，返回新操作与可读来源', async () => {
+    const { controller: sceneGeneration, services: app } = controller()
+    const request = {
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      threadId: 'thread-1',
+      branchId: 'branch-1',
+      checkpointId: 'checkpoint-1',
+      policy: { maxCorrections: 2 }
+    }
+    await expect(sceneGeneration.fork(request, access)).resolves.toMatchObject({
+      code: ErrorCodes.success,
+      data: {
+        status: { operationId: 'operation-1', sequence: 3 },
+        source: { summary: '候选已发布，等待审阅' }
+      }
+    })
+    expect(app.launch.forkSceneGeneration).toHaveBeenCalledWith(request)
+    await expect(
+      sceneGeneration.fork({ ...request, operationId: 'fork-1' }, access)
+    ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
+    await expect(
+      sceneGeneration.fork({ ...request, inputChanges: { canvasId: 'canvas-1' } }, access)
+    ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
+    await expect(sceneGeneration.fork(request, denied)).resolves.toMatchObject({
+      code: ErrorCodes.forbidden
+    })
+    expect(app.launch.forkSceneGeneration).toHaveBeenCalledTimes(1)
   })
 
   it('最近一次生成只按场景身份读取，运行中没有检查点也返回状态', async () => {

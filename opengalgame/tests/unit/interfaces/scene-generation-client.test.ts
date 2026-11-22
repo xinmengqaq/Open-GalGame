@@ -92,7 +92,6 @@ function bridgeWith(
   }
 }
 
-/** 让订阅请求的 then/catch 链跑完，不等待真实时间。 */
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve()
   await Promise.resolve()

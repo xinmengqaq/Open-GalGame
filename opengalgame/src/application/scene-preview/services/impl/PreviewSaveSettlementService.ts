@@ -71,7 +71,6 @@ const SAVE_REFUSAL_CODES: readonly PreviewErrorCode[] = [
   'sessionClosed'
 ]
 
-/** 执行保存、持久结算查询和保存后的运行时复原。 */
 export class PreviewSaveSettlementService {
   constructor(private readonly deps: PreviewSaveSettlementServiceDependencies) {}
 
@@ -339,10 +338,6 @@ export class PreviewSaveSettlementService {
     }
   }
 
-  /**
-   * 只有已经准备的会话才拥有可换代的舞台。
-   * 没准备时保留当前值，避免保存结果宣称一个不存在的运行时。
-   */
   private nextRuntimeGeneration(previewSessionId: string): number {
     const session = this.deps.sessions.find(previewSessionId)
     if (!session || session.closed || !session.prepared) return session?.runtimeGeneration ?? 0
@@ -468,10 +463,6 @@ function rejected(code: PreviewErrorCode): SaveDialogueChangesVO {
   return { status: 'rejected', failure: previewError(code) }
 }
 
-/**
- * 保存结果、持久结算和回读必须是同一份源快照依据。
- * 修订文件字节也必须等于本次提交的修订摘要，正式源文件仍是权威。
- */
 function saveVerified(
   before: ScenePreviewSourceFact,
   verified: ScenePreviewSourceFact | undefined,

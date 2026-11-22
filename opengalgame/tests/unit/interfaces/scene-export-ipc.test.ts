@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ExportSavedSceneDTO } from '@application/scene-export/dto/ExportSavedSceneDTO'
-import type { ReadLatestPreviewSaveService } from '@application/scene-export/services/ReadLatestPreviewSaveUseCase'
+import type { ChooseSceneExportDirectoryService } from '@application/scene-export/services/ChooseSceneExportDirectory'
+import type { ReadLatestSavedSceneVersionService } from '@application/scene-export/services/ReadLatestSavedSceneVersionUseCase'
 import type { SceneExportApplicationService } from '@application/scene-export/services/SceneExportApplicationService'
-import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewSaveVersionVO'
+import type { SceneExportDirectoryChoiceVO } from '@application/scene-export/vo/SceneExportDestinationVO'
+import type { SavedSceneVersionVO } from '@application/scene-export/vo/SavedSceneVersionVO'
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
 import type { OpenDirectoryApplicationService } from '@application/system-path/services/OpenDirectoryApplicationService'
 import { AppException } from '@common/errors/AppException'
@@ -40,7 +42,11 @@ vi.mock('electron', () => ({
 
 const access = { trusted: true, requestId: 'req-1' }
 const denied = { trusted: false, requestId: 'req-2' }
-const fixedChannels = ['scene-export:export-saved-scene', 'scene-export:read-latest-preview-save']
+const fixedChannels = [
+  'scene-export:export-saved-scene',
+  'scene-export:read-latest-saved-scene-version',
+  'scene-export:choose-directory'
+]
 
 function request(): ExportSavedSceneDTO {
   return {
@@ -51,9 +57,9 @@ function request(): ExportSavedSceneDTO {
   }
 }
 
-function previewVersion(): PreviewSaveVersionVO {
+function savedVersion(): SavedSceneVersionVO {
   return {
-    requestId: 'request-1',
+    versionReference: { kind: 'preview-save', requestId: 'request-1' },
     revisionDigest: 'a'.repeat(64),
     contentBasis: request().contentBasis
   }
@@ -82,11 +88,17 @@ function controller(
   exportSavedScene: SceneExportApplicationService['exportSavedScene'] = vi.fn(
     async () => unavailable()
   ),
-  latestPreviewSave: ReadLatestPreviewSaveService = { readLatestPreviewSave: vi.fn(async () => null) }
+  latestSavedSceneVersion: ReadLatestSavedSceneVersionService = {
+    readLatestSavedSceneVersion: vi.fn(async () => null)
+  },
+  chooseDirectory: ChooseSceneExportDirectoryService = {
+    chooseSceneExportDirectory: vi.fn(async () => ({ status: 'canceled' as const }))
+  }
 ): {
   controller: SceneExportController
   exportSavedScene: typeof exportSavedScene
-  latestPreviewSave: ReadLatestPreviewSaveService
+  latestSavedSceneVersion: ReadLatestSavedSceneVersionService
+  chooseDirectory: ChooseSceneExportDirectoryService
   logs: string[]
 } {
   const { logger, logs } = loggerOf()
@@ -94,8 +106,14 @@ function controller(
   return {
     logs,
     exportSavedScene,
-    latestPreviewSave,
-    controller: new SceneExportController(service, latestPreviewSave, new IpcExceptionHandler(logger, new IpcErrorMapper()))
+    latestSavedSceneVersion,
+    chooseDirectory,
+    controller: new SceneExportController(
+      service,
+      latestSavedSceneVersion,
+      chooseDirectory,
+      new IpcExceptionHandler(logger, new IpcErrorMapper())
+    )
   }
 }
 
@@ -157,6 +175,90 @@ describe('单场景导出用户接口', () => {
       code: ErrorCodes.forbidden
     })
     expect(exportSavedScene).not.toHaveBeenCalled()
+  })
+
+  it('生成提交引用按严格判别联合进入应用层，伪造形状在调用前拒绝', async () => {
+    const exportSavedScene = vi.fn(async () => unavailable())
+    const { controller: sceneExport } = controller(exportSavedScene)
+    const generation = {
+      ...request(),
+      versionReference: {
+        kind: 'generation-commit' as const,
+        operationId: 'generation-operation-1',
+        commitId: 'a'.repeat(40)
+      }
+    }
+
+    await expect(sceneExport.exportSavedScene(generation, access)).resolves.toEqual({
+      code: ErrorCodes.success,
+      msg: '场景导出已返回',
+      data: unavailable()
+    })
+    expect(exportSavedScene).toHaveBeenCalledOnce()
+
+    const invalid = [
+      {
+        ...generation,
+        versionReference: { ...generation.versionReference, commitId: 'not-a-commit' }
+      },
+      {
+        ...generation,
+        versionReference: {
+          ...generation.versionReference,
+          operationId: 'generation operation with spaces'
+        }
+      },
+      {
+        ...generation,
+        versionReference: { ...generation.versionReference, requestId: 'preview-request-1' }
+      },
+      {
+        ...generation,
+        versionReference: { kind: 'candidate-snapshot', snapshotId: 'candidate-1' }
+      }
+    ]
+    for (const input of invalid) {
+      await expect(sceneExport.exportSavedScene(input, access)).resolves.toMatchObject({
+        code: ErrorCodes.invalidRequest
+      })
+    }
+    expect(exportSavedScene).toHaveBeenCalledOnce()
+  })
+
+  it('目的地只接受工程默认或 selectionId，路径字段在调用前拒绝', async () => {
+    const exportSavedScene = vi.fn(async () => unavailable())
+    const { controller: sceneExport } = controller(exportSavedScene)
+    const saved = request()
+
+    await expect(
+      sceneExport.exportSavedScene(
+        { ...saved, destination: { kind: 'workspace' } },
+        access
+      )
+    ).resolves.toEqual({
+      code: ErrorCodes.success,
+      msg: '场景导出已返回',
+      data: unavailable()
+    })
+    expect(exportSavedScene).toHaveBeenCalledOnce()
+
+    const invalid = [
+      { kind: 'workspace', path: 'D:/outside' },
+      { kind: 'selected', selectionId: 'not-a-uuid' },
+      {
+        kind: 'selected',
+        selectionId: '00000000-0000-4000-8000-000000000000',
+        path: 'D:/outside'
+      },
+      { kind: 'absolute', directoryPath: 'D:/outside' },
+      'D:/outside'
+    ]
+    for (const destination of invalid) {
+      await expect(
+        sceneExport.exportSavedScene({ ...saved, destination }, access)
+      ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
+    }
+    expect(exportSavedScene).toHaveBeenCalledOnce()
   })
 
   it('保存未完成和路径异常映射为安全错误，不调用成功产物', async () => {
@@ -268,11 +370,15 @@ describe('单场景导出用户接口', () => {
   })
 })
 
-describe('最近预览保存版本查询用户接口', () => {
-  it('注册查询通道并原样返回最近版本，非法输入在调用前拒绝', async () => {
-    const readLatestPreviewSave = vi.fn(async () => previewVersion())
-    const { controller: sceneExport } = controller(vi.fn(async () => unavailable()), {
-      readLatestPreviewSave
+describe('选择导出目录用户接口', () => {
+  const selectionId = '00000000-0000-4000-8000-000000000000'
+
+  it('注册固定选择通道，取消返回成功结果且不携带路径', async () => {
+    const chooseSceneExportDirectory = vi.fn(
+      async (): Promise<SceneExportDirectoryChoiceVO> => ({ status: 'canceled' })
+    )
+    const { controller: sceneExport } = controller(undefined, undefined, {
+      chooseSceneExportDirectory
     })
     const detach = registerSceneExportIpc({
       sceneExport,
@@ -281,81 +387,93 @@ describe('最近预览保存版本查询用户接口', () => {
     })
 
     expect([...ipc.handlers.keys()]).toEqual(fixedChannels)
-    await expect(
-      sceneExport.readLatestPreviewSave({ projectId: 'project-1', sceneId: 'scene-1' }, access)
-    ).resolves.toEqual({
+    const canceled = await sceneExport.chooseSceneExportDirectory(
+      { projectId: 'project-1', sceneId: 'scene-1' },
+      access
+    )
+    expect(canceled).toEqual({
       code: ErrorCodes.success,
-      msg: '最近一次预览保存已返回',
-      data: previewVersion()
+      msg: '导出位置选择已返回',
+      data: { status: 'canceled' }
     })
-    expect(readLatestPreviewSave).toHaveBeenCalledOnce()
+    expect(JSON.stringify(canceled)).not.toMatch(/[A-Za-z]:[\\/]/)
+    expect(chooseSceneExportDirectory).toHaveBeenCalledOnce()
 
-    await expect(sceneExport.readLatestPreviewSave(null, access)).resolves.toMatchObject({
-      code: ErrorCodes.invalidRequest
-    })
     await expect(
-      sceneExport.readLatestPreviewSave({ projectId: 'project-1' }, access)
+      sceneExport.chooseSceneExportDirectory({ projectId: 'project-1' }, access)
     ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
     await expect(
-      sceneExport.readLatestPreviewSave(
-        { projectId: 'project-1', sceneId: 'scene-1', extra: true },
+      sceneExport.chooseSceneExportDirectory(
+        { projectId: 'project-1', sceneId: 'scene-1', directory: 'D:/outside' },
         access
       )
     ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
     await expect(
-      sceneExport.readLatestPreviewSave({ projectId: '   ', sceneId: 'scene-1' }, access)
-    ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
-    await expect(
-      sceneExport.readLatestPreviewSave({ projectId: 'project-1', sceneId: 'scene-1' }, denied)
+      sceneExport.chooseSceneExportDirectory(
+        { projectId: 'project-1', sceneId: 'scene-1' },
+        denied
+      )
     ).resolves.toMatchObject({ code: ErrorCodes.forbidden })
-    expect(readLatestPreviewSave).toHaveBeenCalledOnce()
+    expect(chooseSceneExportDirectory).toHaveBeenCalledOnce()
     detach()
     expect(ipc.handlers.size).toBe(0)
   })
 
-  it('没有已结算版本时原样返回 null', async () => {
-    const { controller: sceneExport, latestPreviewSave } = controller()
+  it('选中目录只回传 selectionId 与展示路径', async () => {
+    const chooseSceneExportDirectory = vi.fn(
+      async (): Promise<SceneExportDirectoryChoiceVO> => ({
+        status: 'selected',
+        selectionId,
+        directoryPath: 'D:/chosen-parent'
+      })
+    )
+    const { controller: sceneExport } = controller(undefined, undefined, {
+      chooseSceneExportDirectory
+    })
+
     await expect(
-      sceneExport.readLatestPreviewSave({ projectId: 'project-1', sceneId: 'scene-1' }, access)
+      sceneExport.chooseSceneExportDirectory(
+        { projectId: 'project-1', sceneId: 'scene-1' },
+        access
+      )
     ).resolves.toEqual({
       code: ErrorCodes.success,
-      msg: '最近一次预览保存已返回',
-      data: null
+      msg: '导出位置选择已返回',
+      data: { status: 'selected', selectionId, directoryPath: 'D:/chosen-parent' }
     })
-    expect(latestPreviewSave.readLatestPreviewSave).toHaveBeenCalledOnce()
   })
 
-  it('客户端只接受安全的最近版本结果，浏览器桥固定返回不支持', async () => {
+  it('客户端只接受安全选择结果，浏览器桥固定返回不支持', async () => {
     const bridge = createDesktopBridge({
       invoke: async (channel) => {
-        if (channel !== 'scene-export:read-latest-preview-save')
+        if (channel !== 'scene-export:choose-directory')
           return { code: ErrorCodes.invalidRequest, msg: '错误通道' }
         return {
           code: ErrorCodes.success,
-          msg: '最近一次预览保存已返回',
-          data: previewVersion()
+          msg: '导出位置选择已返回',
+          data: { status: 'selected', selectionId, directoryPath: 'D:/chosen-parent' }
         }
       },
       subscribe: () => () => undefined
     })
     const client = new SceneExportClientImpl(bridge)
     await expect(
-      client.readLatestPreviewSave({ projectId: 'project-1', sceneId: 'scene-1' })
+      client.chooseSceneExportDirectory({ projectId: 'project-1', sceneId: 'scene-1' })
     ).resolves.toEqual({
       code: ErrorCodes.success,
-      msg: '最近一次预览保存已返回',
-      data: previewVersion()
+      msg: '导出位置选择已返回',
+      data: { status: 'selected', selectionId, directoryPath: 'D:/chosen-parent' }
     })
 
     const malformed = createDesktopBridge({
       invoke: async () => ({
         code: ErrorCodes.success,
-        msg: '最近一次预览保存已返回',
-        data: { requestId: 'request-1', revisionDigest: 'not-a-digest', contentBasis: request().contentBasis }
+        msg: '导出位置选择已返回',
+        data: { status: 'selected', selectionId: 'not-a-uuid', directoryPath: 'relative/path' }
       }),
       subscribe: () => () => undefined
     })
-    const rejected = await new SceneExportClientImpl(malformed).readLatestPreviewSave({
+    const rejected = await new SceneExportClientImpl(malformed).chooseSceneExportDirectory({
       projectId: 'project-1',
       sceneId: 'scene-1'
     })
@@ -368,7 +486,119 @@ describe('最近预览保存版本查询用户接口', () => {
     })
     const browser = createBrowserDesktopBridge()
     await expect(
-      browser.readLatestPreviewSave({ projectId: 'project-1', sceneId: 'scene-1' })
+      browser.chooseSceneExportDirectory({ projectId: 'project-1', sceneId: 'scene-1' })
+    ).resolves.toMatchObject({
+      code: ErrorCodes.forbidden,
+      msg: '当前环境不能选择导出位置'
+    })
+  })
+})
+
+describe('最新可导出正式保存版本查询用户接口', () => {
+  it('注册查询通道并原样返回最近版本，非法输入在调用前拒绝', async () => {
+    const readLatestSavedSceneVersion = vi.fn(async () => savedVersion())
+    const { controller: sceneExport } = controller(vi.fn(async () => unavailable()), {
+      readLatestSavedSceneVersion
+    })
+    const detach = registerSceneExportIpc({
+      sceneExport,
+      getWindow: () => ({}) as never,
+      rendererUrl: 'http://127.0.0.1:5173/'
+    })
+
+    expect([...ipc.handlers.keys()]).toEqual(fixedChannels)
+    await expect(
+      sceneExport.readLatestSavedSceneVersion({ projectId: 'project-1', sceneId: 'scene-1' }, access)
+    ).resolves.toEqual({
+      code: ErrorCodes.success,
+      msg: '最新可导出正式版本已返回',
+      data: savedVersion()
+    })
+    expect(readLatestSavedSceneVersion).toHaveBeenCalledOnce()
+
+    await expect(sceneExport.readLatestSavedSceneVersion(null, access)).resolves.toMatchObject({
+      code: ErrorCodes.invalidRequest
+    })
+    await expect(
+      sceneExport.readLatestSavedSceneVersion({ projectId: 'project-1' }, access)
+    ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
+    await expect(
+      sceneExport.readLatestSavedSceneVersion(
+        { projectId: 'project-1', sceneId: 'scene-1', extra: true },
+        access
+      )
+    ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
+    await expect(
+      sceneExport.readLatestSavedSceneVersion({ projectId: '   ', sceneId: 'scene-1' }, access)
+    ).resolves.toMatchObject({ code: ErrorCodes.invalidRequest })
+    await expect(
+      sceneExport.readLatestSavedSceneVersion({ projectId: 'project-1', sceneId: 'scene-1' }, denied)
+    ).resolves.toMatchObject({ code: ErrorCodes.forbidden })
+    expect(readLatestSavedSceneVersion).toHaveBeenCalledOnce()
+    detach()
+    expect(ipc.handlers.size).toBe(0)
+  })
+
+  it('没有已结算版本时原样返回 null', async () => {
+    const { controller: sceneExport, latestSavedSceneVersion } = controller()
+    await expect(
+      sceneExport.readLatestSavedSceneVersion({ projectId: 'project-1', sceneId: 'scene-1' }, access)
+    ).resolves.toEqual({
+      code: ErrorCodes.success,
+      msg: '最新可导出正式版本已返回',
+      data: null
+    })
+    expect(latestSavedSceneVersion.readLatestSavedSceneVersion).toHaveBeenCalledOnce()
+  })
+
+  it('客户端只接受安全的最近版本结果，浏览器桥固定返回不支持', async () => {
+    const bridge = createDesktopBridge({
+      invoke: async (channel) => {
+        if (channel !== 'scene-export:read-latest-saved-scene-version')
+          return { code: ErrorCodes.invalidRequest, msg: '错误通道' }
+        return {
+          code: ErrorCodes.success,
+          msg: '最新可导出正式版本已返回',
+          data: savedVersion()
+        }
+      },
+      subscribe: () => () => undefined
+    })
+    const client = new SceneExportClientImpl(bridge)
+    await expect(
+      client.readLatestSavedSceneVersion({ projectId: 'project-1', sceneId: 'scene-1' })
+    ).resolves.toEqual({
+      code: ErrorCodes.success,
+      msg: '最新可导出正式版本已返回',
+      data: savedVersion()
+    })
+
+    const malformed = createDesktopBridge({
+      invoke: async () => ({
+        code: ErrorCodes.success,
+        msg: '最新可导出正式版本已返回',
+        data: {
+          versionReference: { kind: 'preview-save', requestId: 'request-1' },
+          revisionDigest: 'not-a-digest',
+          contentBasis: request().contentBasis
+        }
+      }),
+      subscribe: () => () => undefined
+    })
+    const rejected = await new SceneExportClientImpl(malformed).readLatestSavedSceneVersion({
+      projectId: 'project-1',
+      sceneId: 'scene-1'
+    })
+    expect(rejected.code).toBe(ErrorCodes.communicationFailed)
+
+    vi.stubGlobal('window', { location: { search: '' } })
+    vi.stubGlobal('document', {
+      createElement: () => ({ setAttribute: () => undefined, hidden: false }),
+      body: { append: () => undefined }
+    })
+    const browser = createBrowserDesktopBridge()
+    await expect(
+      browser.readLatestSavedSceneVersion({ projectId: 'project-1', sceneId: 'scene-1' })
     ).resolves.toMatchObject({
       code: ErrorCodes.forbidden,
       msg: '当前环境不支持读取场景保存版本'

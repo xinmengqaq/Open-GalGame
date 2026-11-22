@@ -37,7 +37,6 @@ import './works.css'
 
 interface VersionHistoryPanelProps {
   projectId: string
-  /** 统一标签内的工程名；旧抽屉不传时仍保留自身标题，不依赖壳层 title-block。 */
   projectName?: string
   client: ProjectVersioningClient
   writeBlockedReason: string | null
@@ -360,10 +359,6 @@ function WorksEmpty({ onOpenAi }: { onOpenAi?: () => void }): ReactElement {
   )
 }
 
-/**
- * 工程级作品历史：读取、筛选、时间线、分组、详情和写操作确认。
- * 统计只表示当前已加载记录；撤销与清理仍由 useVersionHistory 和版本具名客户端执行。
- */
 export function VersionHistoryPanel({
   projectId,
   projectName,
@@ -422,7 +417,6 @@ export function VersionHistoryPanel({
     scroller.current?.scrollTo({ top: 0 })
   }, [history.resetToken])
 
-  /* 读取失败保留已加载记录，只把提示浮在布局之外；工具栏和分页仍提供重试入口。 */
   useEffect(() => {
     if (history.reloadError === null) {
       toast.dismiss(RELOAD_ERROR_TOAST)

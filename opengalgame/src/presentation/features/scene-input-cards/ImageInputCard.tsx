@@ -13,7 +13,6 @@ import { MediaPurposeText } from './MediaPurposeText'
 import { mediaBlockStateOf } from './cardPresentation'
 import styles from './SceneInputCards.module.css'
 
-/** 图片卡片内容。来源可读时显示真实图片，按原始比例缩小、不裁切。 */
 export function ImageInputCard({
   card,
   onEditSummary

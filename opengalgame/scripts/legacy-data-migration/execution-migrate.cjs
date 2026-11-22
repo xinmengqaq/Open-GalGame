@@ -26,7 +26,6 @@ const USAGE = `生成执行记录批量迁移入口（R29）
 
 let cachedMigration = null
 
-/** 现场装载产品迁移模块，保证批量工具与首访迁移执行同一套备份/校验/写回。 */
 async function loadMigrationModule() {
   if (cachedMigration !== null) return cachedMigration
   const packageRoot = resolve(__dirname, '..', '..')
@@ -167,7 +166,11 @@ async function migrateProject(migration, stateRoot, projectId, apply) {
     counts: null,
     rewrite: false,
     targetSha256: null,
-    archiveDirectory: null
+    archiveDirectory: null,
+    blocked: false,
+    blockedRecords: [],
+    blockedReason: null,
+    remediation: null
   }
   let bytes
   try {
@@ -187,6 +190,15 @@ async function migrateProject(migration, stateRoot, projectId, apply) {
     result.counts = plan.counts
     result.rewrite = plan.rewrite
     result.targetSha256 = plan.targetSha256
+    if (plan.blocked) {
+      result.blocked = true
+      result.blockedRecords = plan.blockedRecords
+      result.blockedReason = migration.legacyMigrationBlockedMessage(plan.blockedRecords)
+      result.remediation =
+        '请先用旧版打开该工程，完成或取消未结束操作（或明确保留草稿），再重新迁移；归档不是可继续的数据源。'
+      result.status = 'blocked'
+      return result
+    }
     if (plan.rewrite) {
       result.archiveDirectory = join(
         stateRoot,
@@ -233,9 +245,10 @@ async function run(argv) {
     results.push(await migrateProject(migration, stateRoot, projectId, options.apply))
   }
   const failures = results.filter((result) => result.status === 'failed')
+  const blocked = results.filter((result) => result.status === 'blocked')
   const payload = {
     command: 'migrate',
-    ok: failures.length === 0,
+    ok: failures.length === 0 && blocked.length === 0,
     dryRun: !options.apply,
     stateRoot,
     projects: results,
@@ -244,10 +257,12 @@ async function run(argv) {
       unchanged: results.filter((result) => result.status === 'unchanged').length,
       planned: results.filter((result) => result.status === 'planned').length,
       migrated: results.filter((result) => result.status === 'migrated').length,
+      blocked: blocked.length,
       failed: failures.length
     }
   }
-  if (failures.length > 0) {
+  // dry-run 只报告阻断；--apply 未完成任何阻断工程时用非零退出码提醒运维。
+  if (failures.length > 0 || (options.apply && blocked.length > 0)) {
     process.exitCode = 3
     return payload
   }

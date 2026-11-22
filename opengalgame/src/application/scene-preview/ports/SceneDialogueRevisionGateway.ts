@@ -9,10 +9,6 @@ export type PreparedDialogueRevision = {
 }
 
 export interface SceneDialogueRevisionGateway {
-  /**
-   * 按同一份源快照准备替换后的正文字节。
-   * 没有可精确替换的正文范围时失败，不写盘，不提交。
-   */
   prepareDialogueRevision(
     source: ScenePreviewSourceFact,
     plan: DialogueEditPlan

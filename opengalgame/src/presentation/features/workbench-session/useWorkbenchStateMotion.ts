@@ -4,10 +4,6 @@ import { useRef, type RefObject } from 'react'
 
 import { prefersReducedMotion } from '../../effects/motion'
 
-/**
- * 顶栏状态变化时提示“对象/状态/下一步”换了一组，不做常驻抖动。
- * 减少动态效果时只做短淡入，结束后清掉内联 transform 和透明度。
- */
 export function useWorkbenchStateMotion(
   scope: RefObject<HTMLElement | null>,
   signature: string

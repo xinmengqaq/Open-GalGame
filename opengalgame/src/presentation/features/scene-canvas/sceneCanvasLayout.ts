@@ -28,7 +28,6 @@ export function relationIdOfAnchor(nodeId: string): string | null {
 export function nodesFromCards(cards: readonly SessionCard[]): InputCardNode[] {
   return cards.map((card) => {
     const preview = isPreviewCard(card.kind)
-    // 提示词卡和预览卡由布局决定高度；其余卡片继续随内容自适应。
     const fixedHeight = preview || card.kind === 'prompt'
     return {
       id: card.cardId,
@@ -121,18 +120,10 @@ export function edgesFromRelations(
   })
 }
 
-/** 命中盒相对最近邻保留的安全边距，单位与锚点位置同为 flow px。 */
 const ANCHOR_HIT_GAP = 1
 
-/** 没有任何最近邻时给命中盒的哨兵边长；min() 里等价于只取屏幕命中补偿。 */
 const ANCHOR_HIT_UNBOUNDED = 100000
 
-/**
- * 锚点命中盒的最大边长（flow px）：取到其它锚点中心与卡片端口中心的方形安全距离，
- * 再留 1px 安全边距；没有最近邻时返回哨兵值。`::before` 命中盒以中心为原点向四周
- * 扩展成正方形，所以最近邻距离取 max(|dx|, |dy|)，斜向相邻时两个盒子也不会叠住。
- * 调用方传入标签实际渲染中心（含 labelLift），展开抬升后的位置同样参与计算。
- */
 export function anchorHitClearance(
   point: { x: number; y: number },
   otherAnchorPoints: readonly { x: number; y: number }[],
@@ -151,7 +142,6 @@ export function anchorHitClearance(
   return Math.max(1, nearest - ANCHOR_HIT_GAP)
 }
 
-/** 卡片左右端口中心（flow px）：端口落在卡片外框左右边的中点。 */
 function cardPortPoints(layouts: readonly LayoutRef[]): { x: number; y: number }[] {
   return layouts.flatMap((layout) => [
     { x: layout.x, y: layout.y + layout.height / 2 },
@@ -159,7 +149,6 @@ function cardPortPoints(layouts: readonly LayoutRef[]): { x: number; y: number }
   ])
 }
 
-/** 关系标签锚点：位置取关系路径中点，节点本身只有 1px，内容向四周展开。 */
 export function anchorsFromRelations(
   cards: readonly SessionCard[],
   relations: readonly SessionRelation[],
@@ -167,7 +156,6 @@ export function anchorsFromRelations(
 ): RelationAnchorNode[] {
   const cardsById = new Map(cards.map((card) => [card.cardId, card]))
   const nodesById = new Map(nodes.map((node) => [node.id, node]))
-  // 先算出全部锚点位置，再用同一批 flow 坐标收窄命中盒：收窄要看邻居，单条关系算不出来。
   const placed: Pick<RelationAnchorNode, 'id' | 'position' | 'data'>[] = []
   for (const relation of relations) {
     const from = cardsById.get(relation.fromCardId)
@@ -207,7 +195,6 @@ export function anchorsFromRelations(
     })
   }
 
-  // 端口按节点实测尺寸取；节点未挂载或未测量时退回卡片布局，坐标仍是 flow px。
   const portPoints = cardPortPoints(
     cards.map((card) => {
       const node = nodesById.get(card.cardId)
@@ -222,7 +209,6 @@ export function anchorsFromRelations(
     })
   )
 
-  // 命中盒以标签实际渲染中心为原点：condensed 时 labelLift 为 0，展开抬升时向下扣减。
   const renderedCenter = (
     anchor: Pick<RelationAnchorNode, 'position' | 'data'>
   ): { x: number; y: number } => ({
@@ -245,12 +231,7 @@ export function anchorsFromRelations(
         height: 1,
         '--anchor-hit-clearance': `${clearance}px`
       } as CSSProperties,
-      // 声明 handles 会让节点被视为已初始化而不再被 observer 测量，而锚点的尺寸
-      // 已经固定为 1px；这里直接给出 measured，让 store 的 nodesInitialized 能成立，
-      // 否则 fitView 会永久排队不执行。
       measured: { width: 1, height: 1 },
-      // React Flow 要先拿到 handleBounds 才能定位边；节点测量前用声明值兜底，
-      // 否则记录边在节点挂载前会因找不到 target handle 而静默不渲染。
       handles: [
         {
           id: 'record',
@@ -271,14 +252,9 @@ export function anchorsFromRelations(
   })
 }
 
-/**
- * 标签高度与候选抬升距离；标签优先落在线上方，从近到远逐档尝试，
- * 找不到空位才收起为光点。档位需覆盖较高的卡片，避免被单张高卡片挡住时过早收起。
- */
 const LABEL_HEIGHT = 32
 const LABEL_LIFTS = [36, 62, 88, 114, 140]
 
-/** 估算标签占位并找一个不压住任何卡片的抬升距离；没有空位时返回 null。 */
 function relationLabelLift(
   labelX: number,
   labelY: number,

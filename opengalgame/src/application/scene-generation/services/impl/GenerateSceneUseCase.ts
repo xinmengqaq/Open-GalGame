@@ -11,9 +11,6 @@ import type { SceneGenerationServiceContext } from './SceneGenerationServiceCont
 export class GenerateSceneUseCase {
   constructor(private readonly context: SceneGenerationServiceContext) {}
 
-  /**
-   * @throws {AppException} 操作身份冲突、输入无效或基础能力调用失败。
-   */
   generateScene(request: GenerateSceneDTO): Promise<SceneGenerationOperationVO> {
     const snapshot = structuredClone(request)
     const key = snapshot.branch

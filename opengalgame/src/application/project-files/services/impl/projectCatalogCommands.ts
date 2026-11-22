@@ -180,7 +180,6 @@ export async function copyProjectFile(
   )
 }
 
-/** 移动文件归属。目标与当前父目录相同时不提交。 */
 export async function moveProjectFile(
   deps: CatalogCommandDeps,
   project: VerifiedProjectReadLocation,
@@ -278,7 +277,6 @@ export async function copyProjectFolder(
   return created
 }
 
-/** 重命名文件夹。名称未变化时不提交。 */
 export async function renameProjectFolder(
   deps: CatalogCommandDeps,
   project: VerifiedProjectReadLocation,

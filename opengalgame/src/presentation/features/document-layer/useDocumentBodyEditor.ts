@@ -43,10 +43,6 @@ const failureMessage: Record<DocumentSaveDraftFailure, string> = {
   'unsupported-image': workbenchFeedback.documentSaveUnsupportedImage
 }
 
-/**
- * 文档层正文草稿与保存。可编辑性只看 Markdown 文档，纯文本保持只读。
- * 保存成功后把返回来源写回会话缓存；版本冲突只提示，不丢弃本地草稿。
- */
 export function useDocumentBodyEditor(
   client: ProjectFilesClient,
   card: SessionDocumentCard,
@@ -71,8 +67,6 @@ export function useDocumentBodyEditor(
   const [applied, setApplied] = useState<DocumentBodyBaseline>(baseline)
   const reloadView = view.reload
 
-  // 来源版本、可编辑性或正文变化时，用当前正文重建草稿并清掉上一轮保存失败。
-  // 按身份快照在渲染期调整状态，避免在 effect 里同步 setState 触发级联渲染。
   if (
     applied.version !== baseline.version ||
     applied.editable !== baseline.editable ||

@@ -1,10 +1,3 @@
-/*
- * 生成面板。选择器全部以 .wb-gen 前缀限定，只作用于 AI 内容区；
- * 颜色、圆角、阴影和字体来自 --wb-* / tokens.css，不新增全局变量。
- * 字号只用 12 / 14 / 16 / 18 / 20 / 24 六级：正文 14，元信息 12。
- */
-
-/* ---------- 面板骨架 ---------- */
 .wb-gen-panel {
   display: flex;
   min-height: 0;
@@ -21,12 +14,10 @@
   padding-top: 12px;
 }
 
-/* 当前生成自己的头部：工程 / 场景 / 状态 / Token，不放进抽屉顶栏。 */
 .wb-gen-head {
   flex: none;
 }
 
-/* ---------- 头部：工程名 / 场景 / 状态 / Token ---------- */
 .wb-gen-header {
   display: flex;
   width: 100%;
@@ -207,7 +198,6 @@
   font-size: 12px;
 }
 
-/* ---------- 对话 ---------- */
 .wb-gen-stage {
   display: flex;
   min-height: 0;
@@ -376,10 +366,6 @@
   color: var(--wb-text-strong);
 }
 
-/*
- * 用户气泡的紫底需要近白正文：通用段落/强调色（muted/strong）在紫底上对比度不足，
- * 这里只在用户气泡内恢复继承，不改全局 token 和 AI/系统气泡。
- */
 .wb-gen-bubble--user p,
 .wb-gen-bubble--user strong {
   color: inherit;

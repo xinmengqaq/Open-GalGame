@@ -22,11 +22,9 @@ import {
 } from './legacy/mapping/LegacySceneArrangementMapping'
 import { validateCanvasArrangement } from './legacy/services/LegacyValidateCanvasArrangement'
 
-/** 旧 v3/v4 文档缺失字段的补值来源。默认值不是旧文件已保存的事实。 */
 export type CanvasMigrationDefaultSource =
   'v3-schema-default' | 'v4-schema-default' | 'v4-not-saved'
 
-/** 旧文件未保存引用、读取时按空数组归一化的来源。 */
 export type CanvasMigrationNormalizeReason = 'v3-absent-references' | 'v4-absent-references'
 
 export type CanvasMigrationFieldRef = {
@@ -67,18 +65,10 @@ export type CanvasArrangementMigrationPlan =
       sourceVersion: number | null
     }
 
-/** 只描述报告需要的源字段存在性；Zod 解析会补默认值，不能用于判断原始存在性。 */
 type RawCard = { kind?: unknown; cardId?: unknown }
 type RawRelation = { relationId?: unknown }
 type RawDocument = { cards?: RawCard[]; relations?: RawRelation[] }
 
-/**
- * 探测旧画布文档并规划 v3/v4 → 当前 v5 的完整转换。纯函数，不碰文件系统。
- * 只有旧 schema 与当前模型校验都通过才返回可写文档；默认值逐项标注来源。
- * @param value - 已解析的 JSON 值；报告从原始值判断字段是否真实存在。
- * @param identity - 调用方要求的工程、场景与画布身份。
- * @param sourceDigest - 源文件摘要，用于按旧读语义派生编排版本。
- */
 export function planCanvasArrangementMigration(
   value: unknown,
   identity: CanvasArrangementMigrationIdentity,
@@ -166,7 +156,6 @@ export function planCanvasArrangementMigration(
   return { ok: false, reason: 'unsupported', sourceVersion }
 }
 
-/** 只记录源文件实际存在并原样写入当前格式的字段。 */
 function preservedFields(value: unknown): string[] {
   const raw = value as RawDocument & Record<string, unknown>
   const preserved: string[] = []

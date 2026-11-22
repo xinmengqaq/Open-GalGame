@@ -11,23 +11,16 @@ import type { OperationCommitState } from '../GitRepository'
 import { AppException } from '@common/errors/AppException'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 
-/** 只读发布证明。引用、阶段和结算缺失不阻断，只以记录、历史和提交内容为准。 */
 export type PublishedCommitProof =
   | { readonly state: 'committed'; readonly commitId: string }
   | { readonly state: 'notCommitted' }
   | { readonly state: 'conflict'; readonly detail: string }
 
-/** 只读回退提交证明。未进入 HEAD 历史但内容自洽时区分未发布。 */
 export type RollbackCommitProof =
   | { readonly state: 'published'; readonly rollbackCommitId: string }
   | { readonly state: 'unpublished'; readonly rollbackCommitId: string }
   | { readonly state: 'conflict'; readonly detail: string }
 
-/**
- * 只根据磁盘上的记录、引用、历史和文件判断操作状态。
- * @returns 未提交、已提交、需要回退、已回退或真正证据不足。
- * @throws {AppException} 仓库本身无法读取，或引用、提交、内容已经确定冲突。
- */
 export async function assessOperation(
   projectRoot: string,
   operationId: string
@@ -86,11 +79,6 @@ function conflict(detail: string): never {
   })
 }
 
-/**
- * 证明操作已经正式发布。
- * 操作引用、记录阶段和结算只是派生证据；引用缺失不阻断，引用冲突或提交内容不符报告冲突。
- * @throws {AppException} 仓库本身无法读取。
- */
 export async function provePublishedOperation(
   projectRoot: string,
   operationId: string
@@ -112,13 +100,23 @@ async function assessCompensated(
   record: OperationRecord,
   refOid: string | null
 ): Promise<OperationCommitState> {
-  if (refOid !== null) conflict('补偿记录仍存在操作引用')
+  const evidence = await compensatedEvidence(projectRoot, record, refOid)
+  if (evidence.state === 'conflict') conflict(evidence.detail)
+  return { state: 'notCommitted' }
+}
+
+async function compensatedEvidence(
+  projectRoot: string,
+  record: OperationRecord,
+  refOid: string | null
+): Promise<{ state: 'notCommitted' } | { state: 'conflict'; detail: string }> {
+  if (refOid !== null) return { state: 'conflict', detail: '补偿记录仍存在操作引用' }
   if (!record.forwardCommitId) return { state: 'notCommitted' }
   if (!(await commitExists(projectRoot, record.forwardCommitId))) {
-    conflict('补偿记录的前向提交对象缺失')
+    return { state: 'conflict', detail: '补偿记录的前向提交对象缺失' }
   }
   if (await forwardInHistory(projectRoot, record)) {
-    conflict('补偿记录的前向提交已在当前历史中')
+    return { state: 'conflict', detail: '补偿记录的前向提交已在当前历史中' }
   }
   return { state: 'notCommitted' }
 }
@@ -145,10 +143,6 @@ async function assessRolledBack(
   }
 }
 
-/**
- * 在 HEAD 历史中找出已经发布、但记录缺失的回退提交。
- * 候选必须通过统一回退证明；只读取提交对象，不回写，冲突直接硬错误。
- */
 export async function findPublishedRollback(
   projectRoot: string,
   record: OperationRecord
@@ -172,10 +166,6 @@ export async function findPublishedRollback(
   return null
 }
 
-/**
- * 校验一个候选回退提交：操作身份、前向提交、父祖先、恢复路径和无关路径。
- * @throws {AppException} 仓库对象无法读取。
- */
 export async function proveRollbackCommit(
   projectRoot: string,
   record: OperationRecord,
@@ -312,6 +302,12 @@ async function provePublishedRecord(
 ): Promise<PublishedCommitProof> {
   if (record.phase === 'rolled-back' || record.phase === 'rollback-required') {
     return { state: 'conflict', detail: '操作处于回退阶段，不能认领前向提交' }
+  }
+  if (record.phase === 'compensated') {
+    const evidence = await compensatedEvidence(projectRoot, record, refOid)
+    return evidence.state === 'notCommitted'
+      ? { state: 'notCommitted' }
+      : { state: 'conflict', detail: evidence.detail }
   }
   if (!record.forwardCommitId) {
     return refOid === null

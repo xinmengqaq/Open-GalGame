@@ -1,4 +1,4 @@
-import { ArrowUp, CircleAlert, Pause, X } from 'lucide-react'
+import { ArrowUp, CircleAlert, Pause, Play, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -36,13 +36,10 @@ interface GenerationHeaderProps {
   projectName: string
   sceneLabel: string
   status: SceneGenerationRenderStatusVO | null
-  /** 重新生成等待期：新状态应用前，头部不能继续显示上一轮终态。 */
   pendingStart?: boolean
-  /** start 动作失败：头部按启动失败显示，与对话区错误一致。 */
   startFailure?: GenerationActionFailure | null
 }
 
-/** 头部只显示工程名、当前场景标识、真实状态和当前操作累计 Token，不显示路径或操作 ID。 */
 export function GenerationHeader({
   projectName,
   sceneLabel,
@@ -50,8 +47,6 @@ export function GenerationHeader({
   pendingStart = false,
   startFailure = null
 }: GenerationHeaderProps): ReactElement {
-  // 「重新生成」即新会话：pending start 与 start 失败后，旧 status 仍带着上一轮 usage，
-  // 但旧用量只属于历史，新会话视图回落到未开始占位；实时运行状态优先，不清本轮 usage。
   const newSessionAttempt =
     pendingStart || (startFailure !== null && (status === null || isTerminalState(status.state)))
   const pill = headerStatusPillOf(status, { pendingStart, startFailure })
@@ -109,23 +104,15 @@ interface GenerationPanelProps {
   sceneLabel: string
   cards: readonly SessionCard[]
   onOpenWorks: () => void
-  /** 由抽屉壳接入输入摘要标签；旧壳不传时隐藏对应入口。 */
   onOpenSummary?: () => void
-  /** 由抽屉壳接入 AI 历史标签；旧壳不传时隐藏对应入口。 */
   onOpenHistory?: () => void
-  /** 由抽屉壳接入关闭抽屉；旧壳不传时不显示“返回画布”。 */
   onReturnToCanvas?: () => void
-  /** 导出入口由工作台页面接入；旧壳不传时隐藏按钮。 */
   onExport?: () => void
   exportDisabled?: boolean
   exportHint?: string
   exporting?: boolean
 }
 
-/**
- * 当前生成视图：自己的头部显示工程/场景/状态/Token，下面只保留对话流、紧凑进度行、
- * 底部输入摘要与回复区。所有生成事实来自页面级 hook，面板只负责展示、草稿输入和动作转发。
- */
 export function GenerationPanel({
   controller,
   projectName,
@@ -151,13 +138,19 @@ export function GenerationPanel({
     draft,
     progress,
     progressNotice,
+    selectionNotice,
     startBlockedReason,
+    startBlockedByGeneration,
+    repairBlockedReason,
     start,
     submitPrimary,
     accept,
     discard,
     pause,
     resume,
+    resumeUnfinished,
+    retryCleanup,
+    verifyResult,
     cancel,
     retryRepair,
     selectOption,
@@ -178,13 +171,24 @@ export function GenerationPanel({
 
   useGenerationMotion(root, { phase, view: 'current', interactionId })
 
-  /* 进度订阅失败不阻断当前生成，用轻提示说明并保持布局稳定。 */
   useEffect(() => {
     if (progressNotice === null) return
     toast(progressNotice, { id: 'generation-progress-notice' })
   }, [progressNotice])
 
-  // 暂停请求只在后端确认 paused 阶段前显示“正在暂停”，失败、完成或取消后不再显示。
+  /* 显式选择的记录被后端确认不存在时明确告知；不静默改看别的任务。 */
+  useEffect(() => {
+    if (selectionNotice === null) return
+    toast(selectionNotice, { id: 'generation-selection-notice', duration: 8000 })
+  }, [selectionNotice])
+
+  /* 空态已有内联错误；当前视图仍显示旧状态时，重载失败也要可见。 */
+  const hasVisibleStatus = status !== null
+  useEffect(() => {
+    if (loadError === null || !hasVisibleStatus) return
+    toast.error(loadError, { id: 'generation-reload-error' })
+  }, [hasVisibleStatus, loadError])
+
   const pauseAwaiting =
     pauseMarker !== null &&
     status !== null &&
@@ -204,7 +208,6 @@ export function GenerationPanel({
     status !== null &&
     status.canCancel &&
     (phase === 'running' || phase === 'preparing' || phase === 'waiting')
-  // 等待交互时没有其他 dock；取消行不含输入，提交中隐藏，避免出现第二套回复入口。
   const waitingCancelVisible = cancelVisible && phase === 'waiting' && pending === null
   const startFailure = actionError && actionError.kind === 'start' ? actionError : null
   const requestFailure =
@@ -233,6 +236,17 @@ export function GenerationPanel({
           <strong>{phase === 'preparing' ? '正在准备。' : '正在生成。'}</strong>
           关闭抽屉不会取消任务。
         </p>
+        {status?.canResumeUnfinished ? (
+          <Button
+            className="wb-gen-primary"
+            disabled={pending !== null}
+            onClick={() => void resumeUnfinished()}
+            type="button"
+          >
+            {pending === 'resumeUnfinished' ? <span className="wb-gen-spinner" /> : <Play />}
+            {pending === 'resumeUnfinished' ? '正在继续…' : '继续未完成的生成'}
+          </Button>
+        ) : null}
         {status?.canPause ? (
           <Button
             className="wb-gen-secondary"
@@ -261,6 +275,12 @@ export function GenerationPanel({
             ? '提交期间不能暂停或取消，完成前不会显示成功。'
             : '先核对提交结果，再结束这次运行。'}
         </p>
+        {phase === 'cancelling' && status?.canCancel ? (
+          <Button className="wb-gen-quiet" onClick={requestCancel} type="button">
+            <X />
+            结束本次生成
+          </Button>
+        ) : null}
       </div>
     )
   }
@@ -301,6 +321,8 @@ export function GenerationPanel({
               setPauseMarker(null)
               void resume()
             }}
+            onVerifyResult={() => void verifyResult()}
+            onRetryCleanup={() => void retryCleanup()}
             onRetryRepair={() => void retryRepair()}
             onReturnToCanvas={onReturnToCanvas}
             onSelectAnswer={selectAnswer}
@@ -313,6 +335,8 @@ export function GenerationPanel({
             projectName={projectName}
             reviseOpen={reviseOpen}
             sceneLabel={sceneLabel}
+            repairBlockedReason={repairBlockedReason}
+            startBlockedByGeneration={startBlockedByGeneration}
             startBlockedReason={startBlockedReason}
             startPhase={startPhase}
             status={status}

@@ -1,7 +1,6 @@
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 
-/** 正文和修改说明去除首尾空白后的最大长度。 */
 export const SCENE_GENERATION_REPLY_BODY_LIMIT = 2000
 
 const REVIEW_REPLIES: Record<'accept' | 'revise' | 'discard', true> = {
@@ -13,9 +12,13 @@ const REVIEW_REPLIES: Record<'accept' | 'revise' | 'discard', true> = {
 export type SceneGenerationReplyKind =
   'accept' | 'discard' | 'clarify' | 'revise' | 'select' | 'answers'
 
-export type SceneGenerationPauseInterrupt = 'paused' | 'candidateConflict' | 'commitUnknown'
+export type SceneGenerationPauseInterrupt =
+  | 'paused'
+  | 'candidateConflict'
+  | 'commitUnknown'
+  | 'writeUnknown'
+  | 'readInterrupted'
 
-/** 领域只看选项的身份和可回传文案，不依赖渲染 VO。 */
 export interface SceneGenerationReplyOption {
   readonly id: string
   readonly label: string
@@ -52,7 +55,6 @@ export type SceneGenerationReply =
       }[]
     }
 
-/** 领域只消费回复合法性所需的当前执行事实。 */
 export interface SceneGenerationReplyExecution {
   readonly projectId: string
   readonly sceneId: string
@@ -86,10 +88,11 @@ export interface SceneGenerationReplyCheckpoint {
   readonly threadId: string
   readonly branchId: string
   readonly canContinue: boolean
+  /** 当前等待能否提交已实现的人工回复；省略表示旧记录不能据此回复。 */
+  readonly canReply?: boolean
   readonly candidateSnapshotId?: string
 }
 
-/** 已发布候选修订只按身份归属，不携带路径。 */
 export interface PublishedSceneGenerationCandidate {
   readonly operationId: string
   readonly threadId: string
@@ -98,9 +101,6 @@ export interface PublishedSceneGenerationCandidate {
   readonly candidateSnapshotId: string
 }
 
-/**
- * 回传工作流的选择事实。标题、说明和自由文本都是业务内容，不能只留选项 ID。
- */
 export interface SceneGenerationSelectionFact {
   readonly optionId: string
   readonly label: string
@@ -108,7 +108,6 @@ export interface SceneGenerationSelectionFact {
   readonly body?: string
 }
 
-/** 服务端按当前问题构造的一题事实。不采用请求里的题干或选项标题。 */
 export interface SceneGenerationAnswerFact {
   readonly questionId: string
   readonly prompt: string
@@ -124,7 +123,6 @@ function requireText(value: string | undefined, message: string): string {
   return text
 }
 
-/** 空白正文视为没有自由文本；有内容时去掉首尾空白并限制长度。 */
 function optionalBody(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   const text = value.trim()
@@ -138,11 +136,6 @@ function optionalBody(value: string | undefined): string | undefined {
 const QUESTION_GROUP_LIMIT = 4
 const OPTIONS_PER_QUESTION = 3
 
-/**
- * 问题组必须是 1～4 题，每题恰好三个可展示选项。
- * 没有问题组的旧创作决策仍必须恰好三个选项。
- * @throws {AppException} 题数、选项数、重复身份或空白文案不合法。
- */
 export function requireCreativeDecision(interaction: SceneGenerationReplyInteraction): void {
   if (interaction.kind !== 'decision') return
   const questions = interaction.questions
@@ -171,7 +164,6 @@ export function requireCreativeDecision(interaction: SceneGenerationReplyInterac
   requireQuestionOptions(interaction.options)
 }
 
-/** 校验一题的三个选项。身份在该题内唯一，标题和说明都不能空白。 */
 function requireQuestionOptions(options: readonly SceneGenerationReplyOption[]): void {
   if (options.length !== OPTIONS_PER_QUESTION) {
     throw new AppException({ code: ErrorCodes.invalidRequest, msg: '每题必须恰好有三个选项' })
@@ -188,10 +180,6 @@ function requireQuestionOptions(options: readonly SceneGenerationReplyOption[]):
   }
 }
 
-/**
- * 审阅只接受、提出修改或丢弃。接受必须指向当前候选，不能批准已经变化的修订。
- * @throws {AppException} 动作、候选缺失或候选身份过期。
- */
 export function requireCandidateReview(
   execution: Pick<SceneGenerationReplyExecution, 'candidateSnapshotId'>,
   interaction: SceneGenerationReplyInteraction,
@@ -239,7 +227,6 @@ function requireCurrentIdentity(
       msg: '该人工等待已结束、已回复或已过期'
     })
   }
-  // D2：候选一旦存在，旧题组一律失效，不能再用旧决定回复修改当前候选。
   if (interaction.kind === 'decision' && execution.candidateSnapshotId) {
     throw new AppException({
       code: ErrorCodes.operationConflict,
@@ -263,10 +250,6 @@ function requireCurrentIdentity(
   return interaction
 }
 
-/**
- * 选择必须命中当前选项，并把标题、说明和自由文本作为事实返回。
- * @returns 非选择回复没有选择事实。
- */
 function selectionFact(
   interaction: SceneGenerationReplyInteraction,
   reply: SceneGenerationReply
@@ -289,10 +272,6 @@ function selectionFact(
   }
 }
 
-/**
- * 整组答案必须覆盖当前题，并按问题顺序返回服务端构造的事实。
- * @throws {AppException} 缺题、重复题、额外题或跨题选项。
- */
 function answerFacts(
   interaction: SceneGenerationReplyInteraction,
   reply: SceneGenerationReply
@@ -341,9 +320,9 @@ function answerFacts(
 
 /**
  * 校验人工回复仍属于当前操作、线程、分支、交互、检查点和候选。
- * @param checkpoint - 当前检查点的继续资格。缺失表示检查点不可继续。
+ * @param checkpoint - 当前检查点的回复资格。缺失或不可回复时拒绝，但不因此冒充可续跑。
  * @returns 选择回复的业务事实；其他回复没有该事实。
- * @throws {AppException} 身份过期、回复重复、动作非法、正文非法或检查点不能继续。
+ * @throws {AppException} 身份过期、回复重复、动作非法、正文非法或检查点不能回复。
  */
 export function validateSceneGenerationReply(
   execution: SceneGenerationReplyExecution,
@@ -363,38 +342,31 @@ export function validateSceneGenerationReply(
   }
   if (request.reply.kind === 'select') optionalBody(request.reply.body)
   const checkpointMatches =
-    checkpoint?.canContinue === true &&
+    checkpoint?.canReply === true &&
     checkpoint.checkpointId === request.checkpointId &&
     checkpoint.operationId === execution.operationId &&
     checkpoint.threadId === execution.threadId &&
     checkpoint.branchId === execution.branchId
   if (!checkpointMatches) {
-    throw new AppException({ code: ErrorCodes.operationConflict, msg: '当前等待缺少可靠恢复依据' })
+    throw new AppException({ code: ErrorCodes.operationConflict, msg: '当前等待缺少可靠回复依据' })
   }
   return selectionFact(interaction, request.reply) ?? answerFacts(interaction, request.reply)
 }
 
-const UNSAFE_INTERRUPT: Record<'candidateConflict' | 'commitUnknown', true> = {
+const UNSAFE_INTERRUPT: Record<'candidateConflict' | 'commitUnknown' | 'writeUnknown', true> = {
   candidateConflict: true,
-  commitUnknown: true
+  commitUnknown: true,
+  writeUnknown: true
 }
 
-/**
- * 只有还能到达安全检查点的活动执行可以请求暂停。
- * 终态、提交中、取消中、提交不明和候选冲突都不能伪装成暂停。
- */
 export function canRequestSceneGenerationPause(execution: SceneGenerationReplyExecution): boolean {
   if (execution.interruptReason !== undefined && execution.interruptReason in UNSAFE_INTERRUPT) {
     return false
   }
-  return (
-    execution.state === 'pending' || execution.state === 'running' || execution.state === 'waiting'
-  )
+  // 等待态没有正在运行的工作流可撤销写资格；暂停只适用于活动执行。
+  return execution.state === 'pending' || execution.state === 'running'
 }
 
-/**
- * 已暂停且检查点仍可继续时才能恢复。其他中断原因即使带检查点也不能当暂停恢复。
- */
 export function canResumePausedSceneGeneration(
   execution: SceneGenerationReplyExecution,
   checkpoint?: SceneGenerationReplyCheckpoint
@@ -412,10 +384,6 @@ export function canResumePausedSceneGeneration(
   )
 }
 
-/**
- * 未终态中断可以从原操作的可继续检查点恢复。
- * 失败、取消和成功已结束；提交不明与候选冲突不能当普通中断续跑。
- */
 export function canResumeInterruptedSceneGeneration(
   execution: SceneGenerationReplyExecution,
   checkpoint?: SceneGenerationReplyCheckpoint
@@ -448,10 +416,6 @@ export function canResumeInterruptedSceneGeneration(
   )
 }
 
-/**
- * 非中断修复重跑只接受已失败来源。取消和未终态中断不能改写成修复重跑。
- * 来源候选、检查点和确认正文必须属于同一操作、线程与分支。
- */
 export function canRetryFailedSceneGenerationRepair(
   source: {
     readonly projectId: string
@@ -465,7 +429,6 @@ export function canRetryFailedSceneGenerationRepair(
     readonly replies: readonly {
       readonly reply: { readonly kind: string; readonly body?: string }
     }[]
-    /** 新重试把原指令放在来源上下文；旧记录只有确认回复。 */
     readonly repairContext?: { readonly instruction: string }
   },
   request: {
@@ -502,10 +465,6 @@ export function canRetryFailedSceneGenerationRepair(
   return fromReply || fromContext
 }
 
-/**
- * 预览只能引用当前操作或所属历史检查点上已发布的候选修订身份。
- * 路径、工作区文件和未发布修订不进入本规则。
- */
 export function canPreviewPublishedCandidate(
   request: PublishedSceneGenerationCandidate,
   published: readonly PublishedSceneGenerationCandidate[]

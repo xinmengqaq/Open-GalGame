@@ -10,11 +10,9 @@ import type {
 const LIVE_TOOLS: Record<string, true> = {
   listDirectory: true,
   readTextRange: true,
-  writeText: true,
-  replaceText: true
+  writeCandidate: true
 }
 
-/** 生成进行中的节流发布。失败不升级，结束或取消后不再发布。 */
 export class SceneGenerationProgressPublisher {
   private timer: ReturnType<typeof setTimeout> | undefined
   private idleTimer: ReturnType<typeof setTimeout> | undefined
@@ -22,6 +20,7 @@ export class SceneGenerationProgressPublisher {
   private publishing = false
   private dirty = false
   private lastPublishedAt = 0
+  private inFlight: Promise<void> | undefined
   private live: SceneGenerationLiveProgress | undefined
   private readonly publishIntervalMs: number
   private readonly idleNoticeMs: number
@@ -33,6 +32,8 @@ export class SceneGenerationProgressPublisher {
       budget: ExecutionBudget
       previousBudget: () => SceneGenerationBudget
       attempt: () => number
+      /** 当前业务步骤；修正轮不能被节流发布改写成生成中。 */
+      step?: () => SceneGenerationExecution['step']
       now?: () => number
       signal?: AbortSignal
       publishIntervalMs?: number
@@ -67,7 +68,6 @@ export class SceneGenerationProgressPublisher {
     this.queue(Math.max(0, this.publishIntervalMs - elapsed))
   }
 
-  /** 生成开始后即使还没有模型事件，也先发布一次生成中。 */
   start(): void {
     if (this.stopped) return
     const now = (this.options.now ?? Date.now)()
@@ -86,6 +86,11 @@ export class SceneGenerationProgressPublisher {
     this.options.signal?.removeEventListener('abort', this.onAbort)
   }
 
+  /** 等待已经在途的进度写入结束；调用方随后才能发布终态，避免迟到进度覆盖结算。 */
+  async drain(): Promise<void> {
+    while (this.inFlight) await this.inFlight
+  }
+
   private scheduleIdle(): void {
     clearTimeout(this.idleTimer)
     this.idleTimer = setTimeout(() => {
@@ -101,7 +106,11 @@ export class SceneGenerationProgressPublisher {
     if (this.timer) return
     this.timer = setTimeout(() => {
       this.timer = undefined
-      void this.flush()
+      const current = this.flush()
+      this.inFlight = current
+      void current.finally(() => {
+        if (this.inFlight === current) this.inFlight = undefined
+      })
     }, delayMs)
   }
 
@@ -110,7 +119,7 @@ export class SceneGenerationProgressPublisher {
     this.dirty = false
     this.publishing = true
     const progress: SceneGenerationWorkflowProgress = {
-      step: 'generating',
+      step: this.options.step?.() ?? 'generating',
       attempt: this.options.attempt(),
       budget: budgetSnapshot(this.options.budget, this.options.previousBudget()),
       live: this.live

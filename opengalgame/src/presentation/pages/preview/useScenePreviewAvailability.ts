@@ -20,10 +20,6 @@ interface UseScenePreviewAvailabilityOptions {
   readonly sceneId: string
 }
 
-/**
- * 页面自己的产物可用性复核。入口可以预先放行，但页面不把入口结论当成读取结果；
- * 读取失败与产物缺失分开表达，读取不会启动会话或舞台。
- */
 export function useScenePreviewAvailability({
   client,
   projectId,

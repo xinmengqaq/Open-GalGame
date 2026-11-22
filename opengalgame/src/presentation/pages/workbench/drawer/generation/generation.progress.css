@@ -1,4 +1,3 @@
-/* ---------- 紧凑进度行 ---------- */
 .wb-gen-run {
   display: block;
   min-width: 0;
@@ -137,7 +136,6 @@
   border-top: 1px solid var(--wb-hairline);
 }
 
-/* ---------- 运行详情浮层 ---------- */
 .wb-gen-details-popover {
   width: min(420px, calc(100vw - 24px));
   max-height: min(60vh, 480px);

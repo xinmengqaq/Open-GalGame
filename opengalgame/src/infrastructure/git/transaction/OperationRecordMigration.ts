@@ -7,13 +7,6 @@ import { resolveRepositoryMetadata } from '../containedPath'
 import { AppException } from '@common/errors/AppException'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 
-/**
- * 产品首访迁移的 legacy 操作记录归档。
- *
- * 归属边界：归档位于作品仓库 `.git/opengalgame/legacy-operations`，只服务迁移与恢复，
- * 不是 R27 `migration:backup` 批次，也不改变 R27 要求备份根位于源根之外的外部备份策略。
- * manifest 使用 R27 原生 `legacy-data-backup` v1，可被现有 verify/restore CLI 直接消费。
- */
 
 const MANIFEST_FORMAT_VERSION = 1
 const MANIFEST_KIND = 'legacy-data-backup'
@@ -216,7 +209,6 @@ async function writeExclusiveFile(path: string, bytes: Uint8Array): Promise<void
   }
 }
 
-/** 原子替换原始字节：同目录临时文件 + fsync + rename，绝不 copyFile 覆盖。 */
 export async function writeOperationRecordBytesAtomically(
   path: string,
   bytes: Uint8Array
@@ -233,10 +225,6 @@ export async function writeOperationRecordBytesAtomically(
   }
 }
 
-/**
- * 只有磁盘仍是本次归一写出的目标摘要时才回填原文；
- * 并发新写或删除不会被覆盖。
- */
 export async function restoreLegacyOperationRecordIfUnchanged(input: {
   readonly operationPath: string
   readonly expectedWrittenSha256: string
@@ -461,10 +449,6 @@ async function expectedArchive(input: LegacyOperationArchiveInput): Promise<{
   }
 }
 
-/**
- * 首访归档：已存在且完整匹配时复用；不存在时先写同根临时目录，完整校验后整体 rename 发布。
- * 归档损坏、链接、写入或 rename 失败都会抛出，调用方保留 legacy 原文。
- */
 export async function archiveLegacyOperationRecord(
   input: LegacyOperationArchiveInput
 ): Promise<LegacyOperationArchiveResult> {
@@ -497,14 +481,12 @@ export async function archiveLegacyOperationRecord(
     }
     await rename(staging, expectation.directory)
   } catch (error) {
-    // 只清理本次独占且尚未发布的 staging；已发布目录即使复验失败也保留并拒绝迁移。
     await rm(staging, { recursive: true, force: true }).catch(() => undefined)
     if (await pathExists(expectation.directory).catch(() => false)) {
       try {
         await readArchiveFiles(expectation.directory, expectation)
         return { directory: expectation.directory, batchId: expectation.batchId, reused: true }
       } catch {
-        // 已存在目录不完整或与源不符，保留原文并报错，绝不删除/覆盖。
       }
     }
     throw error instanceof AppException ? error : archiveFailure('归档写入失败', error)
@@ -514,7 +496,6 @@ export async function archiveLegacyOperationRecord(
   return { directory: expectation.directory, batchId: expectation.batchId, reused: false }
 }
 
-/** 读取源记录的真实修改时间；文件缺失或不可读时由调用方按失败处理。 */
 export async function operationRecordModifiedAt(path: string): Promise<Date> {
   try {
     return (await stat(path)).mtime

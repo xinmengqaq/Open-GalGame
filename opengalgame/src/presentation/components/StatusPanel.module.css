@@ -1,5 +1,3 @@
-/* 状态面板：一层柔和底色 + 图标 + 文案，不做卡中卡。 */
-
 .panel {
   --status-bg: var(--surface-selected);
   --status-ink: var(--purple-deep);

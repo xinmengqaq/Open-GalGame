@@ -16,10 +16,6 @@ interface GameStageStatePanelProps {
   readonly role?: 'alert' | 'status'
 }
 
-/**
- * 舞台内的统一状态面板：加载失败、读取失败、失效和过期共用同一套
- * 图标、标题、说明和主动作位置，只按调用方的真实事实切换语气。
- */
 export function GameStageStatePanel({
   surface,
   accent,

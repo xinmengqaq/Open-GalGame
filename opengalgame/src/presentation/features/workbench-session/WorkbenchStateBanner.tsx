@@ -9,11 +9,6 @@ interface WorkbenchStateBannerProps {
   className?: string
 }
 
-/**
- * 顶栏全局状态视图。用一条轻量状态轨标出当前报告的是工程、来源目录还是画布编排，
- * 再输出对象、状态与下一步；失败和损坏的标题、色调和下一步不同，
- * 不再用绿色“工程已读取”覆盖失败事实。
- */
 export function WorkbenchStateBanner({ className }: WorkbenchStateBannerProps): ReactElement {
   const state = useWorkbenchState()
   const root = useRef<HTMLDivElement>(null)

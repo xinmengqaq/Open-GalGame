@@ -18,7 +18,6 @@ export type ProjectCanvasViewport = {
   zoom: number
 }
 
-/** 卡片绑定的 WebGAL 命令与名称。未选择时为 null。不解释命令含义。 */
 export type ProjectCanvasWebgalPreset = {
   command: string
   name: string
@@ -28,7 +27,6 @@ export type ProjectCanvasImageRole = 'background' | 'cg' | 'characterImage' | 'a
 
 export type ProjectCanvasAudioRole = 'music' | 'soundEffect' | 'voice'
 
-/** 已保存的默认关系。不在读取时按卡片类型重新推断。 */
 export type ProjectCanvasDefaultRelation =
   'actsOn' | 'accompanies' | 'voices' | 'depicts' | 'constrains' | 'sameSubject' | 'associated'
 
@@ -45,7 +43,6 @@ export type ProjectCanvasDocumentCard = ProjectCanvasCardBase & {
   sourceId: string
 }
 
-/** 旧生成适配保留的提示词引用。身份只含 cardId。 */
 export type ProjectCanvasPromptReference = {
   cardId: string
 }
@@ -113,7 +110,6 @@ export type ProjectCanvasArrangement = {
   relations: readonly ProjectCanvasRelation[]
 }
 
-/** 卡片是否挂接着工程来源。提示词和字段卡片没有来源文件。 */
 export function canvasCardSourceId(card: ProjectCanvasCard): string | null {
   if (
     card.kind === 'document' ||

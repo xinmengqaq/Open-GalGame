@@ -33,7 +33,6 @@ function render(actions: readonly WorkbenchToolbarAction[]): string {
   )
 }
 
-/** 取出第一个匹配的开始标签，按属性名读值；不依赖属性渲染顺序。 */
 function tagOf(html: string, pattern: RegExp): string | null {
   const match = html.match(pattern)
   return match ? match[0] : null
@@ -117,5 +116,17 @@ describe('ToolbarActions 场景工具禁用原因', () => {
 
     expect(attributeOf(buttonTagOf(html, 'preview'), 'aria-describedby')).toBe(ids[0])
     expect(attributeOf(buttonTagOf(html, 'export'), 'aria-describedby')).toBe(ids[1])
+  })
+
+  it('showLabel 的场景工具在图标旁显示可见标签，并保留禁用原因', () => {
+    const html = render([
+      sceneTool({ disabled: true, hint: exportHint, showLabel: true })
+    ])
+
+    expect(html).toContain('data-labeled="true"')
+    expect(html).toContain('>导出</span>')
+    expect(html).toContain(`>${exportHint}</span>`)
+    expect(attributeOf(buttonTagOf(html, 'export'), 'aria-label')).toBe('导出')
+    expect(attributeOf(buttonTagOf(html, 'export'), 'disabled')).not.toBeNull()
   })
 })

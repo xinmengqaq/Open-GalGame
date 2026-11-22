@@ -79,7 +79,6 @@ const operationRecordShape = {
 
 const operationRecordSchema = z.strictObject(operationRecordShape)
 
-/** 旧字段只允许迁移解析，当前写入与读取都不再承认它。 */
 const legacyOperationRecordSchema = z.strictObject({
   ...operationRecordShape,
   rollbackIndexBytesBase64: z.string().optional()
@@ -109,10 +108,6 @@ const recordFailure: StorageFailure = {
 
 const recordTails = new Map<string, Promise<unknown>>()
 
-/**
- * 同一记录路径的读迁移与写共用一个进程内串行边界。
- * 只包 JSON 读/归档/写，不进入工程写队列，避免嵌套自等待。
- */
 function enqueueOperationRecord<T>(path: string, action: () => Promise<T>): Promise<T> {
   const resolved = resolve(path)
   const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved
@@ -232,10 +227,6 @@ async function archiveLegacyBytes(
   })
 }
 
-/**
- * 归档成功后才归一写回；归档或写回失败保留 legacy 原文。
- * 写后校验失败时仅在磁盘仍是本次归一结果时回填原文，不覆盖并发新写。
- */
 async function migrateLegacyRecord(
   projectRoot: string,
   operationId: string,
@@ -283,13 +274,6 @@ async function readOperationRecordUnlocked(
   return migrateLegacyRecord(projectRoot, operationId, path, document.bytes, legacy)
 }
 
-/**
- * 返回操作记录在作品仓库中的路径。
- * @throws {AppException} 操作标识格式不正确。
- */
-/**
- * @throws {AppException} 操作标识不正确，或记录目录越过仓库。
- */
 export async function operationRecordPath(
   projectRoot: string,
   operationId: string
@@ -299,10 +283,6 @@ export async function operationRecordPath(
   return join(directory, `${operationId}.json`)
 }
 
-/**
- * 枚举技术操作记录目录；这是未完成写入的恢复 WAL，不是 version-operations 投影。
- * @throws {AppException} 目录无法读取，或包含无法识别的记录文件。
- */
 export async function listOperationRecordIds(projectRoot: string): Promise<string[]> {
   const directory = await resolveRepositoryMetadata(projectRoot, ['opengalgame', 'operations'])
   const names = await listDocumentNames(directory, recordFailure)
@@ -321,20 +301,11 @@ export async function listOperationRecordIds(projectRoot: string): Promise<strin
   return ids
 }
 
-/**
- * @throws {AppException} 操作标识格式不正确。
- */
 export function operationRef(operationId: string): string {
   assertOperationId(operationId)
   return `refs/opengalgame/operations/${operationId}`
 }
 
-/**
- * 读取操作记录。损坏时不抛错，由查询报告结果不明。
- * 首次读到合法旧字段时先归档原文、再归一写回，然后按当前 schema 读回。
- * @returns 缺失、损坏或可用记录。
- * @throws {AppException} 记录文件无法读取。
- */
 export async function readOperationRecord(
   projectRoot: string,
   operationId: string
@@ -345,10 +316,6 @@ export async function readOperationRecord(
   )
 }
 
-/**
- * 覆盖前确认磁盘上的合法 legacy 记录已经归档；归档失败则不写，保住旧字节。
- * @throws {AppException} 写入或归档失败。
- */
 export async function writeOperationRecord(
   projectRoot: string,
   record: OperationRecord
@@ -390,7 +357,6 @@ export async function writeOperationRecord(
   })
 }
 
-/** 用路径、动作和内容摘要生成操作内容指纹。 */
 export function fingerprintChanges(
   changes: readonly { relativePath: string; action: string; intendedDigest: string | null }[]
 ): string {
@@ -408,9 +374,6 @@ export function indexEvidence(bytes: Uint8Array): {
   return { indexBytesBase64: encodeBytes(bytes), indexDigest: digestBytes(bytes) }
 }
 
-/**
- * @throws {AppException} 格式不正确。
- */
 export function assertOperationId(operationId: string): void {
   if (!OPERATION_ID_PATTERN.test(operationId)) {
     throw new AppException({ code: ErrorCodes.invalidRequest, msg: '操作标识格式不正确' })

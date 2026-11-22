@@ -38,30 +38,18 @@ function parseResult<T>(schema: z.ZodType<T>, value: unknown): T | null {
   return parsed.success ? parsed.data : null
 }
 
-/**
- * 校验编辑后的整份编排。缺字段或旧用途字段都不接受。
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseSceneCanvasArrangementResult(
   value: unknown
 ): AjaxResult<SceneCanvasArrangementVO> | null {
   return parseResult(arrangementResultSchema, value)
 }
 
-/**
- * 校验读取结果。没有保存文件时 data 为 null，损坏不是成功空编排。
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseSceneCanvasReadResult(
   value: unknown
 ): AjaxResult<SceneCanvasArrangementVO | null> | null {
   return parseResult(nullableArrangementResultSchema, value)
 }
 
-/**
- * 校验保存响应。成功 data 必须是 null。
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseSceneCanvasSaveResult(value: unknown): AjaxResult<null> | null {
   return parseResult(nullResultSchema, value)
 }

@@ -13,10 +13,6 @@ const projectId = 'p-01'
 const sceneId = 'scene-1'
 const canvasId = 'canvas-1'
 
-/**
- * 浏览器的 Blob URL 创建与撤销是产品可观察结果。这里只记录真实调用，不改写实现；
- * 断言「目录缩略图和画布卡片共享一个 URL」以及「最后一个消费者离开后才撤销」。
- */
 async function recordBlobUrls(page) {
   await page.addInitScript(() => {
     const created = []
@@ -36,10 +32,6 @@ async function recordBlobUrls(page) {
   })
 }
 
-/**
- * 记录真实媒体读取请求，用来确认共享在途读取没有重复请求。
- * 浏览器真实文件模式走 /__opengalgame/dev/media；保留 dev/call 统计以兼容其他装配。
- */
 function recordMediaReads(page) {
   const reads = []
   page.on('request', (request) => {
@@ -54,13 +46,11 @@ function recordMediaReads(page) {
       const payload = request.postDataJSON()
       if (payload?.method === 'readProjectMedia') reads.push(payload.input?.sourceId)
     } catch {
-      // 非 JSON 请求不参与统计。
     }
   })
   return reads
 }
 
-/** 读取页面里真实发生的 Blob URL 创建和撤销记录，作为可观察证据落盘。 */
 async function blobState(page) {
   return page.evaluate(() => ({
     created: [...window.__mediaBlobUrls.created],
@@ -72,7 +62,6 @@ async function writeEvidence(name, payload) {
   await writeFile(join(evidenceDir, name), `${JSON.stringify(payload, null, 2)}\n`)
 }
 
-/** 读取工作台外壳的滚动量与固定区域位置，用于断言操作和焦点不移动外壳。 */
 async function shellGeometry(page) {
   return page.evaluate(() => {
     const box = (element) => {
@@ -112,7 +101,6 @@ async function expectShellUnscrolled(page, before) {
   }
 }
 
-/** 等待页面过渡与工作台入场清理 transform，避免把入场位移误判成外壳漂移。 */
 async function waitForShellSettled(page) {
   await expect
     .poll(() =>
@@ -136,7 +124,6 @@ async function waitForShellSettled(page) {
     .toBe('settled')
 }
 
-/** 断言最上层弹窗内容中心与视口中心的偏差不超过 2px。 */
 async function expectDialogCentered(page) {
   await expect
     .poll(
@@ -394,7 +381,6 @@ async function stopChildren() {
       try {
         execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' })
       } catch {
-        // 进程已经退出。
       }
     }
   }
@@ -651,8 +637,6 @@ test('删除一个消费方不提前撤销仍被目录缩略图使用的 Blob UR
     reads: reads.filter((id) => id === mediaFixtures.image.sourceId).length
   }
 
-  // 负向控制：让 release 在 refs 仍大于 0 时撤销，删除画布卡片后目录缩略图会收到已撤销 URL，
-  // 下面的“不包含 imageUrl”与 naturalWidth 断言会失败。
   const imageCard = page.getByTestId('rf__node-card-image')
   await expect(imageCard).toBeVisible()
   await expect(imageCard.locator('img')).toHaveAttribute('src', imageUrl)
@@ -662,7 +646,6 @@ test('删除一个消费方不提前撤销仍被目录缩略图使用的 Blob UR
   await menu.getByRole('menuitem', { name: '删除卡片' }).click()
   await expect(imageCard).toHaveCount(0)
 
-  // 缓存用 0ms 定时器延迟撤销。清空同一任务队列后再断言，避免把“还没执行”当成“没有撤销”。
   await page.evaluate(() => new Promise((resolveTick) => setTimeout(resolveTick, 0)))
   expect(await page.evaluate(() => [...window.__mediaBlobUrls.revoked])).not.toContain(imageUrl)
   await expect(rowImage).toBeVisible()

@@ -169,10 +169,21 @@ describe('预览与导出跨层装配', () => {
         versioning(world.userDirectory),
         assembled.sources
       ),
+      destinations: {
+        chooseParentDirectory: async () => ({ status: 'canceled' }),
+        resolveDestination: async () => ({
+          kind: 'workspace',
+          parentDirectory: join(world.projectRoot, 'exports'),
+          projectRoot: world.projectRoot
+        })
+      },
       packager: {
         async packageWindowsScene() {
           packaged += 1
           return { status: 'unavailable', reason: 'windowsPackagerUnavailable', message: '未调用' }
+        },
+        async verifyWindowsScene() {
+          return true
         }
       }
     })
@@ -258,6 +269,14 @@ async function assemble(
         versionService,
         preview.currentScene.sources
       ),
+      destinations: {
+        chooseParentDirectory: async () => ({ status: 'canceled' }),
+        resolveDestination: async () => ({
+          kind: 'workspace',
+          parentDirectory: join(world.projectRoot, 'exports'),
+          projectRoot: world.projectRoot
+        })
+      },
       packager: new TerreWindowsScenePackager(logger, world.userDirectory)
     }),
     sources: preview.currentScene.sources,

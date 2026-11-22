@@ -22,7 +22,6 @@ interface HomePageProps {
   appUpdate: AppUpdateFlow
 }
 
-/** 应用设置入口的更新光环；只是入口提示，不替代对话框内的状态。 */
 function AppUpdateIcon(): ReactElement {
   return (
     <svg className={styles.updateIcon} viewBox="0 0 24 24" aria-hidden="true">

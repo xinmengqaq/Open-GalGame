@@ -9,21 +9,31 @@ import {
   type SceneGenerationDispatchIdentity
 } from '@application/scene-generation/services/impl/SceneGenerationCoordinator'
 import { RunSceneGeneration } from '@application/scene-generation/services/impl/RunSceneGeneration'
+import { ControlSceneGeneration } from '@application/scene-generation/services/impl/ControlSceneGeneration'
 import { ClearSceneGenerationMemory } from '@application/scene-generation/services/impl/ClearSceneGenerationMemory'
 import { EditSceneGenerationCandidate } from '@application/scene-generation/services/impl/EditSceneGenerationCandidate'
 import { QuerySceneGenerationHistory } from '@application/scene-generation/services/impl/QuerySceneGenerationHistory'
 import { QuerySceneGenerationStatus } from '@application/scene-generation/services/impl/QuerySceneGenerationStatus'
 import type { SceneGenerationWorkspaceGateway } from '@application/scene-generation/ports/SceneGenerationWorkspaceGateway'
+import type {
+  ForkSourceEvidence,
+  ForkSourceVerification,
+  SceneGenerationForkSourceEvidence
+} from '@application/scene-generation/ports/SceneGenerationForkSourceEvidence'
+import { AppException } from '@common/errors/AppException'
+import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import type { SceneGenerationDomainService } from '@domain/scene-generation/services/SceneGenerationDomainService'
 import type { SceneGenerationMemoryGateway } from '@application/scene-generation/ports/SceneGenerationMemoryGateway'
 import type { SceneGenerationHistoryReader } from '@application/scene-generation/ports/SceneGenerationHistoryReader'
 import type { SceneGenerationSceneHistoryReader } from '@application/scene-generation/ports/SceneGenerationSceneHistoryReader'
 import { vi, type Mocked } from 'vitest'
+import { createHash } from 'node:crypto'
 
 import type { GenerateSceneDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type {
   SceneGenerationCandidate,
+  SceneGenerationCheckpoint,
   SceneGenerationCommitState,
   SceneGenerationExecution,
   SceneGenerationRuntime,
@@ -31,6 +41,10 @@ import type {
 } from '@application/scene-generation/models/SceneGenerationExecution'
 import type { SceneArtifactGateway } from '@application/scene-generation/ports/SceneArtifactGateway'
 import type { SceneGenerationWorkflow } from '@application/scene-generation/ports/SceneGenerationWorkflow'
+import {
+  isPiReviewCheckpointId,
+  piReviewCheckpointId
+} from '@infrastructure/scene-generation/workflow/piReviewCheckpoint'
 import type { SceneInputGateway } from '@application/scene-generation/ports/SceneInputGateway'
 import type { SceneVersionGateway } from '@application/scene-generation/ports/SceneVersionGateway'
 import type { SceneGenerationProgressVO } from '@application/scene-generation/vo/SceneGenerationVO'
@@ -78,7 +92,6 @@ export const questionInteraction = {
   allowedReplies: ['answers', 'discard'] as const,
   candidateSnapshotId: 'snapshot-1'
 }
-/** 建立仅使用内存替身的应用编排夹具，不实现文件、Git 或工作流技术适配。 */
 export interface SceneGenerationTestFixture {
   service: TestServices
   generation: RunSceneGeneration
@@ -104,6 +117,123 @@ export interface SceneGenerationTestFixture {
   advanceTime: (milliseconds: number) => void
   runNext: () => Promise<void>
   restart: () => TestServices
+  /** 当前装配实例的控制服务；重开后使用新协调器与新的应用服务。 */
+  control: () => ControlSceneGeneration
+}
+
+function digestOf(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
+}
+
+/**
+ * 单元夹具的状态化来源证据：与真实存储同一端口契约，捕获时核对来源检查点身份并只写一次，
+ * 重开只按已保存证据与当前分叉身份核对；不依赖文件或 Git 技术适配。
+ */
+function createStatefulForkSourceEvidence(): SceneGenerationForkSourceEvidence {
+  const records = new Map<string, ForkSourceEvidence>()
+  return {
+    async capture(execution, checkpoint): Promise<void> {
+      const fork = execution.fork
+      const sourceOperationId = fork?.sourceOperationId
+      if (!fork || !execution.forkRequest || sourceOperationId === undefined)
+        throw new AppException({
+          code: ErrorCodes.operationConflict,
+          msg: '分叉执行缺少来源身份'
+        })
+      if (checkpoint.view.canFork !== true)
+        throw new AppException({
+          code: ErrorCodes.operationConflict,
+          msg: checkpoint.view.reason ?? '来源检查点当前不能分叉'
+        })
+      if (
+        checkpoint.execution.operationId !== sourceOperationId ||
+        checkpoint.execution.projectId !== execution.projectId ||
+        checkpoint.execution.sceneId !== execution.sceneId ||
+        checkpoint.execution.threadId !== execution.threadId ||
+        checkpoint.execution.branchId !== fork.branchId ||
+        checkpoint.view.checkpointId !== fork.checkpointId ||
+        fork.branchId === execution.branchId ||
+        sourceOperationId === execution.operationId
+      )
+        throw new AppException({
+          code: ErrorCodes.operationConflict,
+          msg: '来源检查点身份与分叉记录不一致'
+        })
+      const candidateSnapshotId = checkpoint.candidateSnapshotId
+      if (
+        candidateSnapshotId === undefined ||
+        fork.candidateSnapshotId !== candidateSnapshotId ||
+        checkpoint.execution.candidateSnapshotId !== candidateSnapshotId
+      )
+        throw new AppException({
+          code: ErrorCodes.operationConflict,
+          msg: '来源候选修订与分叉记录不一致'
+        })
+      const inputSnapshotDigest = digestOf(checkpoint.execution.inputSnapshot)
+      if (!execution.forkRequest.inputChanges && digestOf(execution.inputSnapshot) !== inputSnapshotDigest)
+        throw new AppException({
+          code: ErrorCodes.operationConflict,
+          msg: '分叉输入与来源输入不一致'
+        })
+      const fields: Omit<ForkSourceEvidence, 'digest'> = {
+        version: 1,
+        operationId: execution.operationId,
+        projectId: execution.projectId,
+        sceneId: execution.sceneId,
+        threadId: execution.threadId,
+        sourceOperationId,
+        sourceBranchId: checkpoint.execution.branchId,
+        checkpointId: fork.checkpointId,
+        candidateSnapshotId,
+        checkpointKind: isPiReviewCheckpointId(fork.checkpointId) ? 'pi-review' : 'legacy',
+        checkpointDigest: digestOf({
+          view: checkpoint.view,
+          execution: checkpoint.execution,
+          candidateSnapshotId
+        }),
+        inputSnapshotDigest,
+        revision: {
+          revisionId: candidateSnapshotId,
+          treeId: createHash('sha256')
+            .update(`tree:${sourceOperationId}:${candidateSnapshotId}`)
+            .digest('hex')
+            .slice(0, 40),
+          parentRevisionIds: []
+        }
+      }
+      const evidence: ForkSourceEvidence = { ...fields, digest: digestOf(fields) }
+      const existing = records.get(execution.operationId)
+      if (existing !== undefined) {
+        if (existing.digest !== evidence.digest)
+          throw new AppException({
+            code: ErrorCodes.operationConflict,
+            msg: '分叉来源证据已存在且不一致，不能覆盖现场'
+          })
+        return
+      }
+      records.set(execution.operationId, evidence)
+    },
+    async verify(execution, revisionId): Promise<ForkSourceVerification> {
+      const evidence = records.get(execution.operationId)
+      if (evidence === undefined)
+        return { ok: false, reason: '分叉来源证据缺失，已保留现场待核对' }
+      const fork = execution.fork
+      if (
+        !fork ||
+        fork.sourceOperationId !== evidence.sourceOperationId ||
+        fork.branchId !== evidence.sourceBranchId ||
+        fork.checkpointId !== evidence.checkpointId ||
+        fork.candidateSnapshotId !== evidence.candidateSnapshotId ||
+        execution.projectId !== evidence.projectId ||
+        execution.sceneId !== evidence.sceneId ||
+        execution.threadId !== evidence.threadId
+      )
+        return { ok: false, reason: '分叉来源证据与持久分叉记录不一致' }
+      if (revisionId !== undefined && evidence.candidateSnapshotId !== revisionId)
+        return { ok: false, reason: '待证明的父修订不是创建分叉时复制的来源候选' }
+      return { ok: true, evidence }
+    }
+  }
 }
 
 export function createSceneGenerationFixture(
@@ -188,6 +318,11 @@ export function createSceneGenerationFixture(
             execution.projectId === request.projectId && execution.sceneId === request.sceneId
         )
     ),
+    listProjectExecutions: vi.fn(async (projectId: string) =>
+      [...executions.values()]
+        .filter((execution) => execution.projectId === projectId)
+        .map((execution) => structuredClone(execution))
+    ),
     createExecution: vi.fn<
       (SceneGenerationWorkflow &
         SceneGenerationExecutionRepository &
@@ -208,6 +343,16 @@ export function createSceneGenerationFixture(
       executions.set(execution.operationId, structuredClone(execution))
       return structuredClone(execution)
     }),
+    capabilities: vi.fn<SceneGenerationWorkflow['capabilities']>(() => ({
+      resume: true,
+      pause: true,
+      continueInteraction: true,
+      fork: true
+    })),
+    /** 与真实工作流同一身份契约：同一操作与候选修订得到稳定审阅边界，应用只当不透明标识。 */
+    checkpointIdFor: vi.fn<SceneGenerationWorkflow['checkpointIdFor']>((execution) =>
+      piReviewCheckpointId(execution.operationId, execution.candidateSnapshotId)
+    ),
     executeGeneration: vi.fn<
       (SceneGenerationWorkflow &
         SceneGenerationExecutionRepository &
@@ -274,7 +419,9 @@ export function createSceneGenerationFixture(
           decisions: [],
           differences: [],
           canView: true,
-          canContinue: true
+          canContinue: true,
+          canFork: true,
+          canReply: true
         }
       }
     }),
@@ -356,6 +503,9 @@ export function createSceneGenerationFixture(
       rootDirectory: '/restored/' + execution.operationId,
       sceneDirectory: 'scenes/scene-1'
     })),
+    proveRepairInput: vi.fn<
+      (SceneArtifactGateway & SceneGenerationWorkspaceGateway)['proveRepairInput']
+    >(async () => undefined),
     materializeRepairInput: vi.fn<
       (SceneArtifactGateway & SceneGenerationWorkspaceGateway)['materializeRepairInput']
     >(async (execution) => {
@@ -416,15 +566,17 @@ export function createSceneGenerationFixture(
     input,
     artifacts,
     versions,
+    writeRecovery: {
+      recoverCandidateWrite: async () => ({ outcome: 'notApplicable' as const })
+    },
+    forkSourceEvidence: createStatefulForkSourceEvidence(),
     candidatePreview: undefined,
     nextId: (): string => 'identity-' + ++nextIdentity,
     now: (): number => currentTime,
-    /** 缓冲后台事务及其操作身份，供测试显式执行和核对关联。 */
     dispatch: (job: () => Promise<void>, identity: SceneGenerationDispatchIdentity): void => {
       jobs.push(job)
       dispatches.push(identity)
     },
-    /** 收集已经持久记录的进度。 */
     publishProgress: (event: SceneGenerationProgressVO): void => {
       progress.push(event)
     }
@@ -447,6 +599,7 @@ export function createSceneGenerationFixture(
       getSceneGenerationStatus: s1.getSceneGenerationStatus.bind(s1),
       listSceneGenerationHistory: s2.listSceneGenerationHistory.bind(s2),
       readSceneGenerationCheckpoint: s2.readSceneGenerationCheckpoint.bind(s2),
+      readSceneGenerationHistoryDetail: s2.readSceneGenerationHistoryDetail.bind(s2),
       listSceneGenerationHistoryForScene: s2.listSceneGenerationHistoryForScene.bind(s2),
       editSceneGenerationCandidate: s3.editSceneGenerationCandidate.bind(s3),
       clearSceneGenerationMemory: s4.clearSceneGenerationMemory.bind(s4)
@@ -472,17 +625,14 @@ export function createSceneGenerationFixture(
     advanceTime: (milliseconds: number): void => {
       currentTime += milliseconds
     },
-    /**
-     * 执行下一个后台事务，失败直接交给断言。
-     * @throws {Error} 没有待执行事务或事务失败。
-     */
     runNext: async (): Promise<void> => {
       const job = jobs.shift()
       if (!job) throw new Error('没有待执行任务')
       await job()
     },
-    /** 重新创建应用服务，保留替身持久事实，清空本进程活动表。 */
-    restart: (): TestServices => createServices()
+    restart: (): TestServices => createServices(),
+    /** 按当前装配实例构造控制服务；重开后使用新的协调器与生成服务。 */
+    control: (): ControlSceneGeneration => new ControlSceneGeneration(deps, coordinator, generation)
   }
 }
 
@@ -494,10 +644,6 @@ export function waitForInteraction(fixture: ReturnType<typeof createSceneGenerat
   })
 }
 
-/**
- * 提供执行期间可通过取消信号终止的可控工作流。
- * @returns 仅在被取消时结束的结果。
- */
 export function waitForCancellation(
   runtime: SceneGenerationRuntime
 ): Promise<SceneGenerationWorkflowOutcome> {

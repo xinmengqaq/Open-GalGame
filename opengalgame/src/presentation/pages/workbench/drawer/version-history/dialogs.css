@@ -1,8 +1,3 @@
-/*
- * 撤销与清理确认框。Radix AlertDialog 的 portal 不在 Sheet DOM 内，
- * 用 .wb-drawer--dialog 复用工作台变量；选择器仍限定在 .wb-drawer 前缀。
- */
-/* 撤销与清理确认框；portal 不在 Sheet DOM 内，用 .wb-drawer--dialog 复用变量。 */
 .wb-drawer--dialog.works-dialog {
   display: flex;
   width: calc(100vw - 32px);

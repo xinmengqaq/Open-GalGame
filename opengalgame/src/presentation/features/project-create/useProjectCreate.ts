@@ -25,7 +25,6 @@ export interface CreateFlow {
   locationError: string | null
   error: FailureState | null
   confirmClose: boolean
-  /** 1309 若带回工程身份，重新构建可直接核对该工程。 */
   workspaceProjectId: string | null
   rebuilding: boolean
   setName: (value: string) => void
@@ -59,7 +58,6 @@ export function useProjectCreate(client: ProjectClient): CreateFlow {
 
   const dirty = name.length > 0 || synopsis.length > 0 || directory.length > 0
 
-  /** 打开新建表单，清空上一次的错误状态。 */
   function open(): void {
     setState('editing')
     setConfirmClose(false)
@@ -68,7 +66,6 @@ export function useProjectCreate(client: ProjectClient): CreateFlow {
     setError(null)
   }
 
-  /** 请求关闭：脏草稿先走确认，否则直接复位。 */
   function requestClose(): void {
     if (state === 'creating' || rebuilding) return
     if (dirty && state === 'editing') {
@@ -78,7 +75,6 @@ export function useProjectCreate(client: ProjectClient): CreateFlow {
     reset()
   }
 
-  /** 复位新建流程并清除已选保存位置。 */
   function reset(): void {
     void client.clearSaveLocation()
     setState('closed')
@@ -93,7 +89,6 @@ export function useProjectCreate(client: ProjectClient): CreateFlow {
     setWorkspaceProjectId(null)
   }
 
-  /** 选择保存位置，取消或失败时就地提示。 */
   async function chooseLocation(): Promise<void> {
     if (state === 'creating' || rebuilding) return
     setLocationError(null)
@@ -124,7 +119,6 @@ export function useProjectCreate(client: ProjectClient): CreateFlow {
     await create(request)
   }
 
-  /** 执行创建请求，分别处理取消、完成与失败结果。 */
   async function create(request: CreateProjectDTO): Promise<void> {
     setState('creating')
     setFieldError(null)
@@ -153,7 +147,6 @@ export function useProjectCreate(client: ProjectClient): CreateFlow {
     }
     const projectId = workspaceProjectIdFrom(ajax.data)
     if (ajax.code === PROJECT_WORKSPACE_NOT_READY_CODE) {
-      // 工程已登记但工作区未就绪：只给重新构建，固定安全文案，不显示原始消息。
       setWorkspaceProjectId(projectId)
       void queryClient.invalidateQueries({ queryKey: projectListQueryKey })
       setError({ code: ajax.code, msg: homeWorkspaceFailure.detail })
@@ -165,12 +158,10 @@ export function useProjectCreate(client: ProjectClient): CreateFlow {
     setState('failure')
   }
 
-  /** 用上次的请求重试创建，供登记失败后继续。 */
   async function retry(): Promise<void> {
     if (pendingRequest) await create(pendingRequest)
   }
 
-  /** 显式重新构建：有工程身份就先核对并打开；否则关闭弹窗、刷新列表交给工作台面板。 */
   async function rebuildWorkspace(): Promise<void> {
     if (state !== 'failure' || rebuilding) return
     const projectId = workspaceProjectId

@@ -14,12 +14,7 @@ import {
 import { WebgalInfrastructureError } from '@infrastructure/webgal/WebgalInfrastructureError'
 import { sceneReadException } from './sceneReadErrors'
 
-/** 只检查该场景实际引用的资源可达性。 */
 export class SceneAssetReferenceGatewayImpl implements SceneAssetReferenceGateway {
-  /**
-   * @returns 每个引用的可达性或缺失、外部、非法、清除状态。
-   * @throws {AppException} 内容依据不一致或素材查询故障。
-   */
   async checkSceneAssetReferences(
     snapshot: SceneSourceSnapshot,
     scene: ParsedScene
@@ -53,10 +48,6 @@ export class SceneAssetReferenceGatewayImpl implements SceneAssetReferenceGatewa
   }
 }
 
-/**
- * 逐个按共用优先级查找普通文件，拒绝任何路径和链接逃逸。
- * @throws {WebgalInfrastructureError} 文件查询故障。
- */
 async function checkReference(
   root: string,
   reference: ParsedSceneAssetReference

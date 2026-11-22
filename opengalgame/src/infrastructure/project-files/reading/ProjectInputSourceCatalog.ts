@@ -41,12 +41,6 @@ export type SourceCatalogRecord =
       document?: ProjectInputSourceDocument
     }
 
-/**
- * 枚举来源描述并保留重复身份。
- * 临时文件按既有约定跳过；无法识别身份的名称使整次读取失败。
- * @returns 描述记录，不以 Map 覆盖重复身份。
- * @throws {AppException} 目录无法枚举，或存在无法识别的描述文件名。
- */
 export async function loadSourceCatalog(
   window: ProjectFileReadWindow
 ): Promise<SourceCatalogRecord[]> {
@@ -152,10 +146,6 @@ async function readDescriptorRecord(
   }
 }
 
-/**
- * 检查记录使用的来源身份。优先使用描述中的身份，便于发现重复。
- * @returns 用于诊断和重复判断的身份。
- */
 export function catalogSourceId(record: SourceCatalogRecord): string {
   return record.claimedId ?? record.filenameId
 }

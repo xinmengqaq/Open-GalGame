@@ -5,10 +5,6 @@ import { prefersReducedMotion } from '@presentation/effects/motion'
 
 const formatter = new Intl.NumberFormat('zh-CN')
 
-/**
- * 统计数字变化用滚动数字反馈；减少动态效果时直接替换文本。
- * 只写 textContent，结束后不残留内联样式。
- */
 export function CountUp({ value }: { value: number }): ReactElement {
   const node = useRef<HTMLSpanElement>(null)
 

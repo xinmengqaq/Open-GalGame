@@ -3,10 +3,15 @@ import * as git from 'isomorphic-git'
 
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { SceneGenerationCandidate } from '@application/scene-generation/models/SceneGenerationExecution'
+import type {
+  SceneGenerationBaseline,
+  SceneGenerationCandidate,
+  SceneGenerationExecution
+} from '@application/scene-generation/models/SceneGenerationExecution'
+import type { SceneSourceLocation } from '@application/scenes/models/SceneSourceLocation'
 import type { SceneGenerationArtifact } from '@domain/scene-generation/models/SceneGenerationArtifact'
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
 import type { VersionSettlementVO } from '@application/project-versioning/vo/ProjectVersioningVO'
@@ -18,6 +23,9 @@ import { SceneGenerationVersionConflict } from '@application/scene-generation/er
 import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { SceneVersionGatewayImpl } from '@infrastructure/scene-generation/versions/SceneVersionGatewayImpl'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
+import { readStageOids } from '@infrastructure/git/repository/WorkBaseline'
+import { applyTreeEdits } from '@infrastructure/git/objects/gitTree'
+import { realGitEffects, type GitEffects } from '@infrastructure/git/gitEffects'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 
 const directories: string[] = []
@@ -285,6 +293,324 @@ describe('场景生成版本窄端口', () => {
     ).resolves.toEqual({ state: 'notCommitted' })
     expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(3)
   })
+
+  it('无关修订前进不使候选失效，确认只把目标脚本合入当前作品', async () => {
+    const world = await registeredScene()
+    const sidePath = 'game/scene/side.txt'
+    const versioning = versioningFor(world.userDirectory, ['op-unrelated', 'hist-unrelated'])
+    await versioning.initializeBaseline({
+      projectId: 'project-1',
+      initialPaths: [scriptPath, '.opengalgame/scene-locks.json', sidePath]
+    })
+    const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+    const running = execution(world, await gateway.readBaseline(world.source))
+    const revisionId = await storedCandidate(world, running)
+    const unrelated = await commitOutside(world.projectRoot, sidePath, '旁路确认')
+
+    await expect(gateway.inspectBaseline(running)).resolves.toEqual({
+      baselineState: 'unchanged',
+      lockState: 'unlocked'
+    })
+    const committed = await gateway.commitCandidate(
+      running,
+      candidate(revisionId),
+      () => undefined
+    )
+
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('确认稿')
+    await expect(readFile(join(world.projectRoot, sidePath), 'utf8')).resolves.toBe('旁路确认')
+    const published = await git.readCommit({ fs, dir: world.projectRoot, oid: committed.commitId })
+    expect(published.commit.parent).toEqual([unrelated])
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(3)
+  })
+
+  it('目标脚本的工作区改动仍阻止覆盖', async () => {
+    const world = await prepareCandidateWorld()
+    await writeFile(join(world.projectRoot, scriptPath), '人工改动')
+
+    await expect(world.gateway.inspectBaseline(world.running)).resolves.toMatchObject({
+      baselineState: 'changed'
+    })
+    await expect(
+      world.gateway.commitCandidate(world.running, candidate(world.revisionId), () => undefined)
+    ).rejects.toBeInstanceOf(SceneGenerationVersionConflict)
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('人工改动')
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(1)
+  })
+
+  it('目标脚本只暂存未提交改动也阻止覆盖', async () => {
+    const world = await prepareCandidateWorld()
+    await writeFile(join(world.projectRoot, scriptPath), '暂存改动')
+    await git.add({ fs, dir: world.projectRoot, filepath: scriptPath })
+    await writeFile(join(world.projectRoot, scriptPath), '原稿')
+
+    await expect(world.gateway.inspectBaseline(world.running)).resolves.toMatchObject({
+      baselineState: 'changed'
+    })
+    await expect(
+      world.gateway.commitCandidate(world.running, candidate(world.revisionId), () => undefined)
+    ).rejects.toBeInstanceOf(SceneGenerationVersionConflict)
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('原稿')
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(1)
+  })
+
+  it('目标脚本缺失仍阻止覆盖', async () => {
+    const world = await prepareCandidateWorld()
+    await rm(join(world.projectRoot, scriptPath))
+
+    await expect(world.gateway.inspectBaseline(world.running)).resolves.toMatchObject({
+      baselineState: 'changed'
+    })
+    await expect(
+      world.gateway.commitCandidate(world.running, candidate(world.revisionId), () => undefined)
+    ).rejects.toBeInstanceOf(SceneGenerationVersionConflict)
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(1)
+  })
+
+  it('旧持久候选按生成时修订核对目标文件，无关提交不影响且确认可合入', async () => {
+    const world = await registeredScene()
+    const sidePath = 'game/scene/side.txt'
+    const versioning = versioningFor(world.userDirectory, ['op-legacy', 'hist-legacy'])
+    await versioning.initializeBaseline({
+      projectId: 'project-1',
+      initialPaths: [scriptPath, '.opengalgame/scene-locks.json', sidePath]
+    })
+    const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+    const current = await gateway.readBaseline(world.source)
+    const legacy = {
+      ...current,
+      affectedFiles: [{ relativePath: scriptPath, digest: current.commitId }]
+    }
+    const running = execution(world, legacy)
+    const revisionId = await storedCandidate(world, running)
+    const unrelated = await commitOutside(world.projectRoot, sidePath, '旧候选旁路')
+
+    await expect(gateway.inspectBaseline(running)).resolves.toMatchObject({
+      baselineState: 'unchanged'
+    })
+    const restarted = new SceneVersionGatewayImpl(
+      versioningFor(world.userDirectory, ['op-legacy-restart', 'hist-legacy-restart']),
+      unusedProjects
+    )
+    const committed = await restarted.commitCandidate(
+      running,
+      candidate(revisionId),
+      () => undefined
+    )
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('确认稿')
+    await expect(readFile(join(world.projectRoot, sidePath), 'utf8')).resolves.toBe('旧候选旁路')
+    const published = await git.readCommit({ fs, dir: world.projectRoot, oid: committed.commitId })
+    expect(published.commit.parent).toEqual([unrelated])
+  })
+
+  it('旧持久候选的目标文件在后续提交中被改动时仍拒绝覆盖', async () => {
+    const world = await registeredScene()
+    const versioning = versioningFor(world.userDirectory, ['op-legacy-hit', 'hist-legacy-hit'])
+    await versioning.initializeBaseline({
+      projectId: 'project-1',
+      initialPaths: [scriptPath, '.opengalgame/scene-locks.json']
+    })
+    const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+    const current = await gateway.readBaseline(world.source)
+    const running = execution(world, {
+      ...current,
+      affectedFiles: [{ relativePath: scriptPath, digest: current.commitId }]
+    })
+    const revisionId = await storedCandidate(world, running)
+    await commitOutside(world.projectRoot, scriptPath, '后续提交')
+
+    await expect(gateway.inspectBaseline(running)).resolves.toMatchObject({
+      baselineState: 'changed'
+    })
+    await expect(
+      gateway.commitCandidate(running, candidate(revisionId), () => undefined)
+    ).rejects.toBeInstanceOf(SceneGenerationVersionConflict)
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('后续提交')
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(2)
+  })
+
+  it('提交边界内无关修订前进仍合入，不清除并发改动', async () => {
+    const world = await registeredScene()
+    const sidePath = 'game/scene/side.txt'
+    const versioning = versioningFor(world.userDirectory, ['op-race-side', 'hist-race-side'])
+    await versioning.initializeBaseline({
+      projectId: 'project-1',
+      initialPaths: [scriptPath, '.opengalgame/scene-locks.json', sidePath]
+    })
+    const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+    const running = execution(world, await gateway.readBaseline(world.source))
+    const revisionId = await storedCandidate(world, running)
+    const realCommit = versioning.commitOperation.bind(versioning)
+    let concurrent: string | undefined
+    versioning.commitOperation = async (request, requirePreconditions) =>
+      realCommit(request, async () => {
+        concurrent ??= await commitOutside(world.projectRoot, sidePath, '边界旁路')
+        await requirePreconditions()
+      })
+
+    const committed = await gateway.commitCandidate(
+      running,
+      candidate(revisionId),
+      () => undefined
+    )
+    expect(concurrent).toBeTruthy()
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('确认稿')
+    await expect(readFile(join(world.projectRoot, sidePath), 'utf8')).resolves.toBe('边界旁路')
+    const published = await git.readCommit({ fs, dir: world.projectRoot, oid: committed.commitId })
+    expect(published.commit.parent).toEqual([concurrent])
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(3)
+  })
+
+  it('发布前分支真实前进后抛错时补偿并重试，保留旁路提交与无关暂存', async () => {
+    const world = await registeredScene()
+    const sidePath = 'game/scene/side.txt'
+    const stagedPath = 'game/scene/staged.txt'
+    let concurrent: string | undefined
+    let branchAttempts = 0
+    const effects: GitEffects = {
+      ...realGitEffects,
+      updateBranch: async (projectRoot, branchRef, oid, expectedOid) => {
+        branchAttempts += 1
+        if (branchAttempts === 1) {
+          concurrent = await commitOutsideWithoutIndex(projectRoot, sidePath, '发布前旁路')
+          throw new AppException({
+            code: ErrorCodes.operationConflict,
+            msg: '模拟发布前分支已被其他修订推进'
+          })
+        }
+        return realGitEffects.updateBranch(projectRoot, branchRef, oid, expectedOid)
+      }
+    }
+    const versioning = versioningFor(
+      world.userDirectory,
+      ['op-cas-race', 'hist-cas-race'],
+      effects
+    )
+    await versioning.initializeBaseline({
+      projectId: 'project-1',
+      initialPaths: [scriptPath, '.opengalgame/scene-locks.json', sidePath]
+    })
+    await writeFile(join(world.projectRoot, stagedPath), '无关暂存')
+    await git.add({ fs, dir: world.projectRoot, filepath: stagedPath })
+    const stagedBefore = (await readStageOids(world.projectRoot, [stagedPath])).get(stagedPath)
+    expect(stagedBefore).toBeTruthy()
+    const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+    const running = execution(world, await gateway.readBaseline(world.source))
+    const revisionId = await storedCandidate(world, running)
+
+    const committed = await gateway.commitCandidate(
+      running,
+      candidate(revisionId),
+      () => undefined
+    )
+
+    expect(branchAttempts).toBe(2)
+    expect(concurrent).toBeTruthy()
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('确认稿')
+    await expect(readFile(join(world.projectRoot, sidePath), 'utf8')).resolves.toBe('发布前旁路')
+    await expect(readFile(join(world.projectRoot, stagedPath), 'utf8')).resolves.toBe('无关暂存')
+    expect((await readStageOids(world.projectRoot, [stagedPath])).get(stagedPath)).toBe(
+      stagedBefore
+    )
+    await expect(
+      git.readBlob({ fs, dir: world.projectRoot, oid: committed.commitId, filepath: stagedPath })
+    ).rejects.toThrow()
+    const published = await git.readCommit({ fs, dir: world.projectRoot, oid: committed.commitId })
+    expect(published.commit.parent).toEqual([concurrent])
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(3)
+  })
+
+  it('候选生成时修订不在当前历史中时，内容相同也拒绝合入', async () => {
+    const world = await registeredScene()
+    const versioning = versioningFor(world.userDirectory, ['op-orphan', 'hist-orphan'])
+    await versioning.initializeBaseline({
+      projectId: 'project-1',
+      initialPaths: [scriptPath, '.opengalgame/scene-locks.json']
+    })
+    const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+    const running = execution(world, await gateway.readBaseline(world.source))
+    const revisionId = await storedCandidate(world, running)
+    await rewriteHistoryWithSameTree(world.projectRoot)
+
+    await expect(gateway.inspectBaseline(running)).resolves.toMatchObject({
+      baselineState: 'unchanged'
+    })
+    await expect(
+      gateway.commitCandidate(running, candidate(revisionId), () => undefined)
+    ).rejects.toBeInstanceOf(SceneGenerationVersionConflict)
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('原稿')
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(1)
+  })
+
+  it('提交边界内目标脚本只被暂存时也拒绝覆盖', async () => {
+    const world = await registeredScene()
+    const versioning = versioningFor(world.userDirectory, ['op-race-stage', 'hist-race-stage'])
+    await versioning.initializeBaseline({
+      projectId: 'project-1',
+      initialPaths: [scriptPath, '.opengalgame/scene-locks.json']
+    })
+    const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+    const running = execution(world, await gateway.readBaseline(world.source))
+    const revisionId = await storedCandidate(world, running)
+    const realCommit = versioning.commitOperation.bind(versioning)
+    let staged = false
+    versioning.commitOperation = async (request, requirePreconditions) =>
+      realCommit(request, async () => {
+        if (!staged) {
+          staged = true
+          await writeFile(join(world.projectRoot, scriptPath), '边界暂存')
+          await git.add({ fs, dir: world.projectRoot, filepath: scriptPath })
+          await writeFile(join(world.projectRoot, scriptPath), '原稿')
+        }
+        await requirePreconditions()
+      })
+
+    await expect(
+      gateway.commitCandidate(running, candidate(revisionId), () => undefined)
+    ).rejects.toBeInstanceOf(SceneGenerationVersionConflict)
+    expect(staged).toBe(true)
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('原稿')
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(1)
+    const stageOid = (
+      await readStageOids(world.projectRoot, [scriptPath])
+    ).get(scriptPath)
+    expect(stageOid).toBeTruthy()
+    const stagedBlob = await git.readBlob({ fs, dir: world.projectRoot, oid: stageOid! })
+    expect(Buffer.from(stagedBlob.blob).toString()).toBe('边界暂存')
+  })
+
+  it('提交边界内目标脚本被改动时拒绝覆盖且不产生候选提交', async () => {
+    const world = await registeredScene()
+    const versioning = versioningFor(world.userDirectory, ['op-race-target', 'hist-race-target'])
+    await versioning.initializeBaseline({
+      projectId: 'project-1',
+      initialPaths: [scriptPath, '.opengalgame/scene-locks.json']
+    })
+    const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+    const running = execution(world, await gateway.readBaseline(world.source))
+    const revisionId = await storedCandidate(world, running)
+    const realCommit = versioning.commitOperation.bind(versioning)
+    let concurrent: string | undefined
+    versioning.commitOperation = async (request, requirePreconditions) =>
+      realCommit(request, async () => {
+        concurrent ??= await commitOutside(world.projectRoot, scriptPath, '边界改动')
+        await requirePreconditions()
+      })
+
+    await expect(
+      gateway.commitCandidate(running, candidate(revisionId), () => undefined)
+    ).rejects.toBeInstanceOf(SceneGenerationVersionConflict)
+    expect(concurrent).toBeTruthy()
+    await expect(readFile(join(world.projectRoot, scriptPath), 'utf8')).resolves.toBe('边界改动')
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(2)
+    const messages = (await git.log({ fs, dir: world.projectRoot })).map(
+      (entry) => entry.commit.message
+    )
+    expect(messages.some((message) => message.includes('确认场景生成'))).toBe(false)
+  })
 })
 function gatewayOver(settlement: VersionSettlementVO): SceneVersionGatewayImpl {
   const versioning = {
@@ -320,11 +646,12 @@ function gatewayOver(settlement: VersionSettlementVO): SceneVersionGatewayImpl {
 
 function versioningFor(
   userDirectory: string,
-  ids: readonly string[]
+  ids: readonly string[],
+  effects?: GitEffects
 ): ManageProjectVersioning {
   let cursor = 0
   return new ManageProjectVersioning({
-    ...createProjectVersioningGateways(userDirectory),
+    ...createProjectVersioningGateways(userDirectory, effects),
     nextId: () => {
       const id = ids[cursor]
       cursor += 1
@@ -340,17 +667,13 @@ const unusedProjects = {
   }
 }
 
-async function registeredScene(): Promise<{
+interface TestSceneWorld {
   userDirectory: string
   projectRoot: string
-  source: {
-    projectId: string
-    sceneId: string
-    projectRoot: string
-    sceneDirectory: string
-    entryFile: string
-  }
-}> {
+  source: SceneSourceLocation
+}
+
+async function registeredScene(): Promise<TestSceneWorld> {
   const root = await mkdtemp(join(tmpdir(), 'opengalgame-scene-version-'))
   directories.push(root)
   const userDirectory = join(root, 'user')
@@ -378,13 +701,7 @@ async function registeredScene(): Promise<{
 
 async function idleSource(): Promise<{
   projectRoot: string
-  source: {
-    projectId: string
-    sceneId: string
-    projectRoot: string
-    sceneDirectory: string
-    entryFile: string
-  }
+  source: SceneSourceLocation
 }> {
   return {
     projectRoot: 'unused',
@@ -398,57 +715,144 @@ async function idleSource(): Promise<{
   }
 }
 
+async function prepareCandidateWorld(): Promise<
+  TestSceneWorld & {
+    gateway: SceneVersionGatewayImpl
+    running: SceneGenerationExecution
+    revisionId: string
+  }
+> {
+  const world = await registeredScene()
+  const versioning = versioningFor(world.userDirectory, ['op-target', 'hist-target'])
+  await versioning.initializeBaseline({
+    projectId: 'project-1',
+    initialPaths: [scriptPath, '.opengalgame/scene-locks.json']
+  })
+  const gateway = new SceneVersionGatewayImpl(versioning, unusedProjects)
+  const running = execution(world, await gateway.readBaseline(world.source))
+  const revisionId = await storedCandidate(world, running)
+  return { ...world, gateway, running, revisionId }
+}
+
+async function storedCandidate(
+  world: TestSceneWorld,
+  running: SceneGenerationExecution,
+  content = '确认稿'
+): Promise<string> {
+  const files = new AiProjectFileSystemImpl(world.userDirectory)
+  const workspace = await files.createWorkspace({
+    projectId: running.projectId,
+    threadId: running.threadId,
+    operationId: running.operationId,
+    projectRoot: world.projectRoot,
+    sourcePaths: [scriptPath]
+  })
+  await files.writeFile(workspace, scriptPath, new TextEncoder().encode(content))
+  const revision = await files.saveRevision(workspace)
+  await files.discardWorkspace(workspace)
+  return revision.revisionId
+}
+
+async function commitOutside(
+  projectRoot: string,
+  relativePath: string,
+  content: string
+): Promise<string> {
+  const absolute = join(projectRoot, relativePath)
+  await mkdir(dirname(absolute), { recursive: true })
+  await writeFile(absolute, content)
+  await git.add({ fs, dir: projectRoot, filepath: relativePath })
+  const author = testAuthor()
+  return git.commit({
+    fs,
+    dir: projectRoot,
+    message: `外部提交 ${relativePath}\n`,
+    author,
+    committer: author
+  })
+}
+
+async function commitOutsideWithoutIndex(
+  projectRoot: string,
+  relativePath: string,
+  content: string
+): Promise<string> {
+  const absolute = join(projectRoot, relativePath)
+  await mkdir(dirname(absolute), { recursive: true })
+  await writeFile(absolute, content)
+  const head = await git.readCommit({
+    fs,
+    dir: projectRoot,
+    oid: await git.resolveRef({ fs, dir: projectRoot, ref: 'HEAD' })
+  })
+  const written = await applyTreeEdits({ dir: projectRoot }, head.commit.tree, [
+    { relativePath, action: 'upsert', bytes: new TextEncoder().encode(content) }
+  ])
+  const author = testAuthor()
+  const commitId = await git.writeCommit({
+    fs,
+    dir: projectRoot,
+    commit: {
+      message: `外部提交 ${relativePath}\n`,
+      tree: written.treeOid,
+      parent: [await git.resolveRef({ fs, dir: projectRoot, ref: 'HEAD' })],
+      author,
+      committer: author
+    }
+  })
+  await pointBranch(projectRoot, commitId)
+  return commitId
+}
+
+async function rewriteHistoryWithSameTree(projectRoot: string): Promise<void> {
+  const head = await git.readCommit({
+    fs,
+    dir: projectRoot,
+    oid: await git.resolveRef({ fs, dir: projectRoot, ref: 'HEAD' })
+  })
+  const author = testAuthor()
+  const orphan = await git.writeCommit({
+    fs,
+    dir: projectRoot,
+    commit: {
+      message: '重写作品历史\n',
+      tree: head.commit.tree,
+      parent: [],
+      author,
+      committer: author
+    }
+  })
+  await pointBranch(projectRoot, orphan)
+}
+
+async function pointBranch(projectRoot: string, commitId: string): Promise<void> {
+  const branch = await git.currentBranch({ fs, dir: projectRoot, fullname: true })
+  if (!branch) throw new Error('测试工程没有当前分支')
+  await git.writeRef({ fs, dir: projectRoot, ref: branch, value: commitId, force: true })
+}
+
+function testAuthor(): {
+  name: string
+  email: string
+  timestamp: number
+  timezoneOffset: number
+} {
+  return {
+    name: 'tester',
+    email: 'tester@localhost',
+    timestamp: 1_700_000_000,
+    timezoneOffset: 0
+  }
+}
+
 function lockFile(lockState: 'locked' | 'unlocked'): string {
   return JSON.stringify({ scenes: [{ sceneId: 'scene-1', lockState }] })
 }
 
 function execution(
-  world: {
-    source: {
-      projectId: string
-      sceneId: string
-      projectRoot: string
-      sceneDirectory: string
-      entryFile: string
-    }
-  },
-  baseline: {
-    commitId: string
-    affectedFiles: readonly { relativePath: string; digest?: string }[]
-    lockState: 'locked' | 'unlocked' | 'unknown'
-  }
-): {
-  projectId: string
-  sceneId: string
-  operationId: string
-  threadId: string
-  branchId: string
-  fingerprint: string
-  source: (typeof world)['source']
-  inputSnapshot: {
-    canvasId: string
-    assets: []
-    documents: []
-    prompts: []
-    fieldBindings: []
-    relations: []
-    confirmedControls: []
-  }
-  policy: { maxCorrections: number }
-  reviewCandidate: boolean
-  baseline: typeof baseline
-  state: 'committing'
-  step: 'committing'
-  attempt: number
-  sequence: number
-  budget: {
-    correctionsUsed: number
-    modelCallsUsed: number
-    toolCallsUsed: number
-    activeElapsedMs: number
-  }
-  replies: []
-} {
+  world: { source: SceneSourceLocation },
+  baseline: SceneGenerationBaseline
+): SceneGenerationExecution {
   return {
     projectId: world.source.projectId,
     sceneId: world.source.sceneId,

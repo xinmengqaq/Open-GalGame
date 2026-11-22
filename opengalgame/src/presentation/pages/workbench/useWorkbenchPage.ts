@@ -237,10 +237,6 @@ async function ensureWorkspace(
   }
 }
 
-/**
- * 打开工作台：已就绪直接加载。
- * 只有还没有画布身份时才 ensure。其余未就绪显示面板，不补建。
- */
 export async function openWorkbenchWorkspace(
   projectClient: ProjectClient,
   sceneCanvasClient: SceneCanvasClient,
@@ -281,7 +277,6 @@ export async function openWorkbenchWorkspace(
   return { workspaceReady: false, loaded: false }
 }
 
-/** 显式重新构建或没有画布身份的首次打开：先 ensure，再加载画布。 */
 export async function ensureOpenedWorkspace(
   projectClient: ProjectClient,
   sceneCanvasClient: SceneCanvasClient,
@@ -362,7 +357,6 @@ async function loadWorkspace(
 }
 export type WorkspaceRebuildPhase = 'rebuilding' | 'failed' | 'ready' | 'loaded'
 
-/** 显式重新构建：核对工作区，成功后再读取画布。已有未保存编辑时不覆盖。 */
 export async function rebuildOpenedWorkspace(
   projectClient: ProjectClient,
   projectFilesClient: ProjectFilesClient,
@@ -400,7 +394,6 @@ export async function rebuildOpenedWorkspace(
   return true
 }
 
-/** 重建进行中再次点击直接跳过，不发出第二次核对。 */
 export function beginWorkspaceRebuild(lock: { current: boolean }): boolean {
   if (lock.current) return false
   lock.current = true
@@ -476,7 +469,6 @@ export async function loadArrangement(
         )
         store.putSourceDetails(snapshot.sources)
       } catch {
-        /* 详情失败仍展示编排卡片，来源状态由摘要判断。 */
       }
     }
     if (useWorkbenchSessionStore.getState().projectId !== projectId) return false
@@ -499,8 +491,6 @@ export async function loadArrangement(
       spacingMoves.length > 0 ? { baseline: arrangement } : undefined
     )
     if (spacingMoves.length > 0) {
-      // 装载时自动保存器可能还没启动，这里只把本次间距调整落盘；
-      // 失败保持 draft 与基线之间的 dirty，沿用自动保存的错误显示。
       const state = useWorkbenchSessionStore.getState()
       const sent = snapshotOf(state)
       const projectAtSave = state.projectId

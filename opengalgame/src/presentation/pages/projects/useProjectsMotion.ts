@@ -5,7 +5,6 @@ import { useRef, type RefObject } from 'react'
 import { prefersReducedMotion } from '../../effects/motion'
 import type { ProjectsListStatus } from './useProjectsList'
 
-/** 项目页首次成功列表的卡片入场。翻页不重播。 */
 export function useProjectsMotion(
   root: RefObject<HTMLElement | null>,
   status: ProjectsListStatus

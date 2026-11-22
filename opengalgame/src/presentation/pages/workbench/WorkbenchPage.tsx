@@ -39,20 +39,20 @@ import { useNavigationStore } from '../../stores/navigation.store'
 import { WorkbenchDrawer } from './drawer/WorkbenchDrawer'
 import { candidatePreviewTargetOf } from './drawer/candidate/candidatePreviewState'
 import { GenerationPanel } from './drawer/generation/GenerationPanel'
+import { GenerationStartNotice } from './drawer/generation/GenerationStartNotice'
 import { GenerationHistory } from './drawer/generation/GenerationHistory'
 import { GenerationInputSummaryView } from './drawer/generation/GenerationInputSummary'
-import {
-  generationPhaseOf,
-  isTerminalState
-} from './drawer/generation/generationPresentation'
+import { generationPhaseOf, isTerminalState } from './drawer/generation/generationPresentation'
 import { useSceneGeneration, type SaveCanvasOutcome } from './drawer/generation/useSceneGeneration'
+import { useForkUnknownRegistry } from './drawer/generation/useForkUnknownRegistry'
 import { useWorkbenchDrawerController } from './drawer/useWorkbenchDrawerController'
 import type { DrawerTabTone } from './drawer/workbenchDrawer.types'
 import { historyFeedback } from './drawer/version-history/versionHistoryPresentation'
 import { SparkleMark } from './drawer/drawerIcons'
 import { HistoryIcon, InspectIcon, RefreshIcon, SaveIcon } from './WorkbenchIcons'
 import { FeedbackLayer } from './shell/FeedbackLayer'
-import { SceneExportStatus } from './shell/SceneExportStatus'
+import { SceneExportDialog } from './shell/SceneExportDialog'
+import { SceneExportNoticeCard } from './shell/SceneExportNotice'
 import { openExportDirectory } from './shell/sceneTaskPresentation'
 import { useWorkbenchExportController } from './shell/useWorkbenchExportController'
 import { useWorkbenchHistoryRecovery } from './shell/useWorkbenchHistoryRecovery'
@@ -69,10 +69,8 @@ import styles from './WorkbenchPage.module.css'
 
 const COMPACT_ACTIONS_WIDTH = 1180
 
-/** “当前生成”标签只用真实任务阶段表达进行中 / 等待 / 暂停 / 失败 / 待核对。 */
 function drawerToneOf(status: SceneGenerationRenderStatusVO | null): DrawerTabTone | null {
   if (status === null) return null
-  /* 提交结果不明是等待核对，不是失败；标签点不能沿用失败语义。 */
   if (status.failure?.unverified === true) return 'pendingVerification'
   switch (generationPhaseOf(status)) {
     case 'failed':
@@ -167,9 +165,7 @@ function WorkbenchScreen({
     const state = useWorkbenchSessionStore.getState()
     if (state.projectId !== projectId) return { ok: false, message: '工程已切换，生成没有开始。' }
     if (state.saveState === 'saved' || state.saveState === 'idle') return { ok: true }
-    const referenceFailure = state.saveError
-      ? promptReferenceFailureOf(state.saveError)
-      : null
+    const referenceFailure = state.saveError ? promptReferenceFailureOf(state.saveError) : null
     return {
       ok: false,
       message:
@@ -187,6 +183,7 @@ function WorkbenchScreen({
     canvasReady: arrangementStatus === 'ready' || arrangementStatus === 'empty',
     saveCanvas: saveCanvasForGeneration
   })
+  const forkUnknown = useForkUnknownRegistry({ projectId, sceneId })
   const generationActive = generation.status !== null && !isTerminalState(generation.status.state)
   const candidateTarget = candidatePreviewTargetOf(generation.status)
   const historyRefreshKey =
@@ -276,7 +273,8 @@ function WorkbenchScreen({
     refreshPreviewAvailability,
     generationSettled: {
       succeeded: generation.status?.state === 'succeeded',
-      commitId: generation.status?.result?.commitId ?? null
+      commitId: generation.status?.result?.commitId ?? null,
+      operationId: generation.status?.operationId ?? null
     }
   })
   const closeDrawerForPreview = drawer.actions.closeForPreview
@@ -336,14 +334,14 @@ function WorkbenchScreen({
       disabled: !exportController.entry.canRun,
       hint: exportController.entry.hint,
       iconOnly: true,
-      onInvoke: () => void exportController.runExport()
+      showLabel: true,
+      onInvoke: exportController.beginExport
     },
     {
       id: 'save',
       label: saving ? '正在保存…' : workbenchFeedback.saveAction,
       icon: <SaveIcon />,
-      disabled:
-        saving || pageBlocked || history.viewStale || generationActive || workspaceBlocked,
+      disabled: saving || pageBlocked || history.viewStale || generationActive || workspaceBlocked,
       hint: generationActive ? '生成进行中，保存已暂停' : (saveStatus.detail ?? saveStatus.label),
       onInvoke: () => void commands.save('manual')
     }
@@ -383,21 +381,16 @@ function WorkbenchScreen({
           actions={toolbarActions}
           compact={compactActions}
           saveStatus={saveStatus}
-          taskStatus={
-            <SceneExportStatus
-              notice={exportController.notice}
-              onDismiss={exportController.dismissNotice}
-              onOpenDirectory={(directoryPath) =>
-                openExportDirectory(systemPathClient, directoryPath)
-              }
-            />
-          }
           registerInset={layout.registerInset}
           onBack={() => visit('projects')}
         />
 
+        <SceneExportDialog {...exportController.destinationDialog} />
+
         <FeedbackLayer
-          active={history.viewStale || history.draft.snapshot !== null}
+          active={
+            history.viewStale || history.draft.snapshot !== null || exportController.notice !== null
+          }
           topOffset={layout.insets.topBar}
           onNoticeSlotChange={setNoticeSlot}
         >
@@ -414,7 +407,16 @@ function WorkbenchScreen({
             onRestore={history.draft.restore}
             onDiscard={history.draft.discard}
           />
+          <SceneExportNoticeCard
+            notice={exportController.notice}
+            onDismiss={exportController.dismissNotice}
+            onOpenDirectory={(directoryPath) =>
+              openExportDirectory(systemPathClient, directoryPath)
+            }
+          />
         </FeedbackLayer>
+
+        <GenerationStartNotice notice={generation.startNotice} slot={noticeSlot} />
 
         {pageBlocked ? (
           <div className={styles.blocked}>
@@ -496,7 +498,9 @@ function WorkbenchScreen({
             sceneLabel={sceneLabel}
             returnFocusTo={previewReturnFocus}
             onExit={() => setPreviewOpen(false)}
-            onSavedVersion={exportController.acceptSavedVersion}
+            onSavedVersion={(saved) =>
+              exportController.acceptSavedVersion(saved, { projectId, sceneId })
+            }
           />
         ) : null}
         {opened ? (
@@ -512,7 +516,7 @@ function WorkbenchScreen({
                 exportDisabled={!exportController.entry.canRun}
                 exportHint={exportController.entry.hint}
                 exporting={exportController.exporting}
-                onExport={() => void exportController.runExport()}
+                onExport={exportController.beginExport}
                 onOpenHistory={() => drawer.actions.openTab('history')}
                 onOpenSummary={() => drawer.actions.openTab('summary')}
                 onOpenWorks={() => drawer.actions.openTab('works')}
@@ -529,12 +533,22 @@ function WorkbenchScreen({
                 cancelBusy={generation.pending === 'cancel'}
                 canCancel={generation.status?.canCancel ?? false}
                 client={sceneGenerationClient}
+                forkFromHistory={generation.forkFromHistory}
+                forkUnknown={forkUnknown}
                 key={`${projectId}|${sceneId}`}
                 onCancel={() => void generation.cancel()}
+                onForked={() => drawer.actions.openTab('current')}
                 onOpenRun={() => drawer.actions.openTab('current')}
+                onRefreshDiscovery={generation.refreshDiscovery}
+                onSelectUnfinished={(operationId) => {
+                  if (generation.selectUnfinished(operationId)) {
+                    drawer.actions.openTab('current')
+                  }
+                }}
                 projectId={projectId}
                 refreshKey={historyRefreshKey}
                 sceneId={sceneId}
+                unfinished={generation.unfinished}
               />
             }
             onActivateTab={drawer.actions.activateTab}

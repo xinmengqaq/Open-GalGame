@@ -9,10 +9,6 @@ interface WorkspaceNotReadyPanelProps {
   onRebuild: () => void
 }
 
-/**
- * 工程工作区未就绪。只给出通用说明和一个重新构建入口，
- * 不展示路径、版本状态、锁内容或内部错误。
- */
 export function WorkspaceNotReadyPanel({
   rebuilding,
   failed,

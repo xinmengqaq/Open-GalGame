@@ -1,0 +1,115 @@
+/*
+ * 启动结果卡。挂在反馈安全位的 toast 槽位下方：
+ * 分叉等动作的 toast 出现时只会把这张卡推下去，不会盖住或替换它。
+ * 不参与顶栏、画布或弹窗布局，宽度与其它持久反馈条一致。
+ */
+.notice {
+  position: relative;
+  display: grid;
+  width: min(432px, calc(100vw - 32px));
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 12px;
+  align-self: center;
+  padding: 12px 38px 12px 13px;
+  border: 1px solid var(--wb-hairline-strong);
+  border-radius: var(--wb-radius-card);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--wb-surface-solid) 94%, transparent) 0%,
+    var(--wb-surface-solid) 100%
+  );
+  box-shadow: var(--wb-shadow-float);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: auto;
+  animation: generation-start-notice-in var(--wb-duration-base) var(--wb-ease);
+}
+
+.signal {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.signal svg {
+  width: 17px;
+  height: 17px;
+}
+
+.content {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.label {
+  margin: 0;
+  color: var(--wb-text-faint);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+}
+
+.message {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--wb-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--wb-text-muted);
+  opacity: 0.72;
+}
+
+.dismiss:hover {
+  background: var(--wb-wash-ink);
+  opacity: 1;
+}
+
+.dismiss:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.dismiss svg {
+  width: 13px;
+  height: 13px;
+}
+
+@keyframes generation-start-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice {
+    animation: none;
+  }
+}

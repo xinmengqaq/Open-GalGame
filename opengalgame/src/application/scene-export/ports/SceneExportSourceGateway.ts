@@ -8,23 +8,17 @@ export type SavedSceneReferencedAsset = {
   readonly packagePath: string
 }
 
-/**
- * 已核对的正式场景内容。
- * 绝对路径只留在基础设施，不进入应用结果。
- */
 export type SavedSceneExportSource = {
   readonly scene: SceneIdentity
   readonly contentBasis: SceneExportContentBasis
   readonly versionReference: SceneExportVersionReference
   readonly entryRelativePath: string
+  /** 读取时入口脚本字节的 sha256；打包长时间运行后可据此确认正式场景未变化。 */
+  readonly entrySha256: string
   readonly sceneText: string
   readonly referencedAssets: readonly SavedSceneReferencedAsset[]
 }
 
 export interface SceneExportSourceGateway {
-  /**
-   * 读取本次保存成功并仍与正式工程一致的单场景内容。
-   * 没有保存成功、内容变化或路径越界时失败，不返回可导出内容。
-   */
   readSavedScene(scene: SceneIdentity): Promise<SavedSceneExportSource>
 }

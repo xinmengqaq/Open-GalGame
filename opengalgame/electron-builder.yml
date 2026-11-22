@@ -14,8 +14,6 @@ files:
   - '!prototypes/*'
   - '!tests/*'
   - '!scripts{,/**}'
-  - '!langgraph.json'
-  - '!.langgraph_api{,/**}'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!vite.renderer.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml}'

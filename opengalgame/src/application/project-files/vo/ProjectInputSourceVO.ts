@@ -1,6 +1,5 @@
 export type ProjectTextSourceKind = 'document'
 
-/** 实际文件类型。场景用途留在卡片，不在来源上区分背景、立绘或配音。 */
 export type ProjectFileAssetKind = 'image' | 'audio' | 'video'
 
 export type ProjectInputContentKind = 'text' | ProjectFileAssetKind
@@ -23,13 +22,11 @@ export type ProjectInputSourceSummaryVO =
 
 type ProjectInputSourceIdentity = {
   sourceId: string
-  /** 来源内容版本。只用于判断该来源是否变化，不是作品提交身份。 */
   version: string
 }
 
 export type ProjectDocumentImportFormat = 'markdown' | 'plainText'
 
-/** 文档导入时确认的格式。不包含本机路径。 */
 export type ProjectDocumentImportInfoVO = {
   format: ProjectDocumentImportFormat
 }
@@ -62,7 +59,6 @@ export type ImportProjectFilesVO = {
 
 export type ProjectInputSourcesSnapshotVO = {
   projectId: string
-  /** 本次读取版本。只用于判断这次读取的内容是否变化，不是作品提交身份。 */
   readVersion: string
   sources: readonly ProjectInputSourceVO[]
 }

@@ -6,7 +6,6 @@ import { Button } from '../../components/Button'
 import styles from './AppUpdateSection.module.css'
 import type { AppUpdateFlow } from './useAppUpdate'
 
-/** 发布源不可用时的固定手动下载入口；不接受运行时传入的任意地址。 */
 const MANUAL_DOWNLOAD_URL = 'https://github.com/xinmengqaq/Open-GalGame/releases/latest'
 
 type DialKind =
@@ -420,7 +419,6 @@ function UpdateDial({ kind, percent }: { kind: DialKind; percent: number }): Rea
   )
 }
 
-/** 固定 GitHub Releases 手动下载入口；只作为发布源不可用时的兜底。 */
 export function ManualDownloadLink({ className }: { className?: string }): ReactElement {
   return (
     <a
@@ -435,7 +433,6 @@ export function ManualDownloadLink({ className }: { className?: string }): React
   )
 }
 
-/** 应用设置里的版本与更新区：版本行、状态主视觉、主操作与发行说明。 */
 export function AppUpdateSection({ flow }: { flow: AppUpdateFlow }): ReactElement {
   const view = resolveUpdateView(flow)
   const status = flow.status

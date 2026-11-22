@@ -24,22 +24,12 @@ import { arrangementPath } from './sceneCanvasPaths'
 
 const SOURCE_MODULE = 'scene-canvas'
 
-/**
- * 经版本应用服务核对场景编排是否已进入作品修订。
- * 画布自己决定保存时机并落盘。这里只把已落盘的声明路径交给版本服务。
- * 工作区有内容但当前修订没有时，不能报已保持，也不能按内容相同报无变更。
- * 请求里的 operationId 是画布调用方标识，不是版本身份。
- */
 export class LocalSceneCanvasWorkVersionGatewayImpl implements SceneCanvasWorkVersionGateway {
   constructor(
     private readonly versioning: ProjectVersioningApplicationService,
     private readonly locateProject: (projectId: string) => Promise<SceneCanvasProjectLocation>
   ) {}
 
-  /**
-   * 准备版本身份后提交声明的编排路径。
-   * 调用方身份在提交前持久绑定。没有可靠基线时失败，不在这里建库。
-   */
   async keepArrangement(
     request: SceneCanvasVersionKeepRequest
   ): Promise<SceneCanvasVersionSettlement> {
@@ -97,7 +87,6 @@ export class LocalSceneCanvasWorkVersionGatewayImpl implements SceneCanvasWorkVe
     }
   }
 
-  /** 按持久关联核对。对不上版本操作时保持不明，不把其他操作当成这次提交。 */
   async readSettlement(operationId: string): Promise<SceneCanvasVersionSettlement> {
     try {
       const link = await this.versioning.findCallerOperation({
@@ -149,7 +138,6 @@ export class LocalSceneCanvasWorkVersionGatewayImpl implements SceneCanvasWorkVe
     }
   }
 
-  /** 短提交边界内重读已落盘字节。字节变了就拒绝，不发布另一份内容。 */
   private async requireSameBytes(
     projectId: string,
     relativePath: string,

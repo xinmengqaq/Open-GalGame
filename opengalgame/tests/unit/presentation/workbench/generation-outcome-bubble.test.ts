@@ -88,6 +88,8 @@ function renderOutcome(
       pending: false,
       pendingAction: null,
       startBlockedReason: null,
+      startBlockedByGeneration: false,
+      repairBlockedReason: null,
       retryError: null,
       ...handlers
     })
@@ -102,7 +104,8 @@ const baseHandlers = {
   onResume: () => undefined,
   onRetryRepair: () => undefined,
   onReturnToCanvas: () => undefined,
-  onViewPreviousCandidate: () => undefined
+  onViewPreviousCandidate: () => undefined,
+  onVerifyResult: () => undefined
 }
 
 function withPrevious(statusValue: SceneGenerationRenderStatusVO): SceneGenerationRenderStatusVO {
@@ -187,6 +190,31 @@ describe('失败气泡动作', () => {
     expect(html).toContain('返回画布')
     expect(html).toContain('打开输入摘要')
     expect(html).toContain('按画布重新生成')
+  })
+
+  it('后端允许多次核对时优先显示核对结果，并如实展示仍待核对结论', () => {
+    const html = renderOutcome(
+      status({
+        state: 'interrupted',
+        stage: 'failed',
+        canVerifyResult: true,
+        canCancel: false,
+        failure: {
+          code: 4101,
+          message: '候选写入结果待核对',
+          unverified: true
+        }
+      }),
+      {
+        ...baseHandlers,
+        verifyMessage: '没有找到可证明的候选写入回执；记录保持待核对。'
+      }
+    )
+
+    expect(html).toContain('核对结果')
+    expect(html).toContain('没有找到可证明的候选写入回执')
+    expect(html).toContain('结果待核对')
+    expect(html).not.toContain('按画布重新生成')
   })
 
   it('结果待核对时先核对任务状态，不显示重新生成', () => {

@@ -49,19 +49,12 @@ export interface ScenePreviewClient {
   ): Promise<AjaxResult<PreviewCommandResultVO>>
   playNextDialogue(request: PreviewDialoguePlaybackDTO): Promise<AjaxResult<PreviewCommandResultVO>>
   closePreview(request: PreviewSessionRef): Promise<AjaxResult<null>>
-  /**
-   * 先注册事件监听，再发送订阅请求。失败通过安全错误回调，不把事件当成功。
-   * 旧会话、旧代次和旧序号在这里丢弃。
-   */
   subscribeRuntime(
     scope: PreviewSubscriptionRequest,
     listener: (event: PreviewRuntimeEventVO) => void,
     onError?: (message: string) => void
   ): () => void
   readCandidatePreview(request: ReadCandidatePreviewDTO): Promise<AjaxResult<CandidatePreviewVO>>
-  /**
-   * 候选事件与正式运行时事件分开。身份不匹配时丢弃，退订后不再送达。
-   */
   subscribeCandidatePreview(
     scope: ReadCandidatePreviewDTO,
     listener: (event: CandidatePreviewEventVO) => void

@@ -7,10 +7,6 @@ import type { CandidatePreviewSessionResolution } from '@application/scenes/mode
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 
-/**
- * 只核对生成侧已保存的固定候选会话。
- * 预期拒绝不读取文件，也不回退正式工程。
- */
 export class CandidatePreviewSessionGatewayImpl implements CandidatePreviewSessionGateway {
   constructor(
     private readonly lookup: CandidatePreviewSessionLookup,

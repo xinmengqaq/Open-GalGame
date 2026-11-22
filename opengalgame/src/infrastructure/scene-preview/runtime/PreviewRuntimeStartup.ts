@@ -7,8 +7,7 @@ import {
   CandidateStageFeed,
   CandidateStartError,
   confirmCandidateGame,
-  selectCandidateStartSupport,
-  type CandidateTrustedInputSource
+  selectCandidateStartSupport
 } from '@infrastructure/webgal/compatibility/candidateGameStart'
 import { WEBGAL_COMPATIBILITY_PROFILE } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
 
@@ -21,34 +20,26 @@ import {
 } from './PreviewRuntimeSessionRegistry'
 
 export type PreviewRuntimeStartupOptions = {
-  readonly trustedInput?: CandidateTrustedInputSource
   readonly timeoutMs: number
   readonly startupTimeoutMs: number
 }
 
-/** 就绪等待集合由注册表持有；这里只负责一次等待的生命周期和超时。 */
 export type PreviewRuntimeReadyWaiters = {
   readyConnection(): WebgalPreviewConnection | undefined
   addReadyWaiter(waiter: ReadyWaiter): void
   removeReadyWaiter(waiter: ReadyWaiter): void
 }
 
-/**
- * 启动、可信输入和进入游戏的唯一所有者。
- * 舞台就绪不等于离开标题层；真实游戏画面确认之前不发送定位。
- */
 export class PreviewRuntimeStartup {
-  private readonly trustedInput: CandidateTrustedInputSource | undefined
   private readonly timeoutMs: number
   private readonly startupTimeoutMs: number
 
   constructor(options: PreviewRuntimeStartupOptions) {
-    this.trustedInput = options.trustedInput
     this.timeoutMs = options.timeoutMs
     this.startupTimeoutMs = options.startupTimeoutMs
   }
 
-  /** 每次准备都换一份可信输入和运行代次，旧页面或旧等待不能进入新舞台。 */
+  /** 每次准备都换一份运行代次，旧页面或旧等待不能进入新舞台。 */
   reset(session: RuntimeSession, handle: WebgalRuntimeHandle): void {
     session.startupAttemptAbort?.abort(new Error('预览会话已关闭'))
     session.startupAttemptAbort = undefined
@@ -57,24 +48,10 @@ export class PreviewRuntimeStartup {
     session.startFeed = undefined
     session.startedConnection = undefined
     session.lastSnapshot = undefined
-    session.trustedInputAbort?.abort(new Error('预览会话已关闭'))
-    session.trustedInputAbort = undefined
-    session.trustedInput = undefined
-    session.stagePageUrl = undefined
     session.packageVersion = handle.build.packageVersion
-    if (!this.trustedInput) return
-    const abort = new AbortController()
-    session.trustedInputAbort = abort
-    const input = this.trustedInput({
-      stageUrl: `${handle.baseUrl}/`,
-      signal: abort.signal
-    })
-    if (!input) return
-    session.trustedInput = input
-    session.stagePageUrl = input.stagePageUrl
+    session.autoStart = handle.autoStart
   }
 
-  /** 记录快照来源，并把启动阶段的真实画面推给进入游戏确认。 */
   recordSnapshot(
     session: RuntimeSession,
     snapshot: StageSnapshot,
@@ -92,7 +69,6 @@ export class PreviewRuntimeStartup {
 
   abort(session: RuntimeSession): void {
     session.startupAttemptAbort?.abort(new Error('预览会话已关闭'))
-    session.trustedInputAbort?.abort(new Error('预览会话已关闭'))
     session.startFeed = undefined
   }
 
@@ -121,14 +97,14 @@ export class PreviewRuntimeStartup {
   }
 
   /**
-   * 舞台注册就绪不等于离开语言和标题层。提供可信输入时，先用真实画面确认进入游戏，
-   * 失败或超时明确返回，不把标题画面上的 sync-scene 当成定位成功。
+   * 舞台注册就绪不等于离开语言和标题层。预览宿主在页面内激活真实开始控件，
+   * 这里只等待目标入口的真实游戏快照；失败或超时明确返回，不把标题画面当成定位成功。
    */
   ensureStarted(
     session: RuntimeSession,
     connection: WebgalPreviewConnection
   ): Promise<PreviewErrorVO | null> {
-    if (session.trustedInput === undefined) return Promise.resolve(null)
+    if (!session.autoStart) return Promise.resolve(null)
     if (session.startedConnection === connection) return Promise.resolve(null)
     if (session.startupConnection === connection && session.startup) return session.startup
     session.startupAttemptAbort?.abort(new Error('预览页面已更换'))
@@ -136,7 +112,7 @@ export class PreviewRuntimeStartup {
       packageVersion: session.packageVersion ?? '',
       commands: WEBGAL_COMPATIBILITY_PROFILE.previewCommands
     })
-    if (support !== 'trusted-input') {
+    if (support !== 'host-autostart') {
       return Promise.resolve(runtimeFailure('engineCapabilityUnavailable'))
     }
     const feed = new CandidateStageFeed()
@@ -163,8 +139,7 @@ export class PreviewRuntimeStartup {
           sceneName: sceneIdentity(session.entryName),
           signal: attempt.signal,
           feed,
-          support,
-          input: session.trustedInput ?? null
+          support
         })
         session.startedConnection = connection
         return null

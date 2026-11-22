@@ -19,7 +19,6 @@ interface SceneCanvasToolbarProps {
   registerInset?: RegisterWorkbenchInset
 }
 
-/** 底栏 dock：视图、撤销重做与唯一的三类新增入口，空间由画布安全区让出。 */
 export function SceneCanvasToolbar({
   onAddPrompt,
   onAddAnimation,

@@ -18,10 +18,6 @@ type ProjectRegistrationsDocument = z.infer<typeof projectRegistrationsDocumentS
 
 const failure = projectDocumentFailure(ProjectErrorCodes.storageFailed, '本机项目登记读写失败')
 
-/**
- * @returns 全部登记；文件不存在时为空。
- * @throws {AppException} 文件无法读取或内容损坏。
- */
 export async function readProjectRegistrations(
   userDirectory: string
 ): Promise<ProjectRegistrationsDocument['registrations']> {
@@ -39,10 +35,6 @@ export async function readProjectRegistrations(
   return file.registrations
 }
 
-/**
- * 整份替换本机工程登记文件。调用方已在本机串行执行内完成读改写。
- * @throws {AppException} 写入失败。
- */
 export async function writeProjectRegistrations(
   userDirectory: string,
   registrations: ProjectRegistrationsDocument['registrations']

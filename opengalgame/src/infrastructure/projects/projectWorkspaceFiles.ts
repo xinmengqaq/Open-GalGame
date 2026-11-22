@@ -13,10 +13,6 @@ const workspaceFailure = projectDocumentFailure(
   '工程工作区读写失败'
 )
 
-/**
- * 逐段创建真实目录，拒绝符号链接，并确认结果仍在工程根内。
- * @throws {AppException} 路径越界、被链接占用或目录不能创建。
- */
 export async function ensureRealDirectory(root: string, relativeDirectory: string): Promise<void> {
   const safe = assertRelativePath(relativeDirectory)
   let current = root
@@ -48,10 +44,6 @@ export async function ensureRealDirectory(root: string, relativeDirectory: strin
   }
 }
 
-/**
- * 文件缺失时写入空文件。已有真实文件保持原样。
- * @throws {AppException} 路径被链接或目录占用，或写入失败。
- */
 export async function ensureEmptyFile(root: string, relativePath: string): Promise<void> {
   const absolute = await containedFile(root, relativePath)
   const stats = await optionalStat(absolute)
@@ -73,20 +65,12 @@ export async function ensureEmptyFile(root: string, relativePath: string): Promi
   }
 }
 
-/**
- * 只确认工程内已有真实文件。缺失、目录或符号链接返回 false。不创建。
- * @throws {AppException} 路径越界或工程根无法确认。
- */
 export async function isRealWorkspaceFile(root: string, relativePath: string): Promise<boolean> {
   const absolute = await containedFile(root, relativePath)
   const stats = await optionalStat(absolute)
   return stats !== null && stats.isFile() && !stats.isSymbolicLink()
 }
 
-/**
- * @returns 解析后的文档；文件不存在时为 null。
- * @throws {AppException} 路径不安全或内容无法解析。
- */
 export async function readWorkspaceDocument(
   root: string,
   relativePath: string
@@ -94,10 +78,6 @@ export async function readWorkspaceDocument(
   return readJsonDocument(await containedFile(root, relativePath), workspaceFailure)
 }
 
-/**
- * 原子替换工程内 JSON。调用方负责只在内容确实变化时调用。
- * @throws {AppException} 路径不安全或写入失败。
- */
 export async function writeWorkspaceDocument(
   root: string,
   relativePath: string,

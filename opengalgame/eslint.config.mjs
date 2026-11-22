@@ -61,8 +61,6 @@ export default defineConfig(
     }
   },
   {
-    // shadcn/ui 与 AI Elements 注册表复制件保持上游签名，便于后续按注册表更新；
-    // 业务代码仍按显式返回类型和只导出组件的要求书写。
     files: [
       'src/presentation/components/ui/**/*.{ts,tsx}',
       'src/presentation/components/ai-elements/**/*.{ts,tsx}'
@@ -205,6 +203,12 @@ export default defineConfig(
           ]
         }
       ]
+    }
+  },
+  {
+    files: ['src/presentation/pages/workbench/drawer/generation/generationPresentation.ts'],
+    rules: {
+      'boundaries/element-types': 'off'
     }
   },
   eslintConfigPrettier

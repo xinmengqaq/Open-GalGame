@@ -101,7 +101,6 @@ export interface ProjectFilesApplicationDependencies {
   createFileId?: () => string
 }
 
-/** 编排工程文件的四个只读用例。不保存、不导入、不生成。 */
 export class ManageProjectFiles implements ProjectFilesApplicationService {
   private readonly deps: ProjectFilesApplicationDependencies
 
@@ -131,7 +130,6 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     )
   }
 
-  /** 扫描来源摘要。单个来源不可读仍返回；整次扫描失败则失败。 */
   async listProjectInputSources(
     request: ListProjectInputSourcesDTO
   ): Promise<ProjectInputCatalogVO> {
@@ -158,7 +156,6 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     }
   }
 
-  /** 读取同一窗口内与请求精确对应的来源。失败时不返回部分结果。 */
   async readProjectInputSources(
     request: ReadProjectInputSourcesDTO
   ): Promise<ProjectInputSourcesSnapshotVO> {
@@ -182,13 +179,11 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     return toProjectInputSourcesSnapshotVO(project.projectId, fact.readVersion, fact.sources)
   }
 
-  /** 只读取已登记工程中的素材字节。路径由文件端口解析。 */
   async readProjectMedia(request: ReadProjectMediaDTO): Promise<ProjectMediaVO> {
     const project = await this.locateProject(request.projectId)
     return this.requireFileOperations().files.readProjectMedia(project, request.sourceId)
   }
 
-  /** 按选择顺序导入。一个文件失败不撤销此前已提交的文件。 */
   async importProjectFiles(request: ImportProjectFilesDTO): Promise<ImportProjectFilesVO> {
     if (request.localFilePaths.length === 0) {
       throw new AppException({ code: ErrorCodes.invalidRequest, msg: '没有选择要导入的文件' })
@@ -289,7 +284,6 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     return { importedFiles, failedFiles }
   }
 
-  /** 按操作标识核对提交是否已经落地。不写入。 */
   async readProjectFileOperation(
     request: ReadProjectFileOperationDTO
   ): Promise<ProjectFileOperationSettlementVO> {
@@ -317,7 +311,6 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     }))
   }
 
-  /** 工程打开时按技术 WAL 恢复 project-files 的未完成操作；不是只读查询入口。 */
   async recoverProjectFiles(projectId: string): Promise<void> {
     const project = await this.locateProject(projectId)
     const versions = this.deps.versions
@@ -330,7 +323,6 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     await versions.recoverProject(project)
   }
 
-  /** 打开已定位的工程文件。不产生作品提交。 */
   async openProjectFile(request: ProjectFileScopeDTO): Promise<void> {
     const project = await this.locateProject(request.projectId)
     const operations = this.requireFileOperations()
@@ -338,7 +330,6 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     await operations.desktopOpen.open(located.absolutePath)
   }
 
-  /** 重命名文件并更新记录。名称未变化时直接返回当前摘要。 */
   async renameProjectFile(request: RenameProjectFileDTO): Promise<ProjectInputSourceSummaryVO> {
     requireCallerOperationId(request.operationId)
     const project = await this.locateProject(request.projectId)
@@ -378,7 +369,6 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     )
   }
 
-  /** 删除来源记录和仍存在的内容文件。不级联卡片。 */
   async deleteProjectFile(request: DeleteProjectFileDTO): Promise<void> {
     requireCallerOperationId(request.operationId)
     const project = await this.locateProject(request.projectId)
@@ -476,9 +466,6 @@ export class ManageProjectFiles implements ProjectFilesApplicationService {
     )
   }
 
-  /**
-   * @throws {AppException} 工程未登记、未初始化或身份不一致。
-   */
   private async locateProject(projectId: string): Promise<VerifiedProjectReadLocation> {
     const registration = await this.deps.listQuery.findRegistration(projectId)
     this.deps.domain.requireRegistered(registration)
@@ -589,7 +576,6 @@ function isUnclearCommit(error: unknown): boolean {
   return error instanceof AppException && error.code === ProjectFileErrorCodes.commitUnclear
 }
 
-/** 批次级冲突：继续逐文件会混合不同目录版本/归属的错误。 */
 function isHardImportConflict(error: unknown): boolean {
   if (!(error instanceof AppException)) return false
   return (

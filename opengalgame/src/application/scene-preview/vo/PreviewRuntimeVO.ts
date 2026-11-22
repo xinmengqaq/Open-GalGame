@@ -42,6 +42,10 @@ export type PreviewRuntimeEventVO =
 
 export type PreviewRuntimeListener = (event: PreviewRuntimeEventVO) => void
 
+/**
+ * `ready` 只表示宿主资源地址已准备，可以在装载 iframe 后继续；
+ * 真实游戏是否进入场景由装载后的定位调用确认，准备阶段不能等待它。
+ */
 export type PreviewStageResultVO =
   | { readonly status: 'ready'; readonly stage: PreviewStageVO; readonly stageUrl: string }
   | { readonly status: 'failed'; readonly failure: PreviewErrorVO }

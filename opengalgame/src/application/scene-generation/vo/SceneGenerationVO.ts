@@ -14,10 +14,6 @@ export type SceneGenerationStateVO =
 
 export type SceneGenerationRunMode = 'generate' | 'repair' | 'validate'
 
-/**
- * 非中断修复重跑的来源身份。只保留稳定身份，不保存路径或检查点内部。
- * 旧记录没有该事实时保持缺失。
- */
 export interface SceneGenerationRepairSource {
   readonly operationId: string
   readonly threadId: string
@@ -26,10 +22,6 @@ export interface SceneGenerationRepairSource {
   readonly candidateSnapshotId: string
 }
 
-/**
- * 非终态的业务步骤。`state` 是唯一权威运行状态，
- * `phase`/`stage` 只能由 state + step 经应用层派生函数生成，不能单独持久化。
- */
 export type SceneGenerationStepVO =
   | 'preparing'
   | 'generating'
@@ -40,7 +32,6 @@ export type SceneGenerationStepVO =
   | 'committing'
   | 'rollingBack'
 
-/** 由 state + step 派生的外部阶段值。不再作为持久化事实写入新记录。 */
 export type SceneGenerationPhaseVO =
   | 'preparing'
   | 'generating'
@@ -106,6 +97,17 @@ export type SceneGenerationOperationVO = {
   branchId: string
 }
 
+/** 分叉来源的安全展示事实；只含摘要与时间，不含操作、线程或检查点标识。 */
+export type SceneGenerationForkOriginVO = {
+  summary: string
+  createdAt?: string
+}
+
+/** 分叉建立的新操作和来源展示事实。 */
+export type SceneGenerationForkResultVO = SceneGenerationOperationVO & {
+  forkFrom: SceneGenerationForkOriginVO
+}
+
 export type SceneGenerationResultVO = SceneGenerationOperationVO & {
   commitId: string
   preview: SceneGenerationPreviewVO
@@ -142,7 +144,12 @@ export type SceneGenerationCheckpointVO = SceneGenerationOperationVO & {
   differences: readonly { filePath: string; beforeDigest?: string; afterDigest?: string }[]
   preview?: SceneGenerationPreviewVO
   canView: boolean
+  /** 当前构建能否从该检查点继续执行。与 canReply 分开，不用回复资格冒充续跑。 */
   canContinue: boolean
+  /** 能否从该检查点复制草稿、输入与候选修订到新分支；与续跑资格分开。 */
+  canFork: boolean
+  /** 能否在当前等待上提交本阶段已实现的人工回复；旧记录缺失时不视为可回复。 */
+  canReply?: boolean
   reason?: string
 }
 

@@ -13,7 +13,6 @@ interface ImportResultDialogProps {
   name?: string
   error?: FailureState | null
   onClose: () => void
-  /** 1309 唯一主操作：关闭结果、刷新列表，由工作台未就绪面板继续重建。 */
   onRebuildWorkspace?: () => void
   successActionLabel?: string
   onSuccessAction?: () => void

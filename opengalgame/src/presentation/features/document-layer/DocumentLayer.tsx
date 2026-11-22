@@ -19,7 +19,6 @@ interface DocumentLayerProps {
   client: ProjectFilesClient
 }
 
-/** 文档层。Markdown 文档可编辑并保存；Esc、返回按钮或点击遮罩关闭，脏正文先确认。 */
 export function DocumentLayer({ client }: DocumentLayerProps): ReactElement | null {
   const card = useWorkbenchSessionStore(documentLayerCardOf)
   if (!card) return null

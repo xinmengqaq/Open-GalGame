@@ -22,12 +22,6 @@ export interface CleanupWorkflowStateResult {
   removed: readonly string[]
 }
 
-/**
- * 按引用关系清理一个线程里的检查点、外置内容和临时工作区。
- * 仍被其他检查点或分支引用的文件会保留。不触碰正式工程、Git 历史或其他线程。
- * @throws {AppException} 线程仍有运行中、等待人工或待恢复操作。
- * @throws {WorkflowError} 删除失败。异常保留原始原因和已完成的路径。
- */
 export async function cleanupWorkflowState(input: {
   stateRoot: string
   projectId: string
@@ -95,11 +89,6 @@ export async function cleanupWorkflowState(input: {
   return { removed }
 }
 
-/**
- * 沿保留检查点的父链收集全部祖先，而不是只保留直接父检查点。
- * @param kept - 不在本次删除分支中的检查点。
- * @returns 不能删除的检查点标识。
- */
 function ancestorIds(
   checkpoints: readonly StoredCheckpoint[],
   kept: readonly StoredCheckpoint[]
@@ -130,10 +119,6 @@ interface StoredCheckpoint {
   operationId?: string
 }
 
-/**
- * 读取线程内所有分支的检查点信封。枚举项先核对真实路径仍在该线程内。
- * @throws {WorkflowError | AppException} 信封损坏或路径越界。
- */
 async function readThreadCheckpoints(threadDirectory: string): Promise<StoredCheckpoint[]> {
   const branches = join(threadDirectory, 'branches')
   let branchNames: string[]
@@ -192,11 +177,6 @@ async function readThreadCheckpoints(threadDirectory: string): Promise<StoredChe
   return checkpoints
 }
 
-/**
- * 找到检查点对应的待写入目录。目录不存在时为空。
- * @param namespaceDir - 命名空间真实目录。
- * @throws {AppException} 写入目录越出线程。
- */
 async function existingWrites(
   threadDirectory: string,
   namespaceDir: string,
@@ -207,11 +187,6 @@ async function existingWrites(
   return existing ? [existing] : []
 }
 
-/**
- * 解析线程内路径。目标不存在时返回 undefined，越界仍失败。
- * @returns 真实路径；不存在时为 undefined。
- * @throws {AppException} 真实路径越出线程。
- */
 async function optionalInsideThread(
   threadDirectory: string,
   target: string
@@ -229,12 +204,6 @@ async function optionalInsideThread(
   }
 }
 
-/**
- * 找出目录中不再被引用的文件。
- * @param folder - 外置内容或临时工作区目录。
- * @param referenced - 仍被引用的标识。
- * @throws {AppException} 路径越界。
- */
 async function unreferencedChildren(
   threadDirectory: string,
   folder: 'context' | 'workspaces',
@@ -256,10 +225,6 @@ async function unreferencedChildren(
   return paths
 }
 
-/**
- * 解析可删除目标，并确认真实路径属于当前线程且不进入正式工程。
- * @throws {AppException} 路径越出线程或进入正式工程。
- */
 async function resolveDeletable(
   threadDirectory: string,
   projectRoot: string | undefined,
@@ -281,18 +246,11 @@ async function resolveDeletable(
   return real
 }
 
-/**
- * @param root - 根目录。
- */
 function staysInside(root: string, target: string): boolean {
   const fromRoot = relative(root, target)
   return fromRoot === '' || (!fromRoot.startsWith('..') && !isAbsolute(fromRoot))
 }
 
-/**
- * 删除文件或目录。文件不存在时不失败。
- * @throws {Error} 文件系统拒绝删除。
- */
 async function removeStoredFile(path: string): Promise<void> {
   await rm(path, { recursive: true, force: true })
 }

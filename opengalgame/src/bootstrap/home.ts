@@ -1,4 +1,4 @@
-import { app, shell, type BrowserWindow } from 'electron'
+import { app, dialog, shell, type BrowserWindow, type OpenDialogOptions } from 'electron'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 
@@ -28,7 +28,6 @@ import { EncryptedConnectionSettingsGatewayImpl } from '@infrastructure/connecti
 import { PinoLoggerGatewayImpl } from '@infrastructure/logging/PinoLoggerGatewayImpl'
 import { GitCandidatePreviewGatewayImpl } from '@infrastructure/scene-generation/preview/GitCandidatePreviewGatewayImpl'
 import { RegisteredSceneProductionContext } from '@infrastructure/scene-generation/inputs/RegisteredSceneProductionContext'
-import { createElectronCandidateTrustedInput } from '@infrastructure/webgal/compatibility/ElectronCandidateTrustedInput'
 import { LangChainModelConnectionGatewayImpl } from '@infrastructure/connections/LangChainModelConnectionGatewayImpl'
 import { FileConfigurationGatewayImpl } from '@infrastructure/config/FileConfigurationGatewayImpl'
 import { ElectronProjectFileChooser } from '@infrastructure/project-files/ElectronProjectFileChooser'
@@ -58,10 +57,6 @@ import { SystemPathController } from '@interfaces/system-path/ipc/SystemPathCont
 import { registerSystemPathIpc } from '@interfaces/system-path/ipc/registerSystemPathIpc'
 import { WebgalRuntimeHostImpl } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
 
-/**
- * @param options - 受信任窗口、页面地址与用户级应用目录。
- * @returns 释放资源的方法。
- */
 export async function createHomeBackend(options: {
   getWindow: () => BrowserWindow | null
   rendererUrl: string
@@ -99,7 +94,7 @@ export async function createHomeBackend(options: {
     Date.now,
     undefined,
     undefined,
-    { trustedInput: createElectronCandidateTrustedInput(options.getWindow), logger }
+    { logger }
   )
   const generation = await createSceneGeneration({
     userStateRoot: userDirectory,
@@ -197,14 +192,14 @@ export async function createHomeBackend(options: {
     subscribe: (listener) => appUpdate.subscribe(listener)
   })
   const scenePreviewHost = new WebgalRuntimeHostImpl({
-    engineRoot: dirname(require.resolve('webgal-engine/package.json'))
+    engineRoot: dirname(require.resolve('webgal-engine/package.json')),
+    engineExtension: { autoStart: true }
   })
   const scenePreview = createScenePreview({
     userDirectory,
     versioning: projects.versioning,
     sessionLookup: preview,
-    host: scenePreviewHost,
-    trustedInput: createElectronCandidateTrustedInput(options.getWindow)
+    host: scenePreviewHost
   })
   const detachScenePreviewIpc = registerScenePreviewIpc({
     getWindow: options.getWindow,
@@ -220,14 +215,17 @@ export async function createHomeBackend(options: {
     userDirectory,
     logger,
     versioning: projects.versioning,
-    sources: scenePreview.currentScene.sources
+    sources: scenePreview.currentScene.sources,
+    chooseDirectory: () => chooseExportDirectory(options.getWindow),
+    protectedRoots: [app.getPath('userData'), process.resourcesPath, app.getAppPath()]
   })
   const detachSceneExportIpc = registerSceneExportIpc({
     getWindow: options.getWindow,
     rendererUrl: options.rendererUrl,
     sceneExport: new SceneExportController(
       sceneExport.exportSavedScene,
-      sceneExport.latestPreviewSave,
+      sceneExport.latestSavedSceneVersion,
+      sceneExport.chooseDestination,
       exceptions
     )
   })
@@ -285,10 +283,30 @@ export async function createHomeBackend(options: {
     rendererUrl: options.rendererUrl,
     projectVersioning: new ProjectVersioningController(projects.versioning, exceptions)
   })
+  const projectController = new ProjectController(
+    projects.projects,
+    exceptions,
+    async (projectId) => {
+      try {
+        const result = await generation.recovery.recoverCancelledProject(projectId)
+        if (result.failed > 0)
+          logger.warn('场景生成取消清理未完成', {
+            projectId,
+            stage: `cancelCleanupFailed:${result.failed}`
+          })
+      } catch (error) {
+        // 打开工程已经成功；清理失败保持可重试，不用打开失败掩盖真实状态。
+        logger.warn('场景生成取消清理失败', {
+          projectId,
+          errorCode: error instanceof AppException ? error.code : ErrorCodes.internalError
+        })
+      }
+    }
+  )
   const detachIpc = registerHomeIpc({
     getWindow: options.getWindow,
     rendererUrl: options.rendererUrl,
-    projects: new ProjectController(projects.projects, exceptions),
+    projects: projectController,
     connections: new ConnectionSettingsController(connections, exceptions)
   })
   return async () => {
@@ -309,4 +327,24 @@ export async function createHomeBackend(options: {
     await projects.close()
     await logger.close()
   }
+}
+
+/**
+ * 导出父目录只由主进程选择；用户取消返回 null，不创建目录、不保存选择。
+ * 选择器允许新建文件夹，但返回的只是父目录，产物子目录由打包器创建。
+ */
+async function chooseExportDirectory(
+  getWindow: () => BrowserWindow | null
+): Promise<string | null> {
+  const options: OpenDialogOptions = {
+    title: '选择导出位置',
+    buttonLabel: '选择此文件夹',
+    properties: ['openDirectory', 'createDirectory']
+  }
+  const window = getWindow()
+  const result = window
+    ? await dialog.showOpenDialog(window, options)
+    : await dialog.showOpenDialog(options)
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0] ?? null
 }

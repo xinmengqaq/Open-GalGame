@@ -8,10 +8,6 @@ import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 
-/**
- * 确认目录是已有作品仓库，不创建、不修复。
- * @throws {AppException} 目录不是仓库、仓库不可读，或工程根不是绝对路径。
- */
 export async function assertWorkRepository(projectRoot: string): Promise<void> {
   if (!isAbsolute(projectRoot)) {
     throw new AppException({ code: ErrorCodes.invalidRequest, msg: '作品目录不是绝对路径' })
@@ -37,11 +33,6 @@ export async function assertWorkRepository(projectRoot: string): Promise<void> {
   }
 }
 
-/**
- * 读取当前 HEAD 和分支。没有提交时失败，不自动创建提交。
- * @returns 当前提交和分支名；分离头指针时分支为 null。
- * @throws {AppException} 没有提交或引用无法读取。
- */
 export async function readHead(
   projectRoot: string
 ): Promise<{ commitId: string; branch: string | null }> {
@@ -60,9 +51,6 @@ export async function readHead(
   }
 }
 
-/**
- * @throws {AppException} 当前没有可推进的分支。
- */
 export async function readBranchRef(projectRoot: string): Promise<string> {
   try {
     const branch = await git.currentBranch({ fs, dir: projectRoot, fullname: true })

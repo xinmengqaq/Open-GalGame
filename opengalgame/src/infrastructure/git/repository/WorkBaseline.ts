@@ -17,11 +17,6 @@ interface IndexedPath {
   readonly stageOid: string | null
 }
 
-/**
- * 只读读取正式仓库基线。不刷新索引，也不创建提交。
- * @returns HEAD、分支和各路径的提交、暂存区、工作区摘要。
- * @throws {AppException} 仓库、提交或路径无法读取。
- */
 export async function readWorkBaseline(
   projectRoot: string,
   relativePaths: readonly string[]
@@ -46,10 +41,6 @@ export async function readWorkBaseline(
   return { headCommitId: head.commitId, branch: head.branch, paths: states }
 }
 
-/**
- * 比较两次基线的提交、分支和已列出路径。未列出的路径不参与比较。
- * @param expected - 调用方持有的基线。
- */
 export function baselinesMatch(expected: WorkBaseline, actual: WorkBaseline): boolean {
   if (expected.headCommitId !== actual.headCommitId || expected.branch !== actual.branch)
     return false
@@ -66,11 +57,6 @@ export function baselinesMatch(expected: WorkBaseline, actual: WorkBaseline): bo
   })
 }
 
-/**
- * 读取工作区文件。文件不存在时返回 null；符号链接越界时失败。
- * @returns 真实字节；文件不存在时为 null。
- * @throws {AppException} 路径越界或文件无法读取。
- */
 export async function readWorktreeBytes(
   projectRoot: string,
   relativePath: string
@@ -90,11 +76,6 @@ export async function readWorktreeBytes(
   }
 }
 
-/**
- * 读取指定路径在暂存区中的 blob OID。没有索引项时为 null。
- * @returns 路径到暂存 OID 的映射。
- * @throws {AppException} 索引无法读取。
- */
 export async function readStageOids(
   projectRoot: string,
   relativePaths: readonly string[]
@@ -164,9 +145,6 @@ function presenceEqual(left: ContentPresence, right: ContentPresence): boolean {
   return left.exists === right.exists && left.digest === right.digest
 }
 
-/**
- * @throws {AppException} 索引不存在或无法读取。
- */
 export async function readIndexBytes(projectRoot: string): Promise<Uint8Array> {
   try {
     return new Uint8Array(await readFile(join(projectRoot, '.git', 'index')))

@@ -1,8 +1,3 @@
-/*
- * 卡片共同外框：类型光点、头部、状态槽、内容区与操作槽。
- * 画布卡片是浮在洗光上的轻块，不是后台白卡：没有整圈边框、色带和头部底板。
- */
-
 .frame {
   --card-accent: var(--wb-accent);
   --card-tint: color-mix(in srgb, var(--card-accent) 15%, transparent);
@@ -109,7 +104,6 @@
   outline-offset: 3px;
 }
 
-/* 提示词正文是整块可编辑表面：焦点用柔光而不是整圈描边。 */
 .frame[data-layout='paper']:focus-within {
   outline: 0;
   background:
@@ -126,7 +120,6 @@
     var(--card-shadow);
 }
 
-/* 选中时从卡片上方落下的一层柔光，不做挂签和描边。 */
 
 .selectAura {
   position: absolute;
@@ -146,7 +139,6 @@
   opacity: 1;
 }
 
-/* 头部：类型光点 + 名称，状态槽固定右侧。没有底板和分隔线。 */
 
 .header {
   position: relative;
@@ -204,7 +196,6 @@
   margin-left: auto;
 }
 
-/* 内容与操作槽 */
 
 .content {
   position: relative;
@@ -239,7 +230,6 @@
   background: transparent;
 }
 
-/* 图片与视频是画布上的预览物：外框让位给预览本身。 */
 
 .frame[data-layout='media'],
 .frame[data-layout='media']:hover,

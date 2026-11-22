@@ -298,7 +298,6 @@ interface ControllableWindow {
   destroy: () => void
 }
 
-/** 可独立销毁的窗口，用来观察多窗口订阅与销毁释放。 */
 function controllableWindow(id: number): ControllableWindow {
   const destroyed = { value: false }
   const destroyListeners: (() => void)[] = []

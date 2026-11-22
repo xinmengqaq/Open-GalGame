@@ -34,7 +34,6 @@ async function openWorkbench(page, search = '') {
   await expect(page.getByRole('heading', { name: '工作区' })).toBeVisible()
 }
 
-/** 等目标、祖先和入场动画节点落定，避免截图停在页面/卡片入场中间。 */
 async function waitForSettled(page, selector) {
   await expect
     .poll(
@@ -53,7 +52,6 @@ async function waitForSettled(page, selector) {
           let moving = 0
           for (const item of nodes) {
             if (!(item instanceof HTMLElement)) continue
-            // 缺失光点按设计循环呼吸，不属于入场位移，截图允许其停在任一相位。
             if (item.matches('[data-motion="missing"]')) continue
             const style = getComputedStyle(item)
             if (Number(style.opacity) < 0.995) moving += 1
@@ -67,7 +65,6 @@ async function waitForSettled(page, selector) {
     .toBe('settled')
 }
 
-/** 测量反馈浮层与弹窗标题、首个输入框的几何关系。 */
 async function feedbackPlacement(page) {
   return page.evaluate(() => {
     const dialog = [...document.querySelectorAll('dialog[open]')].at(-1)

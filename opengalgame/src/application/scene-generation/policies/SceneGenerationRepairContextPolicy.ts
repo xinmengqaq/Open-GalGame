@@ -15,11 +15,6 @@ const SOURCE_MISMATCH = '修复来源身份与上下文不一致，不能继续�
 const INCOMPLETE_CONTEXT = '修复来源上下文不完整，不能继续本次修复'
 const CONTEXT_TOO_LARGE = '来源修复上下文过大，已保留原失败记录'
 
-/**
- * 从失败源操作和检查点构造修复上下文。
- * 身份缺失、操作或候选修订错配、指令为空时返回 undefined，由调用方拒绝创建新操作。
- * @throws {AppException} 来源未解决冲突超过执行记录上限；固定安全文案，不建新操作。
- */
 export function buildSceneGenerationRepairContext(
   source: SceneGenerationExecution,
   checkpoint: SceneGenerationCheckpoint,
@@ -46,7 +41,6 @@ export function buildSceneGenerationRepairContext(
     seen.add(key)
     return true
   })
-  // 空数组/空串是已清空的权威事实；只有旧检查点缺字段时才回退上一上下文。
   const summary =
     checkpoint.summary !== undefined ? checkpoint.summary.trim() : (previous?.summary ?? '')
   const unresolvedIssues =
@@ -76,10 +70,6 @@ export function buildSceneGenerationRepairContext(
   }
 }
 
-/**
- * 校验已持久修复上下文的身份；旧记录没有上下文时保持可继续，不补造。
- * @returns 固定的安全文案，不含路径、ID 或模型原文。
- */
 export function repairContextIssue(execution: SceneGenerationExecution): string | undefined {
   const context = execution.repairContext
   if (!context) return undefined
@@ -104,7 +94,6 @@ export function repairContextIssue(execution: SceneGenerationExecution): string 
   return undefined
 }
 
-/** 只接受可进入修复上下文的确认为 revise/clarify 正文。 */
 function confirmedBody(reply: SceneGenerationReplyDTO): string | undefined {
   if (reply.kind !== 'revise' && reply.kind !== 'clarify') return undefined
   const body = reply.body.trim()

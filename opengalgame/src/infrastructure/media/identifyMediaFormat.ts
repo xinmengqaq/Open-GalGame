@@ -11,11 +11,6 @@ export type MediaFormatIdentification =
   | { supported: true; category: MediaCategory; extension: string; mediaType: string }
   | { supported: false; reason: 'unsupported' | 'ambiguous' }
 
-/**
- * 识别缓冲区的媒体类别。
- * SVG 走 XML 结构校验；共用容器只接受明确的音频或视频 MIME。
- * @returns 受支持的类别，或不受支持、无法区分的结果。
- */
 export async function identifyMediaFormat(bytes: Uint8Array): Promise<MediaFormatIdentification> {
   const binary = await identifyBinary(bytes)
   if (binary) return binary

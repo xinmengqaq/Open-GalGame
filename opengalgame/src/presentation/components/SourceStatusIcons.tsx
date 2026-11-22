@@ -22,7 +22,6 @@ function Glyph({
   )
 }
 
-/** 来源状态使用的图标，由共享状态组件自己拥有，不从卡片领域反向引用。 */
 export function CardQuestionIcon(props: IconProps): ReactElement {
   return (
     <Glyph {...props}>

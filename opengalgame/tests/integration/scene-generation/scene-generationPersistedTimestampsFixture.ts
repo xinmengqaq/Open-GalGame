@@ -29,6 +29,7 @@ import { RunSceneGeneration } from '@application/scene-generation/services/impl/
 import type { SceneGenerationProgressVO } from '@application/scene-generation/vo/SceneGenerationVO'
 import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import { FileSceneGenerationExecutionRepositoryImpl } from '@infrastructure/scene-generation/execution/FileSceneGenerationExecutionRepositoryImpl'
+import { piReviewCheckpointId } from '@infrastructure/scene-generation/workflow/piReviewCheckpoint'
 import {
   ensureStateRoot,
   resolveStatePath
@@ -70,7 +71,6 @@ export async function cleanupHarnessRoots(): Promise<void> {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 }
 
-/** 使用真实文件仓库，其余端口保持可控，供仓库与协调器验证。 */
 export async function createHarness(): Promise<Harness> {
   const stateRoot = await mkdtemp(join(tmpdir(), 'scene-generation-timestamps-'))
   roots.push(stateRoot)
@@ -78,6 +78,16 @@ export async function createHarness(): Promise<Harness> {
   const jobs: (() => Promise<void>)[] = []
   const progress: SceneGenerationProgressVO[] = []
   const workflow: Mocked<SceneGenerationWorkflow> = {
+    capabilities: vi.fn<SceneGenerationWorkflow['capabilities']>(() => ({
+      resume: true,
+      pause: true,
+      continueInteraction: true,
+      fork: true
+    })),
+    /** 与真实工作流同一身份契约：同一操作与候选修订得到稳定审阅边界，应用只当不透明标识。 */
+    checkpointIdFor: vi.fn<SceneGenerationWorkflow['checkpointIdFor']>((execution) =>
+      piReviewCheckpointId(execution.operationId, execution.candidateSnapshotId)
+    ),
     executeGeneration: vi.fn<SceneGenerationWorkflow['executeGeneration']>(),
     resumeGeneration: vi.fn<SceneGenerationWorkflow['resumeGeneration']>(),
     continueInteraction: vi.fn<SceneGenerationWorkflow['continueInteraction']>(),
@@ -103,7 +113,9 @@ export async function createHarness(): Promise<Harness> {
           decisions: [],
           differences: [],
           canView: true,
-          canContinue: true
+          canContinue: true,
+          canFork: true,
+          canReply: true
         }
       }
     }
@@ -145,6 +157,7 @@ export async function createHarness(): Promise<Harness> {
       rootDirectory: '/restored/' + execution.operationId,
       sceneDirectory: 'game/scene'
     }),
+    proveRepairInput: async () => undefined,
     materializeRepairInput: async (execution) => ({
       workspaceId: execution.operationId,
       rootDirectory: '/repair/' + execution.operationId,
@@ -173,6 +186,9 @@ export async function createHarness(): Promise<Harness> {
     workspace,
     artifacts,
     versions,
+    writeRecovery: {
+      recoverCandidateWrite: async () => ({ outcome: 'notApplicable' as const })
+    },
     nextId: () => 'identity-' + ++nextIdentity,
     now: () => (currentTime += 1000),
     dispatch: (job) => {

@@ -36,10 +36,6 @@ export type ParsedSceneSentence = {
   readonly arguments: readonly ParsedSceneArgument[]
   readonly inlineComment: string
   readonly sourceRange: SceneSourceRange
-  /**
-   * 原文中可唯一替换的正文范围。
-   * 多行续写、结构不唯一或正文被转义改写时省略，不能用整句范围代替。
-   */
   readonly contentRange?: SceneSourceRange
   readonly continuationRange?: SceneSourceRange
   readonly engineSentenceIndex: number
@@ -51,10 +47,6 @@ export type ParsedSceneSentence = {
 export type SceneParseDiagnosticKind =
   'unknown-command' | 'unsupported-command' | 'invalid-argument' | 'unsupported-dialogue'
 
-/**
- * 生成候选的封闭语法来源。
- * 只由生成读取链设置，不能从脚本正文或模型声明推断。
- */
 export type SceneSyntaxContract = 'generated-candidate'
 
 export type SceneScriptParseOptions = {

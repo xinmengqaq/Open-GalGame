@@ -1,7 +1,3 @@
-/**
- * project-files 跨功能公共入口。
- * 只重导出既有命名符号，不新增实现；project-files 内部的读写模块仍使用相对导入。
- */
 export {
   decodeStorageKey,
   digestBytes,

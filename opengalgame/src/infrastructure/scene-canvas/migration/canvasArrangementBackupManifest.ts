@@ -3,7 +3,6 @@ import { z } from 'zod'
 
 import { isPathInside, pathKey, safeRelativePosix, toPosixPath } from './canvasMigrationPaths'
 
-/** 与 R27 严格 manifest v1 契约一致；产品只写 canvas 族单条目批次。 */
 export const CANVAS_MIGRATION_MANIFEST_FORMAT_VERSION = 1
 export const CANVAS_MIGRATION_TOOL_VERSION = 'scene-canvas-1'
 export const CANVAS_MIGRATION_BATCH_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/
@@ -56,11 +55,6 @@ export type CanvasMigrationManifest = z.infer<typeof manifestSchema>
 const CANVAS_RELATIVE_PATTERN = /^\.opengalgame\/canvases\/([0-9a-f]+)\/([0-9a-f]+)\.json$/u
 const STORAGE_KEY_PATTERN = /^[0-9a-f]{2,250}$/u
 
-/**
- * 严格校验产品写出的迁移 manifest，并核对 canvas 族路径与备份命名空间。
- * 与 R27 scripts/legacy-data-migration/manifest.cjs 的规则一致，不引用开发工具。
- * @throws {Error} 字段、显式根或路径命名空间不合法。
- */
 export function assertCanvasMigrationManifest(value: unknown): CanvasMigrationManifest {
   const manifest = manifestSchema.parse(value)
   const roots = manifest.scope.projectRoots
@@ -103,10 +97,6 @@ function isEvenStorageKey(value: string): boolean {
   return STORAGE_KEY_PATTERN.test(value) && value.length % 2 === 0
 }
 
-/**
- * 构造 R27 严格 manifest v1 的单画布备份批次。
- * @param input - 已解析的真实工程根、源路径、备份相对路径与摘要。
- */
 export function createCanvasMigrationManifest(input: {
   batchId: string
   batchRoot: string

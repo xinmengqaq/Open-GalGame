@@ -3,11 +3,6 @@ export type MediaPixelSize = {
   height: number
 }
 
-/**
- * 把原始媒体尺寸装进给定边界：保持原始比例、不裁切，也不放大超过原始尺寸。
- * 画布媒体卡与输入目录缩略图共用这一条比例规则。
- * @returns 边界尺寸；任一参数不合法时为 null。
- */
 export function mediaFitSize(
   naturalWidth: number,
   naturalHeight: number,

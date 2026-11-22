@@ -28,7 +28,6 @@ interface CatalogNameDialogProps {
   onClose: () => void
 }
 
-/** 新建文件夹、重命名文件与文件夹共用一处命名表单。 */
 export function CatalogNameDialogView({
   dialog,
   busy,
@@ -108,7 +107,6 @@ interface CatalogCreateDialogProps {
   onChooseMedia: () => void
 }
 
-/** 新建素材入口：文档进入空编辑器，媒体走导入。 */
 export function CatalogCreateDialog({
   open,
   busy,
@@ -180,7 +178,6 @@ interface DeleteFileDialogProps {
   onConfirm: () => void
 }
 
-/** 删除文件确认。 */
 export function CatalogDeleteFileDialog({
   target,
   busy,
@@ -238,7 +235,6 @@ interface DeleteFolderDialogProps {
   onConfirm: () => void
 }
 
-/** 删除文件夹确认，显示将会删除的子树规模。 */
 export function CatalogDeleteFolderDialog({
   plan,
   busy,

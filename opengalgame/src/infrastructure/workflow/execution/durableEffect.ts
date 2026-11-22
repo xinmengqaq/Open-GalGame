@@ -30,12 +30,6 @@ export type EffectRecovery =
   | { action: 'execute' }
   | { action: 'stop'; reason: string }
 
-/**
- * 决定副作用能否恢复。已完成且结果可靠时不重放；结果不明时停止。
- * @param verify - 核对实际文件或提交结果。结果不明时必须调用。
- * @returns 跳过、执行一次或停止恢复。
- * @throws {WorkflowError} 记录本身缺少身份或摘要。
- */
 export function decideDurableEffectRecovery(
   record: DurableEffectRecord,
   verify: () => EffectVerification
@@ -69,10 +63,6 @@ export function decideDurableEffectRecovery(
   return { action: 'execute' }
 }
 
-/**
- * 保存副作用记录。不执行文件写入或 Git 提交。
- * @throws {AppException | WorkflowError} 记录或路径不合法。
- */
 export async function writeDurableEffect(
   stateRoot: string,
   identity: WorkflowIdentity,
@@ -90,10 +80,6 @@ export async function writeDurableEffect(
   await writeJsonDocument(path, record, workflowStorageFailure)
 }
 
-/**
- * @returns 已保存的记录。目录不存在时为空。
- * @throws {WorkflowError | AppException} 记录损坏或路径越界。
- */
 export async function readDurableEffects(
   stateRoot: string,
   identity: WorkflowIdentity
@@ -119,11 +105,6 @@ export async function readDurableEffects(
   return records
 }
 
-/**
- * 调用方已确认本步没有发生文件写入时，删除遗留的 started 记录。
- * 记录必须属于当前操作、步骤和输入摘要，否则拒绝；其他状态保持原样，文件不存在时静默返回。
- * @throws {AppException | WorkflowError} 记录与当前步骤不一致、损坏或删除失败。
- */
 export async function abandonDurableEffect(
   stateRoot: string,
   identity: WorkflowIdentity,
@@ -156,11 +137,6 @@ export async function abandonDurableEffect(
   }
 }
 
-/**
- * 把当前操作里仍为 started 的副作用标为失败。
- * 已完成和结果不明的记录保持原样；不补结果摘要。
- * @throws {AppException | WorkflowError} 读取或写入失败时保留原因，不把未结算记录当成已失败。
- */
 export async function settleStartedDurableEffects(
   stateRoot: string,
   identity: WorkflowIdentity
@@ -172,7 +148,29 @@ export async function settleStartedDurableEffects(
   }
 }
 
-/** 已完成且带可靠结果的副作用不能无条件重放。 */
+/**
+ * 只把指定步骤仍为 started 的副作用标为失败。
+ * 只用于调用方已证明本次没有落盘；已完成、结果不明或其它步骤保持原样。
+ * @throws {AppException | WorkflowError} 记录与当前步骤不一致、损坏或写入失败。
+ */
+export async function failStartedDurableEffect(
+  stateRoot: string,
+  identity: WorkflowIdentity,
+  stepId: string,
+  inputDigest: string
+): Promise<void> {
+  const effects = await readDurableEffects(stateRoot, identity)
+  const effect = effects.find((item) => item.stepId === stepId)
+  if (!effect) return
+  if (effect.inputDigest !== inputDigest)
+    throw new AppException({
+      code: ErrorCodes.invalidRequest,
+      msg: '副作用记录与当前步骤不一致'
+    })
+  if (effect.status !== 'started') return
+  await writeDurableEffect(stateRoot, identity, { ...effect, status: 'failed' })
+}
+
 function isReliable(record: DurableEffectRecord): boolean {
   if (record.status !== 'completed' || !record.resultDigest) return false
   if (record.kind === 'fileWrite' || record.kind === 'commit')
@@ -180,10 +178,6 @@ function isReliable(record: DurableEffectRecord): boolean {
   return true
 }
 
-/**
- * @param record - 调用方记录。
- * @throws {WorkflowError} 记录缺少身份、步骤或输入摘要。
- */
 function assertEffectRecord(record: DurableEffectRecord): DurableEffectRecord {
   try {
     assertWorkflowSegment(record.operationId, 'operationId')
@@ -206,10 +200,6 @@ function assertEffectRecord(record: DurableEffectRecord): DurableEffectRecord {
   return record
 }
 
-/**
- * 把未知 JSON 收成副作用记录。缺字段时失败，不补默认状态。
- * @throws {WorkflowError} 文件不是完整记录。
- */
 function asEffectRecord(value: unknown): DurableEffectRecord {
   if (!value || typeof value !== 'object') {
     throw new WorkflowError({ category: 'recoveryBasisMissing', msg: '缺少可恢复依据' })
@@ -247,7 +237,6 @@ function isKind(value: unknown): value is DurableEffectKind {
   return value === 'fileWrite' || value === 'commit' || value === 'none'
 }
 
-/** 题组必须原样可读。缺字段或形状不对时失败，不用空题组冒充旧记录。 */
 function effectQuestions(value: unknown): readonly DurableEffectQuestion[] {
   if (!Array.isArray(value) || value.length > 4) invalidEffect()
   const questions = value.map((item) => {

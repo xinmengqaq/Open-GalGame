@@ -12,10 +12,6 @@ type VersionHistoryMotionOptions = {
   selectedId: string | null
 }
 
-/**
- * 作品历史动效：时间线主轴绘制、日期与条目错落入场、自动保存组展开、
- * 详情展开入场。减少动态效果时只短淡入，结束后清掉内联变换。
- */
 export function useVersionHistoryMotion(
   root: RefObject<HTMLElement | null>,
   options: VersionHistoryMotionOptions

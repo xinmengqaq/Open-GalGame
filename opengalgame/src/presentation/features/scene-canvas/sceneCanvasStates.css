@@ -1,5 +1,3 @@
-/* 空态与拖入：图形和文案直接落在画布洗光上，不套卡片、不做虚线框。 */
-
 .empty {
   position: absolute;
   inset: 0;
@@ -179,7 +177,6 @@
   font-size: 11.5px;
 }
 
-/* 拖入：整面淡青洗光，只有一枚浮起的光环和两行字。 */
 
 .dropZone {
   position: absolute;

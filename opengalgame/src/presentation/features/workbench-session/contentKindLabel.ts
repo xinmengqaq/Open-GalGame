@@ -53,7 +53,6 @@ export function cardKindLabel(kind: SessionCardKind): string {
   return cardKindLabels[kind]
 }
 
-/** 卡片图标沿用来源类别的图标集合。 */
 export function cardIconProps(card: SessionCard): {
   contentKind: SessionContentKind
   textKind?: SessionTextKind
@@ -63,7 +62,6 @@ export function cardIconProps(card: SessionCard): {
   return { contentKind: card.kind }
 }
 
-/** 标题展示值。提示词没有标题，字段卡取预设名或类型名。 */
 export function cardTitleText(card: SessionCard): string {
   if (card.kind === 'prompt') return '提示词'
   if (card.kind === 'animation' || card.kind === 'effect') {
@@ -74,7 +72,6 @@ export function cardTitleText(card: SessionCard): string {
   return card.title
 }
 
-/** 图片、视频预览卡片可由用户按比例缩放。 */
 export function isPreviewCard(kind: SessionCardKind): boolean {
   return kind === 'image' || kind === 'video'
 }
@@ -83,7 +80,6 @@ export function isSourceCard(card: SessionCard): card is SessionSourceCard {
   return card.kind !== 'prompt' && card.kind !== 'animation' && card.kind !== 'effect'
 }
 
-/** 文档、图片、音频和视频卡都有摘要字段；文档称简介，媒体称用途说明。 */
 export function supportsSummary(card: SessionCard): boolean {
   return (
     card.kind === 'document' ||
@@ -98,7 +94,6 @@ export function catalogGroupOf(contentKind: ProjectInputContentKind): 'text' | '
   return 'asset'
 }
 
-/** 来源类别落到卡片类别。文本来源一律建文档卡。 */
 export function sourceCardKindOf(
   summary: Pick<ProjectInputSourceSummaryVO, 'contentKind'> | ProjectInputSourceVO
 ): SessionCardKind {

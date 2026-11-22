@@ -26,9 +26,6 @@ import {
 export class SceneCanvasController {
   private readonly handle: IpcRequestHandler
 
-  /**
-   * @param exceptions - 统一失败出口。
-   */
   constructor(
     private readonly sceneCanvas: SceneCanvasApplicationService,
     exceptions: IpcExceptionHandler
@@ -36,9 +33,6 @@ export class SceneCanvasController {
     this.handle = createRequestHandler(exceptions)
   }
 
-  /**
-   * @returns 编排或 null。
-   */
   readSceneCanvasArrangement(
     input: unknown,
     access: IpcRequestAccess
@@ -210,10 +204,6 @@ export class SceneCanvasController {
     )
   }
 
-  /**
-   * 保存编排。应用服务没有返回值，成功响应 data 为 null。
-   * @returns 成功时 data 为 null。
-   */
   saveSceneCanvasArrangement(input: unknown, access: IpcRequestAccess): Promise<AjaxResult<null>> {
     return this.handle(
       saveSceneCanvasArrangementSchema,

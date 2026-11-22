@@ -19,7 +19,6 @@ const FORBIDDEN_RENDER_FIELD: Record<string, true> = {
   prompts: true
 }
 
-/** 渲染契约只允许稳定身份、数量、阶段、固定文案和累计 Token。 */
 export function assertRenderContractSafe(value: unknown): void {
   const found = forbiddenRenderFields(value)
   if (found.length > 0) throw new Error(`渲染契约包含禁止字段: ${found.join(', ')}`)

@@ -218,7 +218,7 @@ describe('工作区未就绪', () => {
     expect(JSON.stringify(prepared)).not.toContain('D:/secret')
     expect(JSON.stringify(prepared)).not.toContain('scene-locks')
 
-    const listHistory = vi.fn(async () => ok([]))
+    const listHistory = vi.fn(async () => ok({ items: [], unfinished: [] }))
     const latest = vi.fn(async () => ok(null))
     const status = vi.fn()
     const history = await readGenerationHistory(
@@ -227,7 +227,7 @@ describe('工作区未就绪', () => {
       'scene-1'
     )
 
-    expect(history).toEqual({ kind: 'empty' })
+    expect(history).toEqual({ kind: 'empty', unfinished: [] })
     expect(listHistory).toHaveBeenCalledTimes(1)
     expect(latest).toHaveBeenCalledTimes(1)
     expect(status).not.toHaveBeenCalled()

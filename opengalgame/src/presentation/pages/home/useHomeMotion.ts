@@ -23,11 +23,6 @@ interface HomeMotionRefs {
   gearIcon: RefObject<SVGSVGElement | null>
 }
 
-/**
- * 首页入场、入口反馈、视差与持续动态。图标只绕自身中心变换。
- * 首页长期挂载，减弱动效改由 matchMedia 承接，系统设置变更无需刷新即生效。
- * 实现思路：useGSAP 始终提供 contextSafe，非空断言只是与 gsap.context 共用签名的结果。
- */
 export function useHomeMotion(refs: HomeMotionRefs): void {
   useGSAP(
     (_context, contextSafe) => {

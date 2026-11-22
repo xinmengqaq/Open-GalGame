@@ -212,7 +212,6 @@ function scopeFor(projectRoot) {
   }
 }
 
-/** 最近既存祖先取 realpath，缺失尾段按词法拼接；用于在写入前暴露 junction 别名。 */
 async function realPathOfPossiblyMissing(target) {
   if (!isAbsolute(target)) throw new MigrationError(`必须是绝对路径：${target}`, { exitCode: 2 })
   const missing = []
@@ -231,7 +230,6 @@ async function realPathOfPossiblyMissing(target) {
   }
 }
 
-/** 在真实备份根内解析相对路径；已存在链接必须仍落在根内。 */
 async function resolveInsideRealRoot(rootReal, relativePosix) {
   if (
     typeof relativePosix !== 'string' ||
@@ -614,7 +612,6 @@ async function migrateTarget(reader, projectRoot, projectId, backupRoot, target)
     })
     reportPath = writtenReport
   } catch {
-    // 报告是证据，不影响已成功的原子写与备份；不得返回不存在的路径。
   }
   return {
     ...base,

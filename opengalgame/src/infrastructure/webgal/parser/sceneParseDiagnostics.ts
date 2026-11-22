@@ -12,13 +12,6 @@ import {
   isWebgalArgumentValueSupported
 } from '@infrastructure/webgal/compatibility/WebgalCommandArguments'
 
-/**
- * 依据命令声明和已核对参数诊断；callScene 的任意局部参数不受名单限制。
- * 生成契约只在调用方明确传入时生效，不根据前缀猜测外来作品。
- * @param declarations - 调用方可靠的命令声明。
- * @param syntaxContract - 仅生成候选读取设置的封闭语法来源。
- * @returns 保留原文范围的诊断。
- */
 export function sceneParseDiagnostics(
   text: string,
   sentences: readonly ParsedSceneSentence[],
@@ -74,10 +67,6 @@ export function sceneParseDiagnostics(
   return diagnostics
 }
 
-/**
- * 新生成候选必须使用固定解析器命令和显式对白。
- * 解析器把未知前缀回退成 say 时，这里仍按原文前缀报告未知命令，不改写语句。
- */
 function generationContractDiagnostics(
   sentence: ParsedSceneSentence,
   range: ParsedSceneSentence['sourceRange'],
@@ -107,13 +96,11 @@ function generationContractDiagnostics(
   ]
 }
 
-/** 空说话人、单独 say 和裸行才进入新语法问题；角色简写保持既有兼容。 */
 function unsafeGeneratedDialogue(sentence: ParsedSceneSentence): boolean {
   if (explicitGeneratedDialogue(sentence)) return false
   return sentence.commandRaw === 'say' || sentence.commandRaw.trim() === ''
 }
 
-/** 显式姓名和显式旁白都算生成契约对白；两者同时出现时以清除为准。 */
 function explicitGeneratedDialogue(sentence: ParsedSceneSentence): boolean {
   const speaker = sentence.arguments.find((argument) => argument.key === 'speaker')
   const cleared = sentence.arguments.some(
@@ -128,10 +115,6 @@ function explicitGeneratedDialogue(sentence: ParsedSceneSentence): boolean {
   )
 }
 
-/**
- * 只有像命令标识符的未知前缀才进入命令诊断。
- * 中文角色名和普通台词保持对白语义，避免把合法说话人误判成命令。
- */
 function looksLikeUnknownCommand(prefix: string, recognized: readonly string[]): boolean {
   return /^[A-Za-z][A-Za-z0-9]*$/u.test(prefix) && !recognized.includes(prefix)
 }

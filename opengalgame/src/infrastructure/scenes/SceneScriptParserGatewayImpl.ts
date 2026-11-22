@@ -23,7 +23,6 @@ import { sceneReadException } from './sceneReadErrors'
 
 type SdkSentence = ReturnType<SceneParser['parse']>['sentenceList'][number]
 
-/** CJS 互操作可能把默认导出包进命名空间；本身已是构造器时保持原样。 */
 export function resolveSceneParserConstructor(
   imported: typeof SceneParser | { default: typeof SceneParser }
 ): typeof SceneParser {
@@ -47,12 +46,7 @@ const resourceKindByCommand: Readonly<Record<string, string>> = {
 }
 const commandsByType = new Map(SCRIPT_CONFIG.map((item) => [item.scriptType, item.scriptString]))
 
-/** 使用真实官方解析器，技术类型不越过应用端口。 */
 export class SceneScriptParserGatewayImpl implements SceneScriptParserGateway {
-  /**
-   * 同时保留官方运行时结果和未改写资源路径的解析事实。
-   * @throws {AppException} 快照内脚本不可用或解析器失败。
-   */
   parseSceneScript(
     snapshot: SceneSourceSnapshot,
     relativePath = snapshot.entryFile.relativePath,
@@ -153,7 +147,6 @@ export class SceneScriptParserGatewayImpl implements SceneScriptParserGateway {
   }
 }
 
-/** 旧调用传命令声明数组；生成读取链传带来源的对象。 */
 function sceneParseOptions(
   options: readonly SceneCommandDeclaration[] | SceneScriptParseOptions
 ): SceneScriptParseOptions {
@@ -167,7 +160,6 @@ function isCommandDeclarationList(
   return Array.isArray(options)
 }
 
-/** 记录资源内容和配音参数，包括官方资源列表遗漏的音效与清除状态。 */
 function sentenceReferences(
   command: string,
   raw: SdkSentence,
@@ -224,18 +216,10 @@ function sentenceReferences(
   return references
 }
 
-/**
- * 按引擎布尔转换识别显式清除参数。
- * @returns 引擎会执行清除时为 true。
- */
 function isClearValue(value: string | number | boolean | undefined): boolean {
   return webgalBoolean(value) === true
 }
 
-/**
- * 从官方预处理行标注参数的词面值，语义仍由官方解析器决定。
- * @returns 原文参数值；自动补充参数没有词面值。
- */
 function originalArgument(
   processedLine: string,
   key: string,

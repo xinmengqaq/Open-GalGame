@@ -28,7 +28,6 @@ type SaveIdentity = {
   readonly editsSnapshot: string
 }
 
-/** 活动会话和正在执行的保存。关闭后的结算不留在这里。 */
 export class ScenePreviewSessionStore {
   private readonly sessions = new Map<string, ActivePreviewSession>()
   private readonly acceptedSaves = new Map<string, AcceptedSaveTask>()

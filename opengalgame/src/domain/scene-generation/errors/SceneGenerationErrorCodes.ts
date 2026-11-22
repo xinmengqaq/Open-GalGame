@@ -13,7 +13,6 @@ export const SceneGenerationErrorCodes = {
   blankPromptBody: 4212,
   blankConfirmedContent: 4213,
   unknownConfirmedInput: 4214,
-  // 场景生成自身仍使用这些码。数值与版本模块当前技术失败码相同，不能改。
   gitNotRepository: 5201,
   gitUnavailable: 5202,
   gitNoCommits: 5203,

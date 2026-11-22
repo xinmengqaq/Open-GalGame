@@ -10,10 +10,6 @@ import type { ReadCandidatePreviewDTO } from '@application/scene-preview/dto/Rea
 import type { CandidatePreviewEventVO } from '@interfaces/scene-preview/contracts/ScenePreviewResponseSchema'
 import type { ScenePreviewClient } from '@interfaces/scene-preview/client/ScenePreviewClient'
 
-/**
- * 两种舞台事件契约在这里收成同一份呈现事实。候选没有代次、句位和错误码，
- * 这些字段保持 null，不按当前场景的语义补齐。
- */
 export type GameStageEventIdentity = Readonly<{
   previewSessionId: string
   projectId: string | null
@@ -37,7 +33,6 @@ export type GameStageEvent = Readonly<{
   message: string | null
 }>
 
-/** 当前场景的运行时事件按会话过滤，避免迟到的旧会话事件进入舞台。 */
 export function gameStageEventOfRuntime(
   event: PreviewRuntimeEventVO,
   expectedPreviewSessionId: string
@@ -75,7 +70,6 @@ export function gameStageEventOfRuntime(
   }
 }
 
-/** 候选事件按工程、场景、会话和候选四重身份过滤，不把别的候选拼进当前舞台。 */
 export function gameStageEventOfCandidate(
   event: CandidatePreviewEventVO,
   expected: {
@@ -112,7 +106,6 @@ export function gameStageEventOfCandidate(
 type RuntimeStageClient = Pick<ScenePreviewClient, 'subscribeRuntime'>
 type CandidateStageClient = Pick<ScenePreviewClient, 'subscribeCandidatePreview'>
 
-/** 先订阅再由调用方准备；这里只做契约转换，不创建舞台，也不推断就绪。 */
 export function subscribeRuntimeStage(
   client: RuntimeStageClient,
   scope: PreviewSubscriptionRequest,

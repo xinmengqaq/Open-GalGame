@@ -2,20 +2,13 @@ import type { AgentStreamEvent, AgentStreamSubscriber } from './AgentStreamEvent
 
 export type AgentStreamDiagnostic = (message: string) => void
 
-/** 写入固定中文诊断，不记录订阅抛出的原始异常。 */
 export function reportAgentStreamFault(message: string): void {
   try {
     process.stderr.write(`${message}\n`)
   } catch {
-    // 诊断输出失败被忽略；不改变订阅分发。
   }
 }
 
-/**
- * 创建一次运行的订阅集合；回调不等待，不建立历史或待处理事件队列。
- * @param diagnostic - 只接收固定安全消息的本地诊断输出。
- * @returns 本次运行的注册、分发和释放函数。
- */
 export function createAgentStreamConsumer(
   diagnostic: AgentStreamDiagnostic = reportAgentStreamFault
 ): {
@@ -29,11 +22,9 @@ export function createAgentStreamConsumer(
     try {
       diagnostic('Agent 观察订阅输出失败')
     } catch {
-      // 诊断回调失败已隔离；订阅已移除，不产生未处理拒绝。
     }
   }
   return {
-    /** 注册观察回调；注销信号只退出订阅，不影响任务。 */
     subscribe(onEvent: AgentStreamSubscriber, signal?: AbortSignal): () => void {
       if (released || signal?.aborted) return () => {}
       const leave = (): void => {
@@ -45,13 +36,12 @@ export function createAgentStreamConsumer(
       signal?.addEventListener('abort', leave, { once: true })
       return leave
     },
-    /** 按注册顺序分发副本，隔离同步和异步回调故障。 */
     dispatch(event: AgentStreamEvent): void {
       if (released) return
       for (const subscription of subscriptions) {
         try {
           const pending = subscription.onEvent(structuredClone(event))
-          if (pending)
+          if (isPromiseLike(pending))
             void pending.catch(() => {
               subscription.leave()
               report()
@@ -68,4 +58,10 @@ export function createAgentStreamConsumer(
       subscriptions.clear()
     }
   }
+}
+
+/** 回调类型声明返回 void，但运行时可能返回任何值；只对 thenable 安装失败处理。 */
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return false
+  return 'then' in value && typeof value.then === 'function'
 }

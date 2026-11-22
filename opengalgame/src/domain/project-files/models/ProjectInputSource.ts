@@ -25,7 +25,6 @@ export type ProjectFileAssetSource = ProjectInputSourceIdentity & {
 
 export type ProjectInputSource = ProjectDocumentSource | ProjectFileAssetSource
 
-/** 扫描得到的来源摘要。不包含正文、媒体字节或本机路径。 */
 export type ProjectInputSourceSummary =
   | {
       sourceId: string

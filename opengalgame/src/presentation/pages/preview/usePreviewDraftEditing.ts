@@ -45,10 +45,6 @@ export interface UsePreviewDraftEditingResult {
   readonly syncRefs: () => void
 }
 
-/**
- * 台词草稿、选中句和撤销重做历史的唯一所有者。
- * 不判断锁定、保存状态或舞台，由外层组合决定何时可编辑和何时调度舞台。
- */
 export function usePreviewDraftEditing(): UsePreviewDraftEditingResult {
   const [draftState, setDraftState] = useState<PreviewDraftState>(() =>
     createPreviewDraftState([])

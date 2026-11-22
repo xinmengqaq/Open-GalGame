@@ -34,11 +34,6 @@ export interface ProjectsList {
   goNextPage: () => void
 }
 
-/**
- * 项目页列表查询、选中、翻页与文件操作。缓存、竞态与旧页保留由数据层承担。
- * 操作失败连同发生时的读取版本一起记下，下次成功读取后自然不再匹配，无需清除。
- * 实现思路：全局缓存不过期、默认挂载不会重取，进入项目页仍要读取当前页，故挂载时强制重取。
- */
 export function useProjectsList(client: ProjectClient): ProjectsList {
   const queryClient = useQueryClient()
   const [offset, setOffset] = useState(0)
@@ -72,12 +67,10 @@ export function useProjectsList(client: ProjectClient): ProjectsList {
         ? 'empty'
         : 'ready'
 
-  /** 失效项目列表缓存，触发当前页重取。 */
   async function refresh(): Promise<void> {
     await queryClient.invalidateQueries({ queryKey: projectListQueryKey })
   }
 
-  /** 打开可用项目并进入工作区，失败记入操作横幅。 */
   async function openProject(id: string): Promise<void> {
     const entry = entries.find((item) => item.id === id)
     if (!entry || entry.status !== 'available') return
@@ -89,7 +82,6 @@ export function useProjectsList(client: ProjectClient): ProjectsList {
     }
   }
 
-  /** 重命名项目，失败返回可展示的失败对象。 */
   async function renameProject(
     id: string,
     name: string,

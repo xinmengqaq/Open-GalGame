@@ -2,8 +2,11 @@ import { z } from 'zod'
 
 import type {
   SceneGenerationCandidatePreviewVO,
-  SceneGenerationHistorySummaryVO,
-  SceneGenerationRenderStatusVO
+  SceneGenerationForkVO,
+  SceneGenerationHistoryDetailVO,
+  SceneGenerationHistoryPageVO,
+  SceneGenerationRenderStatusVO,
+  SceneGenerationVerificationResultVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -47,6 +50,11 @@ const renderStatusSchema = z.strictObject({
   updatedAt: z.string().min(1).optional(),
   canPause: z.boolean(),
   canResume: z.boolean(),
+  canResumeUnfinished: z.boolean().optional(),
+  cleanupPending: z.boolean().optional(),
+  canRetryCleanup: z.boolean().optional(),
+  canVerifyResult: z.boolean().optional(),
+  blocksNewGeneration: z.boolean().optional(),
   canCancel: z.boolean(),
   resumeReason: z.string().max(200).optional(),
   inputSummary: z.strictObject({
@@ -315,6 +323,36 @@ const previewSchema = z.strictObject({
   url: z.string().url().max(300),
   expiresAt: z.string().datetime()
 })
+/** 单条历史详情只多出后端证明的分叉资格和用户可读原因。 */
+const historyDetailSchema = historySummarySchema.extend({
+  canFork: z.boolean(),
+  forkReason: z.string().max(200).optional()
+})
+/** 分叉响应只含新操作安全状态和来源展示摘要；不接受内部恢复种子。 */
+const forkResultSchema = z.strictObject({
+  status: renderStatusSchema,
+  source: z.strictObject({
+    summary: z.string().max(200),
+    createdAt: z.string().datetime().optional()
+  })
+})
+
+/** 待核对结果只含核对结论、固定安全文案和当前状态；不暴露回执、账本或路径。 */
+const sceneGenerationVerificationResultSchema = z.strictObject({
+  outcome: z.enum(['candidateWritten', 'committed', 'stillPending']),
+  message: z.string().max(200),
+  status: renderStatusSchema
+})
+
+/**
+ * 历史页与需要作者处理的操作页各有独立游标，最多各 100 条；
+ * 未完成页游标只在确有更早条目时返回，不与历史 checkpointId 混用。
+ */
+const historyPageSchema = z.strictObject({
+  items: z.array(historySummarySchema).max(100),
+  unfinished: z.array(renderStatusSchema).max(100),
+  unfinishedNextCursor: identity.optional()
+})
 
 function success<T extends z.ZodType>(data: T): z.ZodType<AjaxResult<z.output<T>>> {
   return z.union([
@@ -328,35 +366,45 @@ function parseResult<T>(schema: z.ZodType<T>, value: unknown): T | null {
   return parsed.success ? parsed.data : null
 }
 
-/** 校验渲染状态。路径、脚本和内部差异不能通过。 */
 export function parseSceneGenerationStatusResult(
   value: unknown
 ): AjaxResult<SceneGenerationRenderStatusVO> | null {
   return parseResult(success(renderStatusSchema), value)
 }
 
-/** 校验场景级 AI 历史。作品历史不走这里。 */
+/** 校验场景级 AI 历史页。作品历史不走这里；未完成操作不是历史条目。 */
 export function parseSceneGenerationHistoryResult(
   value: unknown
-): AjaxResult<readonly SceneGenerationHistorySummaryVO[]> | null {
-  return parseResult(success(z.array(historySummarySchema).max(100)), value)
+): AjaxResult<SceneGenerationHistoryPageVO> | null {
+  return parseResult(success(historyPageSchema), value)
 }
 
-/** 校验单条安全检查点摘要。内部路径和脚本正文不能通过。 */
+/** 校验待核对结果；页面只读取 outcome、安全文案和当前状态。 */
+export function parseSceneGenerationVerificationResult(
+  value: unknown
+): AjaxResult<SceneGenerationVerificationResultVO> | null {
+  return parseResult(success(sceneGenerationVerificationResultSchema), value)
+}
+
 export function parseSceneGenerationCheckpointResult(
   value: unknown
-): AjaxResult<SceneGenerationHistorySummaryVO> | null {
-  return parseResult(success(historySummarySchema), value)
+): AjaxResult<SceneGenerationHistoryDetailVO> | null {
+  return parseResult(success(historyDetailSchema), value)
 }
 
-/** 校验只读预览会话。成功响应只含会话身份和 URL。 */
+/** 校验分叉创建结果。内部路径、检查点差异和模型原文不能通过。 */
+export function parseSceneGenerationForkResult(
+  value: unknown
+): AjaxResult<SceneGenerationForkVO> | null {
+  return parseResult(success(forkResultSchema), value)
+}
+
 export function parseSceneGenerationPreviewResult(
   value: unknown
 ): AjaxResult<SceneGenerationCandidatePreviewVO> | null {
   return parseResult(success(previewSchema), value)
 }
 
-/** 校验无内容的成功响应。 */
 export function parseSceneGenerationNullResult(value: unknown): AjaxResult<null> | null {
   return parseResult(success(z.null()), value)
 }

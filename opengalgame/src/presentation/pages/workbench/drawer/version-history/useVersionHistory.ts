@@ -60,10 +60,6 @@ type UseVersionHistoryResult = {
   dismissActionFailure: () => void
 }
 
-/**
- * 历史抽屉的查询与写操作。响应按工程和筛选查询代际隔离，
- * 写成功后重新读取第一页；列表内容不视为永久缓存。
- */
 export function useVersionHistory({
   client,
   projectId,

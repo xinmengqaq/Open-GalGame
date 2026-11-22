@@ -50,7 +50,6 @@ export function useProjectImport(client: ProjectClient): ProjectImportFlow {
       return
     }
     if (ajax.code === PROJECT_WORKSPACE_NOT_READY_CODE) {
-      // 导入已登记但工作区未就绪：固定安全文案，刷新列表让工程卡可见。
       void queryClient.invalidateQueries({ queryKey: projectListQueryKey })
       setError({ code: ajax.code, msg: homeWorkspaceFailure.detail })
       setState('failure')
@@ -66,7 +65,6 @@ export function useProjectImport(client: ProjectClient): ProjectImportFlow {
     setResult(null)
   }
 
-  /** 关闭导入结果并回到工程列表；打开工程后由工作台未就绪面板继续重建。 */
   function rebuildWorkspace(): void {
     dismiss()
     void queryClient.invalidateQueries({ queryKey: projectListQueryKey })

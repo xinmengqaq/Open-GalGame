@@ -11,7 +11,6 @@ import { replyFingerprint } from '../../policies/SceneGenerationIdempotency'
 export { safeFailureWithDiagnosticRef as safeFailure } from './SceneGenerationFailureFacts'
 export { requireAcceptableCandidate as requireAcceptable } from '../../policies/SceneGenerationCandidatePolicy'
 
-/** 提取调用方需要的身份，避免以展开内部执行模型的方式泄露状态。 */
 function operationVO(execution: SceneGenerationOperationVO): SceneGenerationOperationVO {
   return {
     projectId: execution.projectId,
@@ -22,9 +21,6 @@ function operationVO(execution: SceneGenerationOperationVO): SceneGenerationOper
   }
 }
 
-/**
- * @throws {AppException} 已提交操作缺少结果定位，须保留恢复记录。
- */
 export function completedExecution(
   execution: SceneGenerationExecution,
   commitId: string
@@ -42,11 +38,13 @@ export function completedExecution(
     interaction: undefined,
     pendingReply: undefined,
     failure: undefined,
+    // 成功提交后不再保留任何暂停意图或中断原因。
+    pauseRequested: false,
+    interruptReason: undefined,
     result: { ...operationVO(execution), commitId, preview: execution.preview }
   }
 }
 
-/** 按明确用例字段建立稳定请求指纹，归一默认值并忽略对象字段顺序。 */
 export function generationFingerprint(
   request: GenerateSceneDTO | ForkSceneGenerationDTO | RetrySceneGenerationRepairDTO
 ): string {

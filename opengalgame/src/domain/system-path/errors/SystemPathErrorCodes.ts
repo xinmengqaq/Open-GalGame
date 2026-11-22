@@ -1,7 +1,3 @@
-/**
- * 本机路径打开错误码。
- * 4701 起只表达路径校验与系统打开能力，不复用导出或预览错误码。
- */
 export const SystemPathErrorCodes = {
   pathRejected: 4701,
   openFailed: 4702

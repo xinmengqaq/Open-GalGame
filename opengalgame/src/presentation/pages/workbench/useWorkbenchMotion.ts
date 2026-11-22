@@ -4,10 +4,6 @@ import type { RefObject } from 'react'
 
 import { prefersReducedMotion } from '../../effects/motion'
 
-/**
- * 工作台入场：顶栏、文件区、画布依次出现。
- * 减少动态效果时只做短淡入；结束后清掉内联样式，避免影响布局与拖拽。
- */
 export function useWorkbenchMotion(root: RefObject<HTMLElement | null>): void {
   useGSAP(
     () => {

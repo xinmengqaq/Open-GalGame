@@ -160,7 +160,6 @@ function arrangement(): SceneCanvasArrangementVO {
   }
 }
 
-/** 迁移后的当前 v5 文档：VO 之外的真实业务字段全部存在。 */
 function currentFieldDocument(): Record<string, unknown> {
   const layout = { x: 0, y: 0, width: 100, height: 80 }
   return {

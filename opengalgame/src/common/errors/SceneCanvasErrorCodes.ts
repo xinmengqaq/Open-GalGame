@@ -1,8 +1,3 @@
-/**
- * 画布编排错误码的数值唯一权威。
- * 领域、应用、基础设施与表现层共用这一份；表现层只按数值或结构化 reason 判别，
- * 不再各自复制字面量。
- */
 export const SceneCanvasErrorCodes = {
   identityConflict: 4401,
   targetMissing: 4402,

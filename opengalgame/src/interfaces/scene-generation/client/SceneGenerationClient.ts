@@ -1,19 +1,24 @@
 import type {
   CloseSceneGenerationCandidatePreviewDTO,
+  ForkSceneGenerationFromHistoryDTO,
   ListSceneGenerationHistoryForSceneDTO,
   OpenSceneGenerationCandidatePreviewDTO,
   ReadSceneGenerationCheckpointDTO,
   ReplySceneGenerationInteractionDTO,
   ResumeSceneGenerationDTO,
   RetrySceneGenerationRepairDTO,
+  SceneGenerationRecoveryScopeDTO,
   SceneGenerationScopeDTO,
   StartSceneGenerationDTO
 } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type {
   SceneGenerationCandidatePreviewVO,
-  SceneGenerationHistorySummaryVO,
+  SceneGenerationForkVO,
+  SceneGenerationHistoryDetailVO,
+  SceneGenerationHistoryPageVO,
   SceneGenerationRenderProgressEventVO,
-  SceneGenerationRenderStatusVO
+  SceneGenerationRenderStatusVO,
+  SceneGenerationVerificationResultVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 
@@ -25,21 +30,16 @@ export interface SceneGenerationProgressScope {
   branchId: string
 }
 
-/** 固定生成客户端。进度只刷新界面，成功以状态查询为准。 */
 export interface SceneGenerationClient {
   start(request: StartSceneGenerationDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
-  /**
-   * 从已失败的修复阶段重跑。请求原样带来源操作、线程、分支、检查点、候选和确认正文；
-   * 客户端不重建身份，也不补路径或检查点内部。
-   */
   retryRepair(
     request: RetrySceneGenerationRepairDTO
   ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
-  status(request: SceneGenerationScopeDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
   /**
-   * 读取当前场景最近一次生成的安全状态，用于刷新或历史为空时恢复运行中、等待模型。
-   * 最近一次操作可能还没有检查点；没有执行记录时 `data` 为 null。
+   * 读取指定操作的安全状态。失败信封只在仓储确认操作不存在时带
+   * `FailureReasons.sceneGenerationOperationMissing`；检查点读取失败不带。
    */
+  status(request: SceneGenerationScopeDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
   latest(request: {
     projectId: string
     sceneId: string
@@ -49,26 +49,48 @@ export interface SceneGenerationClient {
   ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
   pause(request: SceneGenerationScopeDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
   resume(request: ResumeSceneGenerationDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
+  /**
+   * 继续尚未产生检查点的崩溃现场。只提交操作、线程和分支身份；
+   * 已有检查点、待核对或仍有活动代次的操作由主进程拒绝。
+   */
+  resumeUnfinished(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
+  /**
+   * 已提交但清理未完成时只重试清理；不重开生成、不再次提交。
+   */
+  retryCleanup(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
   cancel(request: SceneGenerationScopeDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
+  /**
+   * 按操作五元身份重新核对真实写入/提交事实，不新增提交或模型调用。
+   * 证据仍不足时返回 `stillPending`，页面保持待核对现场。
+   */
+  verifyUnknownResult(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<AjaxResult<SceneGenerationVerificationResultVO>>
   listHistory(
     request: ListSceneGenerationHistoryForSceneDTO
-  ): Promise<AjaxResult<readonly SceneGenerationHistorySummaryVO[]>>
+  ): Promise<AjaxResult<SceneGenerationHistoryPageVO>>
   readCheckpoint(
     request: ReadSceneGenerationCheckpointDTO
-  ): Promise<AjaxResult<SceneGenerationHistorySummaryVO>>
+  ): Promise<AjaxResult<SceneGenerationHistoryDetailVO>>
+  /**
+   * 从 AI 历史创建新分支。只提交来源分支、检查点和已批准策略；
+   * 来源资格与新操作身份由主进程重新证明和生成。
+   */
+  fork(
+    request: ForkSceneGenerationFromHistoryDTO
+  ): Promise<AjaxResult<SceneGenerationForkVO>>
   openPreview(
     request: OpenSceneGenerationCandidatePreviewDTO
   ): Promise<AjaxResult<SceneGenerationCandidatePreviewVO>>
   closePreview(request: CloseSceneGenerationCandidatePreviewDTO): Promise<AjaxResult<null>>
-  /**
-   * 订阅进度事件。先注册渲染监听再向主进程发送订阅请求；订阅失败通过 `onError`
-   * 回传安全文案，调用方需自行用状态查询兜底。返回同步退订函数。
-   */
   subscribeProgress(
     scope: SceneGenerationProgressScope,
     listener: (event: SceneGenerationRenderProgressEventVO) => void,
     onError?: (message: string) => void
   ): () => void
-  /** 断线后重新读取状态。进度事件不能代替这次查询。 */
   reconnect(request: SceneGenerationScopeDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
 }

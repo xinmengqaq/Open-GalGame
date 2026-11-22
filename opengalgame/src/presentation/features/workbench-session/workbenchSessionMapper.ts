@@ -26,7 +26,6 @@ export type DraftSource = {
   viewport: SessionViewport
 }
 
-/** 从会话草稿构造可发送的整份编排。布局与视口随保存提交。 */
 export function draftArrangementOf(state: DraftSource): SceneCanvasArrangementVO {
   return {
     projectId: state.projectId,
@@ -38,7 +37,6 @@ export function draftArrangementOf(state: DraftSource): SceneCanvasArrangementVO
   }
 }
 
-/** 会话快照。撤销栈只保存卡片、关联、布局和视口。 */
 export function snapshotOf(
   state: Pick<DraftSource, 'cards' | 'relations' | 'viewport'>
 ): SessionSnapshot {
@@ -69,14 +67,12 @@ export function cloneCard(card: SessionCard): SessionCard {
     return {
       ...card,
       layout: { ...card.layout },
-      // 旧记录没有引用字段；读取时归一为空数组，不补造任何身份。
       references: (card.references ?? []).map((reference) => ({ ...reference }))
     }
   }
   return { ...card, layout: { ...card.layout } }
 }
 
-/** 可保存内容的指纹。选中状态、文档层和撤销栈不参与。 */
 export function draftFingerprint(
   cards: readonly SessionCard[],
   relations: readonly SessionRelation[],
@@ -99,7 +95,6 @@ export function snapshotFingerprint(snapshot: SessionSnapshot): string {
   return draftFingerprint(snapshot.cards, snapshot.relations, snapshot.viewport)
 }
 
-/** 把读取结果拆成会话草稿。卡片按服务端原样保留，不补字段。 */
 export function arrangementDraftOf(arrangement: SceneCanvasArrangementVO): SessionSnapshot {
   return {
     cards: arrangement.cards.map(cloneCard),
@@ -108,7 +103,6 @@ export function arrangementDraftOf(arrangement: SceneCanvasArrangementVO): Sessi
   }
 }
 
-/** 默认卡片尺寸和落点。坐标由调用方给出，应用层不猜位置。 */
 export function layoutAt(kind: SessionCardKind, x: number, y: number): SessionCardLayout {
   const size = defaultCardSize(kind)
   return { x: Math.round(x), y: Math.round(y), width: size.width, height: size.height }
@@ -132,7 +126,6 @@ export function sourceReadable(
   return detail !== undefined
 }
 
-/** 只保留仍出现在摘要中的来源详情。 */
 export function retainSourceDetails(
   summaries: readonly ProjectInputSourceSummaryVO[],
   details: Readonly<Record<string, ProjectInputSourceVO>>
@@ -156,7 +149,6 @@ export function sourceNameOf(
   return '来源信息不可用'
 }
 
-/** 已有文档卡的正文事实只来自工程文件详情，不复制进编排。 */
 export function sourceDocumentFacts(
   card: SessionSourceCard,
   detail: ProjectInputSourceVO | undefined
@@ -182,7 +174,6 @@ export function sourceDocumentFacts(
   }
 }
 
-/** 按素材原始宽高得到预览卡片尺寸，长边保持在当前宽度内。 */
 export function layoutForNaturalPreview(
   layout: SessionCardLayout,
   naturalWidth: number,
@@ -193,7 +184,6 @@ export function layoutForNaturalPreview(
   return { ...layout, width, height: Math.max(96, Math.round(width * ratio)) }
 }
 
-/** 规范化标题。空字符串表示非法。 */
 export function normalizeCardTitle(title: string): string | null {
   const next = title.trim()
   return next.length > 0 ? next : null

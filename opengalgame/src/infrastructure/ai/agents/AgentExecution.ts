@@ -26,9 +26,7 @@ export interface AgentRunContext {
   contentStore?: ExternalContentStore
   requiredMessageIds?: readonly string[]
   progress?: AgentProgressObserver
-  /** 本次生成或修复。缺失时按生成处理，不从提示文本推断。 */
   executionMode?: AgentExecutionMode
-  /** 当前权威候选文件集合。本轮新写入由 written-file ledger 单独记录，不以它判断候选是否存在。 */
   writtenFiles?: readonly string[]
 }
 

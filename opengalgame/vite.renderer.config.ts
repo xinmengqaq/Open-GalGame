@@ -23,7 +23,6 @@ function readAppVersion(): string {
 
 export const appVersion = readAppVersion()
 
-/** Electron 与端到端夹具不挂真实文件后端；普通 Vite 开发服务默认挂上。 */
 function browserFilesMode(): 'real' | 'fixture' {
   if (process.argv.some((arg) => arg.includes('electron-vite'))) return 'fixture'
   if (process.env.OPENGALGAME_BROWSER_FILES === 'fixture') return 'fixture'
@@ -52,7 +51,6 @@ export const rendererConfig: UserConfig = {
   plugins: [react(), tailwindcss(), ...(browserFiles === 'real' ? [browserDevFilesPlugin()] : [])],
   resolve: {
     alias: rendererAliases,
-    // md-blockkit 通过 file: 子模块链接，包内自带 node_modules/react；强制从应用根解析，避免打包后出现两份 React。
     dedupe: ['react', 'react-dom']
   },
   server: {

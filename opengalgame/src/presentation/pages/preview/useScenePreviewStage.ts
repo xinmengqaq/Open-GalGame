@@ -58,7 +58,6 @@ export interface UseScenePreviewStageResult {
   readonly position: PreviewPositionVO
   readonly stageBusy: boolean
   readonly iframeLoaded: boolean
-  /** 画面已到达但还没有真实句位：正在处理语言和标题层，不能当作就绪。 */
   readonly startupPending: boolean
   readonly frameToken: number
   readonly controlsBlockedReason: string | null
@@ -114,10 +113,6 @@ function retryableLocateFailure(failure: PreviewFailureView): boolean {
   )
 }
 
-/**
- * 当前场景的舞台会话：订阅、准备、按句定位、草稿和相邻句切换。
- * 只把真实返回和事件写入状态；iframe load 只允许触发一次真实定位，不代表引擎就绪。
- */
 export function useScenePreviewStage({
   client,
   projectId,
@@ -190,7 +185,6 @@ export function useScenePreviewStage({
       try {
         if (token === queueTokenRef.current) await work()
       } catch {
-        // 客户端把请求失败收成响应；队列不能因单个任务失败而中断。
       } finally {
         workCountRef.current = Math.max(0, workCountRef.current - 1)
         if (workCountRef.current === 0) setStageBusy(false)

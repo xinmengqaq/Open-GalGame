@@ -6,7 +6,9 @@ const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
 
 const appRoot = resolve(__dirname, '..', '..')
-const evidenceDir = join(appRoot, 'artifacts', 'scene-export-r25')
+const evidenceDir = process.env.OPENGALGAME_SCENE_EXPORT_EVIDENCE_DIR
+  ? resolve(process.env.OPENGALGAME_SCENE_EXPORT_EVIDENCE_DIR)
+  : join(appRoot, 'artifacts', 'scene-export-r25')
 const projectId = 'p-r25'
 const sceneId = 'scene-1'
 const savedRequestId = 'request-saved-r25'
@@ -16,26 +18,54 @@ const contentBasis = {
   engineVersion: '4.6.5'
 }
 const savedVersion = {
-  requestId: savedRequestId,
+  versionReference: { kind: 'preview-save', requestId: savedRequestId },
   revisionDigest: 'a'.repeat(64),
   contentBasis
 }
+const selectionId = '00000000-0000-4000-8000-000000000000'
+const completedStatus = {
+  projectId,
+  sceneId,
+  operationId: 'fixture-operation',
+  threadId: 'fixture-thread',
+  branchId: 'fixture-branch',
+  checkpointId: 'fixture-checkpoint',
+  state: 'succeeded',
+  stage: 'completed',
+  stageMessage: '场景生成已完成',
+  attempt: 0,
+  sequence: 3,
+  canPause: false,
+  canResume: false,
+  canCancel: false,
+  inputSummary: {
+    canvasId: 'fixture-canvas',
+    arrangementVersion: '1',
+    documentCount: 0,
+    assetCount: 0,
+    promptCount: 0,
+    fieldBindingCount: 0,
+    relationCount: 0,
+    confirmedControlCount: 0
+  },
+  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, tokenLimit: null },
+  previewAvailable: false,
+  result: { commitId: 'fixture-commit' }
+}
+const historySummary = {
+  projectId,
+  sceneId,
+  operationId: 'fixture-operation',
+  threadId: 'fixture-thread',
+  branchId: 'fixture-branch',
+  checkpointId: 'fixture-checkpoint',
+  boundary: 'committed',
+  stage: 'completed',
+  message: '场景生成已完成',
+  createdAt: '2026-11-20T00:00:00.000Z'
+}
 const openDirectoryFailureNote = '无法打开文件夹，请手动打开上面的路径'
 
-/**
- * R25「打开所在文件夹」页面回归。
- *
- * 真实装配：隔离临时用户目录 + real 模式 Vite + 真实工程，不使用产品夹具冒充导出。
- * 只断言用户可见行为：进行中/禁用、失败内联提示、收起后不复活、目录与提示一致。
- *
- * 明确边界：
- * - 成功路径在 dev 调用边界截断 `openDirectory` 响应，不启动资源管理器，
- *   不声称真实 OS 打开成功。
- * - 失败路径把导出目录指向不存在的路径，让真实 system-path 校验在系统打开前拒绝。
- * - 取消/收起：产品没有取消打开动作；用户可在进行中收起提示，
- *   请求继续，迟到结果不得回填到已收起的提示。
- * - 导出/最近保存的 dev 响应只用于稳定构造成功提示，不验证 Windows 打包。
- */
 const screenViewport = (() => {
   if (process.platform !== 'win32') return null
   try {
@@ -177,7 +207,6 @@ async function stopChildren() {
       try {
         execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' })
       } catch {
-        // 进程已经退出。
       }
     }
   }
@@ -211,7 +240,7 @@ function isDevCall(request, method) {
 function latestSaveResult() {
   return {
     code: 2000,
-    msg: '最近预览保存已读取',
+    msg: '最新可导出正式版本已返回',
     data: savedVersion
   }
 }
@@ -257,20 +286,71 @@ function exportButton(page) {
 }
 
 function exportNotice(page) {
-  return page.getByRole('status').filter({ hasText: '已导出' })
+  return page.getByTestId('scene-export-notice')
 }
 
-/** 按钮文案在打开中会变成「正在打开…」，用两种状态共用同一 locator。 */
+async function rectOf(locator) {
+  return locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return {
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left
+    }
+  })
+}
+
+function expectSameRects(before, after, keys) {
+  for (const key of keys) {
+    for (const edge of ['x', 'y', 'width', 'height', 'top', 'right', 'bottom', 'left']) {
+      expect(Math.abs(after[key][edge] - before[key][edge]), `${key}.${edge}`).toBeLessThanOrEqual(
+        0.5
+      )
+    }
+  }
+}
+
+function overlaps(a, b) {
+  return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)
+}
+
+/** 浮动提示只占用操作栏空白，不压住选项、选择按钮或底部操作按钮。 */
+function assertHintClearsControls(measured) {
+  for (const key of ['options', 'choose', 'cancel', 'confirm']) {
+    expect(overlaps(measured.hint, measured[key]), `hint overlaps ${key}`).toBe(false)
+  }
+}
+
+async function openExportDialog(page) {
+  await expect(exportButton(page)).toBeEnabled({ timeout: 30000 })
+  await exportButton(page).click()
+  const dialog = page.getByRole('dialog', { name: '导出当前场景' })
+  await expect(dialog).toBeVisible()
+  return dialog
+}
+
+/** 从顶栏入口确认默认目的地；开始导出后弹窗关闭，状态条负责结果。 */
+async function startDefaultExport(page) {
+  const dialog = await openExportDialog(page)
+  await expect(dialog.getByRole('radio', { name: /工程目录（默认）/u })).toBeChecked()
+  await dialog.getByRole('button', { name: '开始导出' }).click()
+  await expect(dialog).toBeHidden()
+}
+
 function openDirectoryButton(notice) {
   return notice.getByRole('button', { name: /打开所在文件夹|正在打开…/ })
 }
 
-/** 只铺设页面装载与导出提示所需的三类 dev 调用；其余请求交给真实 dev backend。 */
 async function installExportRoutes(page, directoryPath, onOpenDirectory) {
   await page.route('**/__opengalgame/dev/call', async (route) => {
     const payload = devCallOf(route.request())
     if (payload === null) return route.continue()
-    if (payload.method === 'readLatestPreviewSave') {
+    if (payload.method === 'readLatestSavedSceneVersion') {
       return fulfillJson(route, latestSaveResult())
     }
     if (payload.method === 'exportSavedScene') {
@@ -283,15 +363,14 @@ async function installExportRoutes(page, directoryPath, onOpenDirectory) {
   })
 }
 
-/** 导出成功提示是打开目录的唯一入口；这里只构造提示，不验证导出本身。 */
 async function openExportedScene(page, directoryPath = world.exportDirectory) {
-  await expect(exportButton(page)).toBeEnabled({ timeout: 30000 })
-  await exportButton(page).click()
+  await startDefaultExport(page)
   const notice = exportNotice(page)
   await expect(notice).toBeVisible({ timeout: 15000 })
-  await expect(notice).toContainText('已导出到：')
+  await expect(notice).toContainText('产物位置')
   await expect(notice).toContainText(directoryPath)
   await expect(notice).toHaveAttribute('title', '已生成 WebGAL.exe（2.5 MB）')
+  await expect(page.locator('[data-testid="scene-export-notice"]')).toHaveCount(1)
   return notice
 }
 
@@ -314,7 +393,6 @@ test('打开所在文件夹时显示进行中并禁用重复操作，成功后�
 
   await installExportRoutes(page, world.exportDirectory, async (route, input) => {
     openRequests.push(input)
-    /* 明确截断系统边界：不启动资源管理器，只验证页面消费者。 */
     await openGate
     await fulfillJson(route, openDirectorySuccess())
   })
@@ -327,7 +405,6 @@ test('打开所在文件夹时显示进行中并禁用重复操作，成功后�
   await expect(openButton).toBeDisabled()
   await expect(openButton).toHaveAttribute('aria-busy', 'true')
 
-  /* 禁用状态下再点一次不产生第二次目录请求。 */
   await openButton.evaluate((button) => button.click())
   await page.screenshot({ path: join(evidenceDir, 'open-directory-opening.png') })
 
@@ -354,7 +431,6 @@ test('目录不存在时保留导出结果并显示内联失败提示', async ({
 
   await installExportRoutes(page, world.missingDirectory, async (route, input) => {
     openRequests.push(input)
-    /* 继续走真实 dev backend：缺失目录在系统打开前被拒绝。 */
     return route.continue()
   })
   await openWorkbench(page)
@@ -397,7 +473,6 @@ test('打开进行中收起提示，迟到的失败不恢复旧结果', async ({
 
   await installExportRoutes(page, world.missingDirectory, async (route) => {
     await openGate
-    /* 产品没有取消打开动作：收起提示后请求继续，由真实 system-path 返回失败。 */
     return route.continue()
   })
   await openWorkbench(page)
@@ -418,7 +493,7 @@ test('打开进行中收起提示，迟到的失败不恢复旧结果', async ({
   const rejected = await (await rejectedResponse).json()
   expect(rejected).toMatchObject({ code: 4701, msg: '只能打开本机已有的目录' })
   await page.waitForTimeout(250)
-  await expect(page.getByText('已导出到：')).toHaveCount(0)
+  await expect(page.getByText('产物位置')).toHaveCount(0)
   await expect(page.getByText(openDirectoryFailureNote)).toHaveCount(0)
   await expect(exportButton(page)).toBeEnabled()
   await page.screenshot({ path: join(evidenceDir, 'open-directory-cancelled.png') })
@@ -431,5 +506,348 @@ test('打开进行中收起提示，迟到的失败不恢复旧结果', async ({
     noticeAfterDismiss: 0,
     failureNoteAfterSettle: 0,
     exportButtonEnabled: true
+  })
+})
+
+test('取消导出弹窗不发送导出请求，也不显示结果', async ({ page }) => {
+  const exportRequests = []
+  await page.route('**/__opengalgame/dev/call', async (route) => {
+    const payload = devCallOf(route.request())
+    if (payload === null) return route.continue()
+    if (payload.method === 'readLatestSavedSceneVersion') {
+      return fulfillJson(route, latestSaveResult())
+    }
+    if (payload.method === 'exportSavedScene') {
+      exportRequests.push(payload.input)
+      return fulfillJson(route, exportResult(world.exportDirectory))
+    }
+    return route.continue()
+  })
+  await openWorkbench(page)
+
+  const dialog = await openExportDialog(page)
+  await dialog.getByRole('button', { name: '取消' }).click()
+  await expect(dialog).toBeHidden()
+  expect(exportRequests).toEqual([])
+  await expect(exportNotice(page)).toHaveCount(0)
+  await expect(exportButton(page)).toBeEnabled()
+  await page.screenshot({ path: join(evidenceDir, 'destination-cancel-modal.png') })
+
+  await writeEvidence('destination-cancel-modal', {
+    viewport: page.viewportSize(),
+    boundary: '取消只关闭弹窗；未发送 exportSavedScene，未得到产物。',
+    exportRequests: exportRequests.length,
+    notice: 0,
+    exportButtonEnabled: true
+  })
+})
+
+test('选择其他位置后取消系统选择器：不导出、不显示错误、确认保持禁用', async ({ page }) => {
+  const chooseRequests = []
+  const exportRequests = []
+  await page.route('**/__opengalgame/dev/call', async (route) => {
+    const payload = devCallOf(route.request())
+    if (payload === null) return route.continue()
+    if (payload.method === 'readLatestSavedSceneVersion') {
+      return fulfillJson(route, latestSaveResult())
+    }
+    if (payload.method === 'chooseSceneExportDirectory') {
+      chooseRequests.push(payload.input)
+      return fulfillJson(route, {
+        code: 2000,
+        msg: '导出位置选择已返回',
+        data: { status: 'canceled' }
+      })
+    }
+    if (payload.method === 'exportSavedScene') {
+      exportRequests.push(payload.input)
+      return fulfillJson(route, exportResult(world.exportDirectory))
+    }
+    return route.continue()
+  })
+  await openWorkbench(page)
+
+  const dialog = await openExportDialog(page)
+  await dialog.getByRole('radio', { name: /其他位置/u }).check()
+  await dialog.getByRole('button', { name: '选择文件夹' }).click()
+  await expect.poll(() => chooseRequests.length).toBe(1)
+  await expect(dialog.getByText('尚未选择文件夹')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '开始导出' })).toBeDisabled()
+  expect(exportRequests).toEqual([])
+  await expect(exportNotice(page)).toHaveCount(0)
+  await dialog.getByRole('button', { name: '取消' }).click()
+  await expect(dialog).toBeHidden()
+  await page.screenshot({ path: join(evidenceDir, 'destination-picker-canceled.png') })
+
+  await writeEvidence('destination-picker-canceled', {
+    viewport: page.viewportSize(),
+    boundary: '系统目录选择器通过 dev 调用桩返回 canceled；只验证页面流程，不证明本机对话框行为。',
+    chooseRequests,
+    exportRequests: exportRequests.length,
+    confirmDisabled: true,
+    errorShown: false
+  })
+})
+
+test('临时反馈浮层不挤压顶栏、弹窗主体和操作栏', async ({ page }) => {
+  const longPath = join(
+    world.exportDirectory,
+    `scene-${'a'.repeat(56)}`,
+    'nested-folder-name'.repeat(3)
+  )
+  let releaseChoose
+  const chooseGate = new Promise((resolveGate) => {
+    releaseChoose = resolveGate
+  })
+
+  await page.route('**/__opengalgame/dev/call', async (route) => {
+    const payload = devCallOf(route.request())
+    if (payload === null) return route.continue()
+    if (payload.method === 'readLatestSavedSceneVersion') {
+      return fulfillJson(route, latestSaveResult())
+    }
+    if (payload.method === 'chooseSceneExportDirectory') {
+      await chooseGate
+      return fulfillJson(route, {
+        code: 2000,
+        msg: '导出位置选择已返回',
+        data: { status: 'canceled' }
+      })
+    }
+    if (payload.method === 'exportSavedScene') {
+      return fulfillJson(route, exportResult(longPath))
+    }
+    if (payload.method === 'openDirectory') {
+      return fulfillJson(route, openDirectorySuccess())
+    }
+    return route.continue()
+  })
+  await openWorkbench(page)
+  await expect(exportButton(page)).toBeEnabled({ timeout: 30000 })
+
+  const chrome = page.locator('[data-motion="chrome"]')
+  const screen = page.getByTestId('workbench-screen')
+  const saveButton = chrome.getByRole('button', { name: '保存', exact: true })
+  const toolbarBefore = {
+    chrome: await rectOf(chrome),
+    export: await rectOf(exportButton(page)),
+    save: await rectOf(saveButton),
+    scrollTop: await screen.evaluate((element) => element.scrollTop),
+    scrollLeft: await screen.evaluate((element) => element.scrollLeft)
+  }
+
+  const dialog = await openExportDialog(page)
+  await dialog.getByRole('radio', { name: /其他位置/u }).check()
+  const chooseButton = dialog.getByTestId('scene-export-choose')
+  await expect(chooseButton).toHaveText('选择文件夹')
+
+  const measureDialog = async () => ({
+    dialog: await rectOf(dialog),
+    options: await rectOf(dialog.locator('fieldset')),
+    choose: await rectOf(chooseButton),
+    footer: await rectOf(dialog.locator('footer')),
+    cancel: await rectOf(dialog.getByRole('button', { name: '取消' })),
+    confirm: await rectOf(dialog.getByRole('button', { name: '开始导出' })),
+    hint: await rectOf(dialog.getByRole('status'))
+  })
+
+  const baseline = await measureDialog()
+  await page.screenshot({ path: join(evidenceDir, 'feedback-layout-dialog-baseline.png') })
+
+  await chooseButton.click()
+  await expect(dialog.getByText('正在打开系统文件夹选择器…')).toBeVisible()
+  const choosing = await measureDialog()
+  expectSameRects(baseline, choosing, [
+    'dialog',
+    'options',
+    'choose',
+    'footer',
+    'cancel',
+    'confirm'
+  ])
+  assertHintClearsControls(choosing)
+  await page.screenshot({ path: join(evidenceDir, 'feedback-layout-dialog-choosing.png') })
+
+  releaseChoose()
+  await expect(dialog.getByText('正在打开系统文件夹选择器…')).toHaveCount(0)
+  await expect(dialog.getByText('尚未选择文件夹')).toBeVisible()
+  const canceled = await measureDialog()
+  expectSameRects(choosing, canceled, [
+    'dialog',
+    'options',
+    'choose',
+    'footer',
+    'cancel',
+    'confirm'
+  ])
+  assertHintClearsControls(canceled)
+  await page.screenshot({ path: join(evidenceDir, 'feedback-layout-dialog-canceled.png') })
+
+  await dialog.getByRole('button', { name: '取消' }).click()
+  await expect(dialog).toBeHidden()
+
+  const exportDialog = await openExportDialog(page)
+  await expect(exportDialog.getByRole('radio', { name: /工程目录（默认）/u })).toBeChecked()
+  await exportDialog.getByRole('button', { name: '开始导出' }).click()
+  await expect(exportDialog).toBeHidden()
+
+  const notice = exportNotice(page)
+  await expect(notice).toBeVisible({ timeout: 15000 })
+  await expect(notice).toContainText(longPath)
+  await expect(page.getByTestId('scene-export-notice')).toHaveCount(1)
+  await expect(page.getByText('产物位置')).toHaveCount(1)
+  await expect(page.getByText('已导出', { exact: true })).toHaveCount(1)
+
+  const toolbarAfter = {
+    chrome: await rectOf(chrome),
+    export: await rectOf(exportButton(page)),
+    save: await rectOf(saveButton),
+    scrollTop: await screen.evaluate((element) => element.scrollTop),
+    scrollLeft: await screen.evaluate((element) => element.scrollLeft)
+  }
+  expectSameRects(toolbarBefore, toolbarAfter, ['chrome', 'export', 'save'])
+  expect(toolbarAfter.scrollTop).toBe(toolbarBefore.scrollTop)
+  expect(toolbarAfter.scrollLeft).toBe(toolbarBefore.scrollLeft)
+
+  const noticeRect = await rectOf(notice)
+  expect(overlaps(noticeRect, toolbarAfter.chrome)).toBe(false)
+  expect(overlaps(noticeRect, toolbarAfter.export)).toBe(false)
+  expect(overlaps(noticeRect, toolbarAfter.save)).toBe(false)
+  await page.screenshot({ path: join(evidenceDir, 'feedback-layout-success-long-path.png') })
+
+  await writeEvidence('feedback-layout-stability', {
+    viewport: page.viewportSize(),
+    boundary:
+      '系统目录选择器与导出结果由 dev 调用桩返回；只验证页面反馈不参与布局，不验证本机选择器或打包。',
+    longPath,
+    dialogBaseline: baseline,
+    dialogChoosing: choosing,
+    dialogCanceled: canceled,
+    toolbarBefore,
+    toolbarAfter,
+    notice: noticeRect,
+    duplicateNoticeCount: await page.getByTestId('scene-export-notice').count(),
+    duplicatePathLabelCount: await page.getByText('产物位置').count()
+  })
+})
+
+test('选择其他位置后导出只携带 selectionId，不把展示路径回传', async ({ page }) => {
+  const chosenParent = join(world.root, 'chosen-parent')
+  const exportedPath = join(chosenParent, 'scene-fixture')
+  const chooseRequests = []
+  const exportRequests = []
+  await page.route('**/__opengalgame/dev/call', async (route) => {
+    const payload = devCallOf(route.request())
+    if (payload === null) return route.continue()
+    if (payload.method === 'readLatestSavedSceneVersion') {
+      return fulfillJson(route, latestSaveResult())
+    }
+    if (payload.method === 'chooseSceneExportDirectory') {
+      chooseRequests.push(payload.input)
+      return fulfillJson(route, {
+        code: 2000,
+        msg: '导出位置选择已返回',
+        data: {
+          status: 'selected',
+          selectionId,
+          directoryPath: chosenParent
+        }
+      })
+    }
+    if (payload.method === 'exportSavedScene') {
+      exportRequests.push(payload.input)
+      return fulfillJson(route, exportResult(exportedPath))
+    }
+    return route.continue()
+  })
+  await openWorkbench(page)
+
+  const dialog = await openExportDialog(page)
+  await dialog.getByRole('radio', { name: /其他位置/u }).check()
+  await dialog.getByRole('button', { name: '选择文件夹' }).click()
+  await expect(dialog.getByText(chosenParent)).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '开始导出' })).toBeEnabled()
+  await dialog.getByRole('button', { name: '开始导出' }).click()
+  await expect(dialog).toBeHidden()
+
+  const notice = exportNotice(page)
+  await expect(notice).toBeVisible({ timeout: 15000 })
+  await expect(notice).toContainText(exportedPath)
+  expect(chooseRequests).toEqual([{ projectId, sceneId }])
+  expect(exportRequests).toHaveLength(1)
+  expect(exportRequests[0].destination).toEqual({
+    kind: 'selected',
+    selectionId
+  })
+  expect(JSON.stringify(exportRequests[0])).not.toContain(chosenParent)
+  await page.screenshot({ path: join(evidenceDir, 'destination-selected-export.png') })
+
+  await writeEvidence('destination-selected-export', {
+    viewport: page.viewportSize(),
+    boundary:
+      '目录选择与打包结果由 dev 调用桩提供；断言传输只含 selectionId，展示路径只来自选择结果。',
+    chooseRequests,
+    exportRequest: exportRequests[0],
+    exportedPath,
+    exportNoticeVisible: true
+  })
+})
+
+test('已提交气泡的导出按钮打开同一个目的地弹窗', async ({ page }) => {
+  const exportRequests = []
+  await page.route('**/__opengalgame/dev/call', async (route) => {
+    const payload = devCallOf(route.request())
+    if (payload === null) return route.continue()
+    if (payload.method === 'readLatestSavedSceneVersion') {
+      return fulfillJson(route, latestSaveResult())
+    }
+    if (payload.method === 'listSceneGenerationHistory') {
+      return fulfillJson(route, {
+        code: 2000,
+        msg: '生成历史已返回',
+        data: [historySummary]
+      })
+    }
+    if (payload.method === 'getSceneGenerationStatus') {
+      return fulfillJson(route, {
+        code: 2000,
+        msg: '生成状态已返回',
+        data: completedStatus
+      })
+    }
+    if (payload.method === 'subscribeSceneGenerationProgress') {
+      return fulfillJson(route, { code: 2000, msg: '已订阅', data: null })
+    }
+    if (payload.method === 'exportSavedScene') {
+      exportRequests.push(payload.input)
+      return fulfillJson(route, exportResult(world.exportDirectory))
+    }
+    return route.continue()
+  })
+  await openWorkbench(page)
+  await page.getByRole('button', { name: '生成', exact: true }).click()
+  const drawer = page.getByRole('dialog', { name: '创作抽屉' })
+  await expect(drawer).toBeVisible()
+  await expect(drawer.getByText('已提交', { exact: true }).first()).toBeVisible({
+    timeout: 20000
+  })
+
+  const exportBubble = drawer.getByRole('button', { name: '导出当前场景' })
+  await expect(exportBubble).toBeEnabled({ timeout: 15000 })
+  await exportBubble.click()
+  const dialog = page.getByRole('dialog', { name: '导出当前场景' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('radio', { name: /工程目录（默认）/u })).toBeChecked()
+  await dialog.getByRole('button', { name: '取消' }).click()
+  await expect(dialog).toBeHidden()
+  expect(exportRequests).toEqual([])
+  await page.screenshot({ path: join(evidenceDir, 'destination-bubble-entry.png') })
+
+  await writeEvidence('destination-bubble-entry', {
+    viewport: page.viewportSize(),
+    boundary:
+      '生成状态与历史由 dev 调用桩提供；只验证已提交气泡按钮打开同一弹窗，不证明真实生成完成。',
+    dialogOpened: true,
+    exportRequests: exportRequests.length
   })
 })

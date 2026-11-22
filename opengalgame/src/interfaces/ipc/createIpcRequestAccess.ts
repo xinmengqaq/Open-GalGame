@@ -9,10 +9,6 @@ interface IpcWindowBinding {
   rendererUrl: string
 }
 
-/**
- * 判断调用是否来自当前受信任窗口的主框架，且仍位于预期文档。
- * 每次读取当前窗口，不沿用上一次判断。
- */
 export function isTrustedIpcSender(event: IpcMainInvokeEvent, binding: IpcWindowBinding): boolean {
   const window = binding.getWindow()
   if (

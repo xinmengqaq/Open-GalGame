@@ -19,7 +19,6 @@ interface RelationDialogProps {
   onClose: () => void
 }
 
-/** 线上标签的“特殊关系”弹窗：只编辑可选名称、查看记录并删除连线。 */
 export function RelationDialog({ relation, onClose }: RelationDialogProps): ReactElement {
   if (!relation) {
     return (

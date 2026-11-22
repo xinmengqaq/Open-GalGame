@@ -29,7 +29,6 @@ type ImportedKind =
 const catalogs = new Map<string, FixtureCatalog>()
 let importedSourceCount = 0
 
-/** 当前工程的可写夹具目录。空场景从空目录开始，其余从演示目录复制。 */
 function catalogOf(projectId: string): FixtureCatalog {
   const existing = catalogs.get(projectId)
   if (existing) return existing
@@ -71,7 +70,6 @@ export function fixturePathForDroppedFile(file: File): AjaxResult<string> {
   return { code: ErrorCodes.success, msg: '已转换路径', data: name }
 }
 
-/** 浏览器夹具：把路径导入当前目录快照。不写本机工程文件。 */
 export function fixtureImportProjectFiles(
   request: ImportProjectFilesDTO
 ): AjaxResult<ImportProjectFilesVO> {

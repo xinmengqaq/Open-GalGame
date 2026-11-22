@@ -2,9 +2,6 @@ import { AppException } from '@common/errors/AppException'
 import { ProjectFileErrorCodes } from '../errors/ProjectFileErrorCodes'
 import type { ProjectFileAssetKind, ProjectInputSource } from '../models/ProjectInputSource'
 
-/**
- * @throws {AppException} 身份、版本或必需内容不成立。
- */
 export function validateProjectInputSource(source: ProjectInputSource): void {
   requireText(source.sourceId, ProjectFileErrorCodes.blankSourceId, '来源身份不能为空')
   requireText(source.version, ProjectFileErrorCodes.blankSourceVersion, '来源版本不能为空')

@@ -13,10 +13,6 @@ const interactiveSelector =
 export type CanvasCardOpenAction =
   { kind: 'document'; cardId: string } | { kind: 'file'; request: ProjectFileScopeDTO }
 
-/**
- * 双击卡面时决定打开方式。文档走内置文档层，图片、音频、视频走系统程序。
- * 端口、缩放和表单控件不打开；连接中、断开或不可读取来源不伪造打开。
- */
 export function canvasCardOpenAction(
   card: SessionCard,
   eventTarget: EventTarget | null,
@@ -45,7 +41,6 @@ function isCanvasOpenControl(target: EventTarget | null): boolean {
     : false
 }
 
-/** 用系统默认程序打开当前工程来源。迟到结果不提示到已切换的工程。 */
 export async function openCanvasSourceFile(
   client: ProjectFilesClient,
   request: ProjectFileScopeDTO

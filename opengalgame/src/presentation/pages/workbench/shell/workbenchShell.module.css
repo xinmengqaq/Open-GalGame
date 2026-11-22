@@ -1,5 +1,3 @@
-/* 工作台顶栏、动作槽位、更多菜单与壳层反馈安全区。 */
-
 .topbar {
   position: relative;
   z-index: 20;
@@ -15,7 +13,6 @@
   border-bottom: 1px solid var(--wb-hairline);
 }
 
-/* 返回键是浮在画布上的圆形玻璃钮，不是工具栏方块。 */
 .back {
   display: grid;
   width: 38px;
@@ -96,7 +93,6 @@
   white-space: nowrap;
 }
 
-/* 场景是“点 + 文字”，不再做胶囊标签。 */
 .sceneChip {
   display: inline-flex;
   flex: none;
@@ -143,7 +139,6 @@
   align-items: center;
 }
 
-/* 辅助动作是裸文字按钮，悬停才浮出一层淡紫 wash。 */
 .secondaryAction {
   display: inline-flex;
   height: 36px;
@@ -204,7 +199,6 @@
   white-space: nowrap;
 }
 
-/* 场景工具是常驻的图标按钮，靠 tooltip 说明，不增加一排文字按钮。 */
 .sceneTools {
   display: flex;
   gap: 4px;
@@ -220,19 +214,20 @@
   border-radius: 50%;
 }
 
-/* 禁用按钮不接收指针事件：把命中让给包裹层，禁用原因才能在悬停时浮出。 */
+.sceneToolWrap[data-labeled='true'] {
+  border-radius: var(--wb-radius-pill);
+}
+
 .sceneToolWrap[data-hint='true'] .sceneTool:disabled {
   pointer-events: none;
 }
 
-/* 禁用按钮也不可聚焦：包裹层承接键盘焦点，视觉沿用图标钮的淡紫 wash 与焦点环。 */
 .sceneToolWrap[data-hint='true']:focus-visible {
   outline: none;
   background: var(--wb-wash-lilac-soft);
   box-shadow: var(--wb-focus);
 }
 
-/* 禁用原因浮层：沿用「更多」菜单的玻璃浮层语言，默认收起，悬停或聚焦时浮出。 */
 .sceneToolHint {
   position: absolute;
   top: calc(100% + 10px);
@@ -288,6 +283,22 @@
     transform var(--wb-duration-fast) var(--wb-ease);
 }
 
+.sceneTool[data-labeled='true'] {
+  width: auto;
+  min-width: 34px;
+  grid-auto-flow: column;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: var(--wb-radius-pill);
+}
+
+.sceneToolLabel {
+  color: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .sceneTool:hover:not(:disabled) {
   background: var(--wb-wash-lilac-soft);
   color: var(--wb-accent-strong);
@@ -315,178 +326,6 @@
   height: 17px;
 }
 
-.sceneTaskSpinner {
-  animation: save-spin 0.9s linear infinite;
-}
-
-.sceneTaskStatus {
-  display: inline-flex;
-  max-width: 176px;
-  min-height: 28px;
-  gap: 6px;
-  align-items: center;
-  margin-left: 6px;
-  padding: 0 6px 0 9px;
-  border-radius: var(--wb-radius-pill);
-  background: var(--wb-surface-glass);
-  box-shadow: var(--wb-shadow-chip);
-  color: var(--wb-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.sceneTaskStatus[data-tone='busy'] {
-  color: var(--wb-accent-strong);
-}
-
-.sceneTaskStatus[data-tone='ok'] {
-  background: color-mix(in srgb, var(--teal) 14%, var(--paper-strong));
-  color: var(--wb-positive-strong);
-}
-
-.sceneTaskStatus[data-tone='danger'],
-.sceneTaskStatus[data-tone='warning'] {
-  background: color-mix(in srgb, var(--rose) 12%, var(--paper-strong));
-  color: var(--wb-danger);
-}
-
-.sceneTaskStatusIcon {
-  display: grid;
-  flex: none;
-  place-items: center;
-}
-
-.sceneTaskStatusIcon svg {
-  width: 14px;
-  height: 14px;
-}
-
-.sceneTaskStatusLabel {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 导出成功时补一行产物绝对路径与打开动作；仍是一条内联状态，不另开浮层。 */
-.sceneTaskStatus[data-expanded='true'] {
-  flex-wrap: wrap;
-  max-width: min(400px, 44vw);
-  padding: 6px 6px 6px 9px;
-  border-radius: var(--wb-radius-control);
-  white-space: normal;
-  row-gap: 5px;
-}
-
-.sceneTaskStatusBody {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 3px 10px;
-  align-items: center;
-}
-
-.sceneTaskStatusPath {
-  display: inline-flex;
-  min-width: 0;
-  gap: 2px;
-  align-items: baseline;
-  color: var(--wb-text);
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  word-break: break-all;
-}
-
-.sceneTaskStatusPathLabel {
-  flex: none;
-  color: var(--wb-text-muted);
-}
-
-.sceneTaskStatusPathValue {
-  min-width: 0;
-}
-
-.sceneTaskStatusActions {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.sceneTaskStatusAction {
-  display: inline-flex;
-  height: 24px;
-  gap: 5px;
-  align-items: center;
-  padding: 0 9px;
-  border: 0;
-  border-radius: var(--wb-radius-pill);
-  background: color-mix(in srgb, var(--teal) 16%, var(--paper-strong));
-  color: var(--wb-positive-strong);
-  font-size: 11.5px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.sceneTaskStatusAction:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--teal) 26%, var(--paper-strong));
-}
-
-.sceneTaskStatusAction:focus-visible {
-  outline: none;
-  box-shadow: var(--wb-focus);
-}
-
-.sceneTaskStatusAction:disabled {
-  opacity: 0.62;
-  cursor: default;
-}
-
-.sceneTaskStatusAction svg {
-  width: 13px;
-  height: 13px;
-  flex: none;
-}
-
-.sceneTaskStatusError {
-  grid-column: 1 / -1;
-  color: var(--wb-danger);
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.sceneTaskStatusDismiss {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  flex: none;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: currentColor;
-  opacity: 0.65;
-}
-
-.sceneTaskStatusDismiss:hover {
-  background: color-mix(in srgb, currentColor 14%, transparent);
-  opacity: 1;
-}
-
-.sceneTaskStatusDismiss:focus-visible {
-  outline: none;
-  box-shadow: var(--wb-focus);
-}
-
-.sceneTaskStatusDismiss svg {
-  width: 12px;
-  height: 12px;
-}
-
 .saveCluster {
   display: flex;
   gap: 10px;
@@ -494,7 +333,6 @@
   margin-left: 8px;
 }
 
-/* 保存结果是一条轻状态轨：字形 + 短文案，底色随语义轻微变化。 */
 .saveState {
   display: inline-flex;
   max-width: 138px;
@@ -595,7 +433,6 @@
   text-overflow: ellipsis;
 }
 
-/* 全屏只有一个实心主操作：无边框主按钮，软浮在画布上。 */
 .saveButton {
   display: inline-flex;
   min-height: 38px;
@@ -647,7 +484,6 @@
   height: 16px;
 }
 
-/* 更多动作菜单 */
 
 .moreWrap {
   position: static;
@@ -803,7 +639,6 @@
   white-space: nowrap;
 }
 
-/* 反馈固定悬浮在顶栏下方的中央安全位；不按遮挡关系跳到任意角落。 */
 .shelf {
   position: fixed;
   top: calc(var(--feedback-top, 64px) + 24px);
@@ -827,11 +662,6 @@
   transform: translate(-50%, 0);
 }
 
-/*
- * 原生居中弹窗内部：反馈改为操作栏之前的流内一条。
- * 弹窗自身带 backdrop-filter，会成为 fixed 子元素的包含块，固定浮层会盖住标题和输入；
- * 这里不覆盖弹窗内容，也不改 Dialog 的居中方式。右侧抽屉仍走上面的固定浮层。
- */
 .shelf[data-host='dialog'] {
   position: static;
   width: auto;
@@ -849,7 +679,6 @@
   transform: none;
 }
 
-/* 工作台主题弹窗正文用 30px 内边距，反馈条与正文左右对齐。 */
 :global(dialog[data-theme='workbench']) .shelf[data-host='dialog'] {
   margin-inline: 30px;
 }
@@ -965,26 +794,6 @@
   .actionSlot {
     width: 100%;
     justify-content: flex-end;
-  }
-}
-
-@media (max-width: 760px) {
-  .sceneTaskStatus {
-    max-width: none;
-    padding: 0 4px;
-  }
-
-  .sceneTaskStatusLabel {
-    display: none;
-  }
-
-  .sceneTaskStatus[data-expanded='true'] {
-    max-width: min(100%, 360px);
-    padding: 6px 6px 6px 9px;
-  }
-
-  .sceneTaskStatus[data-expanded='true'] .sceneTaskStatusLabel {
-    display: inline;
   }
 }
 

@@ -44,7 +44,6 @@ export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps)
   const overlayRef = useRef<HTMLDivElement>(null)
   const clipRef = useRef<HTMLParagraphElement>(null)
 
-  // busy 开始时立即丢掉拖入高亮；busy 结束只更新快照，不让高亮自己复活。
   if (wasBusy !== catalog.busy) {
     setWasBusy(catalog.busy)
     if (catalog.busy) setDropActive(false)
@@ -134,8 +133,6 @@ export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps)
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onContextMenu={(event) => {
-        // 文档编辑器等内容通过 Portal 渲染到 body，React 事件仍会冒泡到本面板；
-        // 只接管真正落在文件区 DOM 内的右键，避免文件菜单覆盖文档自己的浮层。
         if (!event.currentTarget.contains(event.target as Node)) return
         event.preventDefault()
         catalog.openBlankMenu(event)

@@ -4,10 +4,6 @@ import { sameFileName } from './fileNameFacts'
 
 export type FileMoveDecision = { changed: false } | { changed: true }
 
-/**
- * 判断文件移动。原归属变化、目标同名时失败；目标即当前父目录时不提交。
- * @throws {AppException} 归属已变化或目标名称被占用。
- */
 export function evaluateFileMove(facts: {
   currentParentFolderId: string | null
   expectedParentFolderId: string | null

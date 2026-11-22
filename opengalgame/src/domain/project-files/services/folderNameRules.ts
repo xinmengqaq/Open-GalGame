@@ -7,18 +7,10 @@ const MAX_COPY_SUFFIX = 9999
 
 export type FolderRenameDecision = { changed: false } | { changed: true; name: string }
 
-/**
- * 校验文件夹名称。不修剪输入，也不接受路径。
- * @throws {AppException} 名称空白或包含路径成分。
- */
 export function requireFolderName(name: string): void {
   requireSingleFileName(name)
 }
 
-/**
- * 判断文件夹重命名。名称未变化时不需要提交。
- * @throws {AppException} 名称无效或已被占用。
- */
 export function evaluateFolderRename(
   currentName: string,
   newName: string,
@@ -36,10 +28,6 @@ export function evaluateFolderRename(
   return { changed: true, name: newName }
 }
 
-/**
- * 为文件夹副本选择未占用名称。冲突时在名称后追加序号。
- * @throws {AppException} 名称无效或序号用尽。
- */
 export function chooseFolderCopyName(name: string, occupiedNames: readonly string[]): string {
   requireFolderName(name)
   if (!occupiedNames.some((occupied) => sameFileName(occupied, name))) return name
@@ -53,10 +41,6 @@ export function chooseFolderCopyName(name: string, occupiedNames: readonly strin
   })
 }
 
-/**
- * @param parentFolderId - 目标父目录。根目录为 null。
- * @param exceptId - 不计入占用的对象身份。
- */
 export function namesInParent(
   folders: readonly ProjectFolder[],
   sourceNames: readonly { sourceId: string; name: string; parentFolderId: string | null }[],

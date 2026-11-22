@@ -14,10 +14,6 @@ interface VersionHistoryRecoveryBarProps {
   onDiscard: () => void
 }
 
-/**
- * 撤销成功后保留的会话草稿恢复条。它属于工作台页面壳，不放进抽屉，
- * 也不写入作品历史；样式独立于已删除的历史抽屉。
- */
 export function VersionHistoryRecoveryBar({
   draft,
   canRestore,

@@ -11,10 +11,6 @@ import { app } from 'electron'
 
 const unsupportedMessage = '当前运行形态不支持应用内更新'
 
-/**
- * 真实 electron-updater 发布源。
- * 发布地址只来自安装包内的 app-update.yml，不在运行时接收地址；库自身日志关闭，只向应用 logger 记录分类。
- */
 export class ElectronUpdaterGatewayImpl implements UpdateReleaseGateway {
   private activeProgressListener: ((info: ProgressInfo) => void) | undefined
 
@@ -87,7 +83,6 @@ export class ElectronUpdaterGatewayImpl implements UpdateReleaseGateway {
     }
   }
 
-  /** 释放库事件监听，避免窗口重载或退出阶段留下悬挂回调。 */
   dispose(): void {
     autoUpdater.off('error', this.handleUpdaterError)
     if (this.activeProgressListener !== undefined) {

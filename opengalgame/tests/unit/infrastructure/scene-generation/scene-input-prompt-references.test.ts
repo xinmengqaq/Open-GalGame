@@ -220,12 +220,6 @@ describe('提示词卡片引用进入生成输入', () => {
   })
 })
 
-/**
- * G07 基线：旧 v4（字面量 4）、旧 v3 与 R11 当前 v5 的 title/summary/usage/
- * defaultRelation/references/relations 进入 SceneGenerationInputsDTO 的真实结果。
- * 旧 v4 fixture 使用字面量 4，不绑定可变版本常量；v4 缺失的业务字段只能是读取默认值，
- * 不能与旧 v3 或当前 v5 的真实保存值混为一谈。
- */
 describe('当前与旧画布字段进入生成输入的基线（G07）', () => {
   it('v4（字面量 4）：源卡片 title/summary 保留，prompt 标题与全部 usage/defaultRelation 是读取默认值', async () => {
     const root = await temporaryProject()
@@ -500,10 +494,6 @@ describe('当前与旧画布字段进入生成输入的基线（G07）', () => {
   })
 })
 
-/**
- * R11 修正：旧 v4 生成输入必须保持 R11 前的适配与校验语义。
- * 这些用例只经真实 readInputs 消费者观察错误码和文案，直接读写真实磁盘文件。
- */
 describe('旧 v4 生成输入错误码与引用顺序（R11）', () => {
   type PlainDocument = Record<string, unknown>
 
@@ -535,7 +525,6 @@ describe('旧 v4 生成输入错误码与引用顺序（R11）', () => {
       mutate: (document: PlainDocument) => void,
       _oldReadError: { code: number; message: string }
     ): Promise<void> => {
-      // 旧读错误码与文案保留在此作为职责映射记录；迁移工具统一判 damaged。
       void _oldReadError
       const document = structuredClone(base)
       mutate(document)
@@ -652,7 +641,6 @@ describe('旧 v4 生成输入错误码与引用顺序（R11）', () => {
       mutate: (document: PlainDocument) => void,
       _oldReadError: { code: number; message: string; reason?: string }
     ): Promise<void> => {
-      // 旧读错误码/reason 保留在此作为职责映射记录；迁移工具统一判 damaged。
       void _oldReadError
       const document = structuredClone(base)
       mutate(document)
@@ -899,11 +887,6 @@ async function writeMediaArrangement(
   )
 }
 
-/**
- * 同一组业务值分别写成旧 v4（字面量 4）、旧 v3 与当前 v5：
- * - 旧 v4 只允许源卡片 title/summary；prompt/字段卡没有 title/summary/usage，关系没有 defaultRelation。
- * - 旧 v3 与当前 v5 的全部卡片与关系都保存 title/summary/usage/defaultRelation。
- */
 async function writeFieldArrangement(
   root: string,
   formatVersion: number
@@ -1006,10 +989,6 @@ async function writeFieldArrangement(
   return document
 }
 
-/**
- * arrangementVersion 是读入口公开的画布文件内容摘要，生成启动用它检测文件漂移：
- * 文件未变时重复读取稳定，仅布局变化也必须得到不同的值。
- */
 async function expectArrangementVersionTracksCanvasFile(
   root: string,
   document: Record<string, unknown>,

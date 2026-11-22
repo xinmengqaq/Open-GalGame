@@ -10,10 +10,6 @@ import {
   WEBGAL_COMPATIBILITY_PROFILE
 } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
 
-/**
- * 返回当前进程固定安装的解析器和引擎版本。
- * 不读取脚本，不启动引擎，失败不沿用旧版本。
- */
 export class SceneCompatibilityGatewayImpl implements SceneCompatibilityGateway {
   async readSceneCompatibility(): Promise<SceneCompatibilityFacts> {
     try {

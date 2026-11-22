@@ -13,7 +13,6 @@ const blockedMessages = {
   readUnavailable: '当前场景暂时无法读取'
 } as const
 
-/** 只判断当前场景的产物可用性，不读取正文、不接触运行时。 */
 export class PreviewAvailabilityService {
   constructor(private readonly deps: { readonly artifacts: ScenePreviewArtifactGateway }) {}
 

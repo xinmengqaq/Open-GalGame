@@ -118,21 +118,23 @@ describe('编排登记路径', () => {
         } as SceneGenerationExecution
       })
     ) as {
-      assetBindings: {
-        category: string
-        commandReference: string
-        relativePath: string
-      }[]
+      inputs: {
+        assets: {
+          category: string
+          commandReference: string
+          relativePath: string
+        }[]
+      }
     }
 
-    expect(assembled.assetBindings[0]).toMatchObject({
+    expect(assembled.inputs.assets[0]).toMatchObject({
       relativePath: registeredPath,
       commandReference,
       category: 'image'
     })
-    expect(assembled.assetBindings[0]).not.toHaveProperty('purpose')
-    expect(assembled.assetBindings[0]).not.toHaveProperty('defaultRuntimeDirectory')
-    expect(assembled.assetBindings[0]).not.toHaveProperty('role')
+    expect(assembled.inputs.assets[0]).not.toHaveProperty('purpose')
+    expect(assembled.inputs.assets[0]).not.toHaveProperty('defaultRuntimeDirectory')
+    expect(assembled.inputs.assets[0]).not.toHaveProperty('role')
   })
 
   it('音频类别只作命令族提示，说明和稳定引用不随类别改写', () => {
@@ -165,21 +167,23 @@ describe('编排登记路径', () => {
         } as SceneGenerationExecution
       })
     ) as {
-      assetBindings: {
-        category: string
-        description: string
-        relativePath: string
-        commandReference: string
-      }[]
+      inputs: {
+        assets: {
+          category: string
+          description: string
+          relativePath: string
+          commandReference: string
+        }[]
+      }
     }
 
-    expect(assembled.assetBindings[0]).toMatchObject({
+    expect(assembled.inputs.assets[0]).toMatchObject({
       category: 'audio',
       description: '下压音效',
       relativePath: audioPath,
       commandReference: `${audioKey}/duck.ogg`
     })
-    expect(assembled.assetBindings[0]).not.toHaveProperty('defaultRuntimeDirectory')
-    expect(assembled.assetBindings[0]).not.toHaveProperty('runtimeDirectory')
+    expect(assembled.inputs.assets[0]).not.toHaveProperty('defaultRuntimeDirectory')
+    expect(assembled.inputs.assets[0]).not.toHaveProperty('runtimeDirectory')
   })
 })

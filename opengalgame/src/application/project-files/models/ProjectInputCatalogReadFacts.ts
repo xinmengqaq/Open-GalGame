@@ -5,7 +5,6 @@ export type CatalogSourceFact = ProjectInputSourceSummary & {
   parentFolderId: string | null
 }
 
-/** 同一次读取窗口内的目录、归属和来源摘要。 */
 export type ProjectInputCatalogReadFact = {
   projectId: string
   catalogVersion: string

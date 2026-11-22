@@ -89,7 +89,6 @@ function preview(issues: CandidatePreviewVO['issues']): CandidatePreviewVO {
   }
 }
 
-/** 已打开但尚未读取的候选会话。 */
 function openedCandidateState(): CandidatePreviewState {
   const started = candidatePreviewReducer(initialCandidatePreviewState, {
     type: 'start',
@@ -108,7 +107,6 @@ function openedCandidateState(): CandidatePreviewState {
   })
 }
 
-/** 打开并读取完成的候选会话；不等舞台 ready，读取问题已经可用。 */
 function readCandidateState(issues: CandidatePreviewVO['issues'] = []): CandidatePreviewState {
   return candidatePreviewReducer(
     candidatePreviewReducer(openedCandidateState(), { type: 'read-started' }),
@@ -119,7 +117,6 @@ function readCandidateState(issues: CandidatePreviewVO['issues'] = []): Candidat
   )
 }
 
-/** 已打开但读取失败的候选会话。 */
 function readFailedCandidateState(): CandidatePreviewState {
   return candidatePreviewReducer(
     candidatePreviewReducer(openedCandidateState(), { type: 'read-started' }),

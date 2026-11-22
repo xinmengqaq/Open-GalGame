@@ -28,10 +28,6 @@ export type ExchangeResult =
   | { readonly status: 'timeout'; readonly timedOut: boolean; readonly snapshot?: StageSnapshot }
   | { readonly status: 'rejected' }
 
-/**
- * 舞台序号、监听器、在途命令和覆盖层槽的唯一所有者。
- * 命令确认必须等匹配响应后的同场景停止指针快照；事件按会话代次过滤。
- */
 export class PreviewRuntimeStageCommands {
   private readonly timeoutMs: number
   private sceneOverlay: SceneTextOverlayRequest | undefined
@@ -43,7 +39,6 @@ export class PreviewRuntimeStageCommands {
     this.timeoutMs = timeoutMs
   }
 
-  /** 准备返回的舞台固定从序号 1 开始，不代表已经定位。 */
   prepareStage(session: RuntimeSession): PreviewStageVO {
     session.sequence = 1
     return {
@@ -83,7 +78,6 @@ export class PreviewRuntimeStageCommands {
     return () => session.listeners.delete(listener)
   }
 
-  /** 释放会话时中止在途命令并清空监听，单个监听器失败不影响其他监听器。 */
   detach(session: RuntimeSession): void {
     this.cancelExchanges(session)
     session.listeners.clear()
@@ -199,13 +193,11 @@ export class PreviewRuntimeStageCommands {
     }
   }
 
-  /** 准备换代时丢弃旧覆盖层，再让宿主清除同一会话的画面文本。 */
   async discardOverlay(previewSessionId: string): Promise<void> {
     this.sceneOverlay = undefined
     await this.host.clearSceneTextOverlay({ previewSessionId })
   }
 
-  /** 只清理属于该会话的全局覆盖槽，不影响其他会话。 */
   async releaseOverlay(scope: SceneTextOverlayScope): Promise<void> {
     if (this.sceneOverlay?.previewSessionId === scope.previewSessionId) {
       this.sceneOverlay = undefined
@@ -218,16 +210,11 @@ export class PreviewRuntimeStageCommands {
       try {
         listener({ type: 'stage', ...stage })
       } catch {
-        // 单个监听器失败不影响其他监听器。
       }
     }
   }
 }
 
-/**
- * 把舞台快照的句号映射回源台词。
- * 快照句号是停止指针语义，目标语句下标为句号减一；无法精确映射时保持 unknown。
- */
 function snapshotPosition(session: RuntimeSession, snapshot: StageSnapshot): PreviewPositionVO {
   if (snapshot.sentenceId <= 0) return { kind: 'unknown' }
   const sentence = session.scene.sentences.find(

@@ -260,7 +260,6 @@ describe('project media cache', () => {
     expect(cache.peek('image-1')).toBeNull()
   })
 
-  // 负向控制：把 release 改成第一个引用释放就撤销时，本场景必须在首个 release 处失败。
   it('多个引用只在最后一个释放后撤销，重复释放不提前撤销', async () => {
     const read = vi.fn((sourceId: string) => Promise.resolve(okResult(media(sourceId))))
     const urls = createUrls()

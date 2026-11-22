@@ -27,10 +27,6 @@ const projectInfoSchema = z
 
 type ProjectInfoRecord = z.infer<typeof projectInfoSchema>
 
-/**
- * 在工程信息中补齐默认场景和画布身份。
- * 已有合法身份原样保留，不改名称、简介或未知字段。
- */
 export class LocalProjectSceneIdentityGatewayImpl implements ProjectSceneIdentityGateway {
   constructor(private readonly userDirectory: string) {}
 

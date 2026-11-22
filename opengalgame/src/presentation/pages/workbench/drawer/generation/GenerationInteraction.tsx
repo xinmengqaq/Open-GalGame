@@ -60,11 +60,6 @@ interface GenerationInteractionProps {
   onDiscard: () => void
 }
 
-/**
- * 一次生成里的当前交互。单题、选项数量以后端为准；决策和补充用同一份 `Question`
- * 表单，审阅动作只按能力布尔显示。审阅候选通过抽屉的“游戏候选”标签查看，
- * 那里不承载编辑、提交或导出。
- */
 export function GenerationInteraction({
   status,
   interaction,
@@ -91,7 +86,6 @@ export function GenerationInteraction({
   const candidateTab = useCandidatePreviewTab()
   const candidateTarget = candidatePreviewTargetOf(status)
   const candidateAvailable = candidateTarget !== null && candidateTab !== null
-  // 控制器可能还停留在上一候选；只有身份与当前目标完全一致时才消费读取事实和入口说明。
   const candidateControllerMatches =
     candidateTarget !== null &&
     candidateTab !== null &&
@@ -99,16 +93,13 @@ export function GenerationInteraction({
     candidateTab.state.sceneId === candidateTarget.sceneId &&
     candidateTab.state.candidateSnapshotId === candidateTarget.candidateSnapshotId
   const review = interaction.kind === 'review' ? reviewNoticeOf(status, interaction) : null
-  // 降级候选或还有未解决可修正问题的候选不能直接提交，先给出可执行的下一步。
   const acceptBlockedReason =
     interaction.kind === 'review' ? acceptBlockedReasonOf(status, interaction) : null
   const knownIssues = status.knownIssues ?? []
-  // 校验问题已经出现在交互说明里时不再重复；读取问题另取候选会话的真实结果。
   const knownIssueMessages = knownIssues.map((issue) => issue.message)
   const reviewNotes = (review?.issues ?? []).filter((line) => !knownIssueMessages.includes(line))
   const candidateRead =
     candidateControllerMatches && candidateTab ? candidateTab.state.read : 'idle'
-  // 读取结果只在控制器仍对应当前候选时展示，避免候选切换的同一帧带出上一候选的问题。
   const readIssues =
     candidateControllerMatches && candidateTab && candidateRead === 'ready'
       ? candidateTab.state.issues

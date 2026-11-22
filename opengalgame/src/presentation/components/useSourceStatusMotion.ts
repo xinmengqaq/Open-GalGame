@@ -4,10 +4,6 @@ import { useRef, type RefObject } from 'react'
 
 import { prefersReducedMotion } from '../effects/motion'
 
-/**
- * 来源状态变化时显现风险；初次挂载交给调用方入场，不重复闪烁。
- * 独立于卡片其他动效，供卡片头部与目录行共用。
- */
 export function useSourceStatusMotion(
   scope: RefObject<HTMLElement | null>,
   statusKey: string,

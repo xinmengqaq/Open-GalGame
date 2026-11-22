@@ -154,7 +154,6 @@ export const Question = ({
 
   return (
     <QuestionContext.Provider value={contextValue}>
-      {/* 默认外观不进入生成抽屉：间距、表面和边框由调用侧的 wb-* 样式决定。 */}
       <form className={cn(className)} onSubmit={handleSubmit} {...props}>
         {children}
       </form>

@@ -5,7 +5,6 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 
 import { decodeStorageKey } from '@infrastructure/project-files/public/projectFileStorage'
 
-/** 与 `webgal-engine@4.6.5` 的 fileType 顺序一致。tex 没有 game 目录。 */
 const assetDirectoryByType = ['background', 'bgm', 'figure', 'scene', '', 'vocal', 'video'] as const
 
 export const WEBGAL_ASSET_DIRECTORIES = [
@@ -17,19 +16,11 @@ export const WEBGAL_ASSET_DIRECTORIES = [
   'video'
 ] as const
 
-/**
- * 判断候选路径是否仍在指定根目录内。
- * @param root - 已解析的根目录。
- * @returns 候选路径位于根目录内时为 true。
- */
 export function isInsideRoot(root: string, candidate: string): boolean {
   const path = relative(root, candidate)
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
 }
 
-/**
- * @returns `./game/<目录>/<原文>`；远程地址原样返回，tex 返回空字符串。
- */
 export function runtimeAssetReference(assetType: number, rawReference: string): string {
   if (rawReference.includes('http://') || rawReference.includes('https://')) return rawReference
   const directory = assetDirectoryByType[assetType]
@@ -37,12 +28,6 @@ export function runtimeAssetReference(assetType: number, rawReference: string): 
   return `./game/${directory}/${rawReference.replaceAll('\\', '/')}`
 }
 
-/**
- * 把一种素材引用映射到工程内的只读位置。
- * 种类目录仍是 `game/<种类>/<原文>` 和 `assets/<种类>/<原文>`。
- * 编排登记的来源存储键再查 `assets/<原文>`，不扫整个 assets。
- * @param rawReference - 脚本原始引用，不剥前缀。
- */
 export function projectAssetRelativePaths(kind: string, rawReference: string): readonly string[] {
   const normalized = rawReference.replaceAll('\\', '/').replace(/^\.\//u, '')
   const paths = [`game/${kind}/${normalized}`, `assets/${kind}/${normalized}`]
@@ -52,7 +37,6 @@ export function projectAssetRelativePaths(kind: string, rawReference: string): r
       sourcePath: normalized,
       runtimeDirectory: kind
     })
-    // 原文自带 `game/` 或 `assets/` 时按字面查找，不能把剥前缀后的路径当候选。
     if (
       !normalized.startsWith('game/') &&
       !normalized.startsWith('assets/') &&
@@ -70,9 +54,6 @@ export function projectAssetRelativePaths(kind: string, rawReference: string): r
   return paths
 }
 
-/**
- * @returns 与素材引用相同的候选列表；非素材目录只查 `game/`。
- */
 export function projectPathsForGameRequest(gameRelativePath: string): readonly string[] {
   const slash = gameRelativePath.indexOf('/')
   if (slash <= 0) return [`game/${gameRelativePath}`]
@@ -83,7 +64,6 @@ export function projectPathsForGameRequest(gameRelativePath: string): readonly s
   return projectAssetRelativePaths(kind, gameRelativePath.slice(slash + 1))
 }
 
-/** WebGAL 运行时目录。用途不明时不能从文件名或扩展名猜测。 */
 export const SCENE_ASSET_RUNTIME_DIRECTORIES = [
   'background',
   'figure',
@@ -103,11 +83,6 @@ export type SceneAssetReferenceResolution = {
 const kindDirectoryReference = /^(?:game|assets)\/(?:background|figure|bgm|vocal|video)\/(.+)$/u
 const importedReference = /^assets\/([^/]+)\/(.+)$/u
 
-/**
- * 由编排登记路径给出与命令无关的稳定素材引用。
- * 已在种类目录下的路径去掉该目录；来源存储键保留在引用里。
- * @throws {AppException} 落在素材根目录内但无法解析用途的路径。
- */
 export function neutralSceneAssetReference(sourcePath: string): string {
   const normalized = sourcePath.replaceAll('\\', '/').replace(/^\.\//u, '')
   const kindRelative = kindDirectoryReference.exec(normalized)
@@ -121,11 +96,6 @@ export function neutralSceneAssetReference(sourcePath: string): string {
   return normalized
 }
 
-/**
- * 由明确用途解析命令引用、源路径和规范路径。
- * 已在 `game/` 下的素材保持原路径；来源存储键保留在引用里。
- * @throws {AppException} 用途不明或路径不能安全映射。
- */
 export function resolveSceneAssetReference(input: {
   sourcePath: string
   runtimeDirectory: string

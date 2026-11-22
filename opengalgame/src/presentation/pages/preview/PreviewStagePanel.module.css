@@ -1,5 +1,3 @@
-/* 右栏：真实 WebGAL 舞台与按句定位控件。 */
-
 .panel {
   position: relative;
   display: flex;
@@ -291,11 +289,6 @@
   color: var(--muted);
 }
 
-/* The stage notices float above the stage instead of taking part in the panel
-   flex layout: when they appear/disappear the `.viewport` height (and with it
-   the 16:9 `.surface`) no longer changes, so the stage no longer jumps.
-   They are anchored to the top-right stage area so they never cover the
-   bottom dialogue line nor the panel top info row. */
 .notices {
   position: absolute;
   top: 50px;

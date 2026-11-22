@@ -52,7 +52,6 @@ export class RetryFailedRepairUseCase {
       } catch (error) {
         repairContextError = error
       }
-      // 上下文构造直接抛出安全业务文案（如来源上下文过大），不改写成通用失败。
       const repairContext = checkpoint
         ? buildSceneGenerationRepairContext(source, checkpoint, snapshot.repair.instruction)
         : undefined

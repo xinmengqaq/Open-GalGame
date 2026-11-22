@@ -4,7 +4,6 @@ import type { ReactElement } from 'react'
 import layerStyles from './RelationLayer.module.css'
 import type { RecordEdge } from './sceneCanvas.types'
 
-/** 记录卡到关系标签的装载线：固定斜纹与端点菱形表达“引用”，不表达关系类型。 */
 export function RelationRecordEdge({
   sourceX,
   sourceY,

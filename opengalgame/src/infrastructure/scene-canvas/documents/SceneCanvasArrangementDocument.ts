@@ -2,10 +2,6 @@ import { z } from 'zod'
 
 import { MAX_IDENTITY_BYTES } from '@infrastructure/project-files/public/projectFileStorage'
 
-/**
- * 场景画布编排当前格式。旧 v3/旧 v4 只由迁移工具读取，产品侧不静默转换；
- * 当前格式是唯一读写格式，承载生成输入使用的真实业务字段。
- */
 export const SCENE_CANVAS_ARRANGEMENT_FORMAT_VERSION = 5
 
 const identity = z

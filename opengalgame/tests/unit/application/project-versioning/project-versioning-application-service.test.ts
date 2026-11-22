@@ -459,6 +459,133 @@ describe('版本应用编排', () => {
     expect(ports.boundaryOpen).toBe(false)
   })
 
+  it('候选写集合并只核对声明范围，无关基线前进仍可提交', async () => {
+    const { service, ports } = createService()
+    await withBaseline(ports, service)
+    const prepared = await service.prepareOperation({
+      projectId,
+      sourceModule: 'scene-generation',
+      targets: [{ kind: 'scene', id: 'scene-1' }],
+      changePaths: ['story/a.txt'],
+      watchedPaths: []
+    })
+    const request: CommitVersionOperationDTO = {
+      projectId,
+      operationId: prepared.operationId,
+      baselineRef: prepared.baselineRef,
+      input: {
+        kind: 'candidate',
+        candidateRef: 'candidate-1',
+        changes: [{ relativePath: 'story/a.txt', action: 'modify' }]
+      },
+      scopeBaseline: {
+        revisionRef: 'a'.repeat(40),
+        paths: [{ relativePath: 'story/a.txt', worktree: 'a'.repeat(64), stage: 'a'.repeat(64) }]
+      },
+      saveMode: 'manual',
+      contentSource: 'ai',
+      title: '确认场景生成',
+      summary: '已确认的场景脚本进入作品'
+    }
+    ports.baseline = { baselineRef: 'baseline-next', revisionRef: 'rev-9' }
+    let checked = false
+
+    const committed = await service.commitOperation(request, () => {
+      checked = true
+    })
+
+    expect(checked).toBe(true)
+    expect(committed.state).toBe('已提交')
+    expect(ports.revisionRefs).toEqual([committed.revisionRef])
+  })
+
+  it('没有候选写集基点时仍拒绝无关基线前进', async () => {
+    const { service, ports } = createService()
+    await withBaseline(ports, service)
+    const prepared = await service.prepareOperation({
+      projectId,
+      sourceModule: 'scene-generation',
+      targets: [{ kind: 'scene', id: 'scene-1' }],
+      changePaths: ['story/a.txt'],
+      watchedPaths: []
+    })
+    ports.baseline = { baselineRef: 'baseline-next', revisionRef: 'rev-9' }
+
+    await expectCode(
+      () =>
+        service.commitOperation(
+          {
+            projectId,
+            operationId: prepared.operationId,
+            baselineRef: prepared.baselineRef,
+            input: {
+              kind: 'candidate',
+              candidateRef: 'candidate-1',
+              changes: [{ relativePath: 'story/a.txt', action: 'modify' }]
+            },
+            saveMode: 'manual',
+            contentSource: 'ai',
+            title: '确认场景生成',
+            summary: '已确认的场景脚本进入作品'
+          },
+          () => undefined
+        ),
+      ErrorCodes.operationConflict
+    )
+    expect(ports.revisionRefs).toEqual([])
+  })
+
+  it('候选写集基点只能用于不可变候选且必须覆盖声明范围', async () => {
+    const { service, ports } = createService()
+    await withBaseline(ports, service)
+    const prepared = await service.prepareOperation({
+      projectId,
+      sourceModule: 'scene-generation',
+      targets: [{ kind: 'scene', id: 'scene-1' }],
+      changePaths: ['story/a.txt'],
+      watchedPaths: []
+    })
+    const scopeBaseline = {
+      revisionRef: 'a'.repeat(40),
+      paths: [{ relativePath: 'story/other.txt', worktree: 'a'.repeat(64), stage: null }]
+    }
+
+    await expectCode(
+      () =>
+        service.commitOperation(
+          {
+            ...commitRequest(prepared.operationId, prepared.baselineRef, [1], '错误范围', 'manual'),
+            scopeBaseline
+          },
+          () => undefined
+        ),
+      ErrorCodes.invalidRequest
+    )
+    await expectCode(
+      () =>
+        service.commitOperation(
+          {
+            projectId,
+            operationId: prepared.operationId,
+            baselineRef: prepared.baselineRef,
+            input: {
+              kind: 'candidate',
+              candidateRef: 'candidate-1',
+              changes: [{ relativePath: 'story/a.txt', action: 'modify' }]
+            },
+            scopeBaseline,
+            saveMode: 'manual',
+            contentSource: 'ai',
+            title: '确认场景生成',
+            summary: '已确认的场景脚本进入作品'
+          },
+          () => undefined
+        ),
+      ErrorCodes.invalidRequest
+    )
+    expect(ports.revisionRefs).toEqual([])
+  })
+
   it('可靠提交再次提交时不依赖来源内容', async () => {
     const { service, ports } = createService()
     await withBaseline(ports, service)

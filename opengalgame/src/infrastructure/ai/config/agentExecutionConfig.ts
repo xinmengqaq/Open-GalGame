@@ -17,7 +17,6 @@ export interface AgentExecutionOverride {
   modelAttemptLimit?: number
   toolCallLimit?: number
   activeLimitMs?: number
-  /** 省略表示本次不设单次工具超时，不用有限数值冒充。 */
   toolTimeoutMs?: number
   technicalRetryCount?: number
   technicalRetryDelayMs?: number
@@ -33,7 +32,6 @@ export interface AgentExecutionProfile {
   modelAttemptLimit: number
   toolCallLimit: number
   activeLimitMs: number
-  /** 缺省表示不安装单次工具超时。已给出时必须是正整数。 */
   toolTimeoutMs?: number
   technicalRetryCount: number
   technicalRetryDelayMs: number
@@ -49,11 +47,6 @@ export interface AgentExecutionAssembly {
   user?: AgentUserExecutionPreference
 }
 
-/**
- * 按本次指定、实现类覆盖、用户级参数、建议默认值组装 Agent 执行配置。
- * @param assembly - 三层可选参数。省略的字段继续向下取值。
- * @throws {AppException} 任一层给出的显式值不合法。非法值不会被默认值替换。
- */
 export function assembleAgentExecutionProfile(
   assembly: AgentExecutionAssembly = {}
 ): AgentExecutionProfile {
@@ -117,9 +110,6 @@ export function assembleAgentExecutionProfile(
   }
 }
 
-/**
- * @param fallback - 三层都没有给出时的建议默认值。
- */
 function pick(
   assembly: AgentExecutionAssembly,
   key: keyof AgentExecutionOverride,
@@ -129,9 +119,6 @@ function pick(
   return value === undefined ? fallback : value
 }
 
-/**
- * @returns 明确给出的数值；三层都省略时为 undefined。
- */
 function pickOptional(
   assembly: AgentExecutionAssembly,
   key: keyof AgentExecutionOverride
@@ -141,10 +128,6 @@ function pickOptional(
   return assembly.user?.[key]
 }
 
-/**
- * 任一层明确写出工具超时时返回该层的值。
- * 显式 undefined 返回 null，表示不设；三层都没写时返回建议值。
- */
 function explicitTimeout(assembly: AgentExecutionAssembly): number | null {
   if (assembly.override !== undefined && 'toolTimeoutMs' in assembly.override) {
     return assembly.override.toolTimeoutMs ?? null
@@ -158,19 +141,10 @@ function explicitTimeout(assembly: AgentExecutionAssembly): number | null {
   return suggestedToolTimeoutMs
 }
 
-/**
- * @param msg - 失败时的中文说明。
- * @throws {AppException} 数值不是安全的正整数。
- */
 function requirePositiveInteger(value: number, msg: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) throw invalid(msg)
 }
 
-/**
- * 拒绝负数和非整数。0 对重试次数是合法的。
- * @param msg - 失败时的中文说明。
- * @throws {AppException} 数值不是安全的非负整数。
- */
 function requireNonNegativeInteger(value: number, msg: string): void {
   if (!Number.isSafeInteger(value) || value < 0) throw invalid(msg)
 }

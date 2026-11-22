@@ -8,7 +8,7 @@ import type { SceneValidationReport } from '@domain/scene-generation/models/Scen
 import { estimateTokens } from '@infrastructure/ai/context/contextBudget'
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import { recordWrittenFile } from '@infrastructure/ai/execution/writtenFileLedger'
-import { runStateBlock } from '@infrastructure/scene-generation/agents/context/ContextFactsInjector'
+import { runStateBlock } from '@infrastructure/scene-generation/agents/context/SceneGenerationRunState'
 import { SceneGenerationContextAssemblerImpl } from '@infrastructure/scene-generation/agents/context/SceneGenerationContextAssemblerImpl'
 
 const ENTRY = 'game/scene/start.txt'
@@ -354,7 +354,6 @@ describe('SceneGenerationContextAssemblerImpl 修复上下文事实', () => {
         assets: Record<string, unknown>[]
         prompts: { references: Record<string, unknown>[] }[]
       }
-      assetBindings: Record<string, unknown>[]
     }
 
     expect(assembled.inputs.assets.map((asset) => asset.category)).toEqual([
@@ -363,19 +362,14 @@ describe('SceneGenerationContextAssemblerImpl 修复上下文事实', () => {
       'video'
     ])
     expect(assembled.inputs.assets.some((asset) => 'purpose' in asset)).toBe(false)
-    expect(assembled.assetBindings.map((binding) => binding.category)).toEqual([
-      'image',
-      'audio',
-      'video'
-    ])
-    expect(assembled.assetBindings.map((binding) => binding.commandReference)).toEqual([
+    expect(assembled.inputs.assets.map((asset) => asset.commandReference)).toEqual([
       'room.webp',
       'night.ogg',
       'opening.mp4'
     ])
     expect(
-      assembled.assetBindings.some(
-        (binding) => 'purpose' in binding || 'defaultRuntimeDirectory' in binding
+      assembled.inputs.assets.some(
+        (asset) => 'purpose' in asset || 'defaultRuntimeDirectory' in asset
       )
     ).toBe(false)
     expect(assembled.inputs.prompts[0]?.references[0]).toEqual({
@@ -397,7 +391,8 @@ describe('runStateBlock 修复重跑运行状态', () => {
 
     expect(block).toContain('候选：源候选可读（修复起点）')
     expect(block).not.toContain('候选：未写出')
-    expect(block).not.toContain('request_clarification')
+    expect(block).not.toContain('requestClarification')
+    expect(block).toContain('reportBlocked')
     expect(block).toContain('先读取源候选，再作最小修改')
     expect(estimateTokens(block)).toBeLessThanOrEqual(200)
   })
@@ -410,7 +405,8 @@ describe('runStateBlock 修复重跑运行状态', () => {
     })
 
     expect(block).toContain('候选：未写出')
-    expect(block).toContain('request_clarification')
+    expect(block).toContain('requestClarification')
+    expect(block).toContain('reportBlocked')
     expect(estimateTokens(block)).toBeLessThanOrEqual(200)
   })
 
@@ -425,7 +421,7 @@ describe('runStateBlock 修复重跑运行状态', () => {
 
     expect(block).toContain(`候选：${ENTRY}（120 bytes，版本 120:1）`)
     expect(block).not.toContain('修复起点')
-    expect(block).not.toContain('request_clarification')
+    expect(block).not.toContain('requestClarification')
     expect(estimateTokens(block)).toBeLessThanOrEqual(200)
   })
 })

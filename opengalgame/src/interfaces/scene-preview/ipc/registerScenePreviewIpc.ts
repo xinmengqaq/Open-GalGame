@@ -28,10 +28,6 @@ interface ScenePreviewIpcScope {
   stopCandidateEvents: (() => void) | undefined
 }
 
-/**
- * 注册固定预览通道。运行时订阅随窗口、关闭和注销一起释放。
- * listener 只留在主进程，不进入 IPC 载荷。
- */
 export function registerScenePreviewIpc(options: ScenePreviewIpcBinding): () => void {
   const access = createIpcRequestAccess(options)
   const scope: ScenePreviewIpcScope = {
@@ -198,10 +194,6 @@ const candidateChannels = {
   invalidated: 'scene-preview:invalidated'
 } as const
 
-/**
- * 注册时就订阅，打开返回前到达的事件不会丢。
- * 只发给当前窗口；窗口销毁或注销时退订。载荷不含路径和诊断。
- */
 function bindCandidatePreviewEvents(
   scenePreview: ScenePreviewController,
   getWindow: () => BrowserWindow | null

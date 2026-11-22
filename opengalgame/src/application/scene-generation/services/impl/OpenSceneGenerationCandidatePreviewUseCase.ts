@@ -67,6 +67,14 @@ async function publishedCandidates(
           }
         ]
       : []
+  // 本操作已记录的旧修订与当前修订并列；只授权记录中的修订，不按 Git 对象枚举。
+  const recorded = (execution.publishedCandidates ?? []).map((record) => ({
+    operationId: execution.operationId,
+    threadId: execution.threadId,
+    branchId: execution.branchId,
+    checkpointId: record.checkpointId,
+    candidateSnapshotId: record.candidateSnapshotId
+  }))
   const history = await deps.history.listHistory({
     projectId: execution.projectId,
     sceneId: execution.sceneId,
@@ -87,6 +95,7 @@ async function publishedCandidates(
   )
   return [
     ...current,
+    ...recorded,
     ...historical.flatMap((checkpoint) =>
       checkpoint.candidateSnapshotId
         ? [
@@ -103,11 +112,18 @@ async function publishedCandidates(
   ]
 }
 
-/** 当前候选必须有生成侧校验且没有问题。旧记录没有该事实时不能当成已通过。 */
+/**
+ * 请求修订必须属于本操作已登记的通过候选；当前候选没有登记时只认当前校验结论。
+ * 旧记录没有该事实时不能当成已通过，也不能按任意 Git 对象放行。
+ */
 function candidateAcceptedForPreview(
   execution: SceneGenerationExecution,
   candidateSnapshotId: string
 ): boolean {
+  const record = execution.publishedCandidates?.find(
+    (item) => item.candidateSnapshotId === candidateSnapshotId
+  )
+  if (record) return record.artifactValidation.issues.length === 0
   return (
     execution.candidateSnapshotId === candidateSnapshotId &&
     execution.artifactValidation !== undefined &&

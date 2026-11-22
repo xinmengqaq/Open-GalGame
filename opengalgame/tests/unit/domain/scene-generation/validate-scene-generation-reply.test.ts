@@ -80,6 +80,7 @@ function checkpoint(
     threadId: 'thread-1',
     branchId: 'branch-1',
     canContinue: true,
+    canReply: true,
     ...overrides
   }
 }
@@ -333,16 +334,27 @@ describe('validateSceneGenerationReply', () => {
 
   it('不能继续的检查点拒绝回复', () => {
     expect(() =>
-      domain.validateReply(execution(), request(), checkpoint({ canContinue: false }))
+      domain.validateReply(
+        execution(),
+        request(),
+        checkpoint({ canContinue: false, canReply: false })
+      )
     ).toThrowError(expect.objectContaining({ code: 4103 }))
   })
 
-  it('提交中、提交不明和候选冲突不能请求或恢复为暂停', () => {
+  it('提交中、提交不明、文件写入不明和候选冲突不能请求或恢复为暂停', () => {
     expect(canRequestSceneGenerationPause(execution({ state: 'running' }))).toBe(true)
+    // 等待态没有活动运行可撤销写资格，不能把暂停显示成可用。
+    expect(canRequestSceneGenerationPause(execution({ state: 'waiting' }))).toBe(false)
     expect(canRequestSceneGenerationPause(execution({ state: 'committing' }))).toBe(false)
     expect(
       canRequestSceneGenerationPause(
         execution({ state: 'running', interruptReason: 'commitUnknown' })
+      )
+    ).toBe(false)
+    expect(
+      canRequestSceneGenerationPause(
+        execution({ state: 'running', interruptReason: 'writeUnknown' })
       )
     ).toBe(false)
     expect(
@@ -358,6 +370,9 @@ describe('validateSceneGenerationReply', () => {
     expect(canResumePausedSceneGeneration(paused, checkpoint())).toBe(true)
     expect(
       canResumePausedSceneGeneration({ ...paused, interruptReason: 'commitUnknown' }, checkpoint())
+    ).toBe(false)
+    expect(
+      canResumePausedSceneGeneration({ ...paused, interruptReason: 'writeUnknown' }, checkpoint())
     ).toBe(false)
     expect(canResumePausedSceneGeneration(paused, checkpoint({ canContinue: false }))).toBe(false)
     expect(
@@ -381,6 +396,12 @@ describe('validateSceneGenerationReply', () => {
     expect(
       canResumeInterruptedSceneGeneration(
         { ...interrupted, interruptReason: 'commitUnknown' },
+        checkpoint()
+      )
+    ).toBe(false)
+    expect(
+      canResumeInterruptedSceneGeneration(
+        { ...interrupted, interruptReason: 'writeUnknown' },
         checkpoint()
       )
     ).toBe(false)

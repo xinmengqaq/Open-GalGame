@@ -7,7 +7,7 @@ import type {
   SceneGenerationCheckpointVO,
   SceneGenerationHistoryVO
 } from '../../vo/SceneGenerationVO'
-import type { SceneGenerationHistorySummaryVO } from '../../vo/SceneGenerationRenderVO'
+import type { SceneGenerationHistoryDetailVO, SceneGenerationHistorySummaryVO } from '../../vo/SceneGenerationRenderVO'
 import { toCheckpointVO } from '../../mapping/SceneGenerationViewMapper'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -21,9 +21,6 @@ export class QuerySceneGenerationHistory implements SceneGenerationHistoryQueryS
     private readonly history: SceneGenerationHistoryReader,
     private readonly sceneHistory: SceneGenerationSceneHistoryReader
   ) {}
-  /**
-   * @throws {AppException} 历史读取失败或身份越界。
-   */
   async listSceneGenerationHistory(
     request: ListSceneGenerationHistoryDTO
   ): Promise<SceneGenerationHistoryVO> {
@@ -39,10 +36,6 @@ export class QuerySceneGenerationHistory implements SceneGenerationHistoryQueryS
     }
   }
 
-  /**
-   * 只将明确的安全详情字段交给调用方。
-   * @throws {AppException} 检查点不存在或身份越界。
-   */
   async readSceneGenerationCheckpoint(
     request: ReadSceneGenerationCheckpointDTO
   ): Promise<SceneGenerationCheckpointVO> {
@@ -51,10 +44,39 @@ export class QuerySceneGenerationHistory implements SceneGenerationHistoryQueryS
   }
 
   /**
-   * 只投影已保存操作的安全摘要，并按记录时间倒序分页。
-   * 没有检查点、操作边界或已记录时间的操作不进入历史。同一时间以后追加的操作在前。
-   * @throws {AppException} 页大小或游标无效，或历史读取失败。
+   * 分叉资格只取检查点读取结果；列表中的边界、阶段和候选存在都不参与判断。
+   * 只投影安全摘要、布尔资格和用户可读原因，不返回差异、预览或内部恢复种子。
+   * @throws {AppException} 检查点不存在、身份越界或缺少记录时间。
    */
+  async readSceneGenerationHistoryDetail(
+    request: ReadSceneGenerationCheckpointDTO
+  ): Promise<SceneGenerationHistoryDetailVO> {
+    const checkpoint = await this.history.readCheckpoint(request)
+    const createdAt =
+      checkpoint.execution.updatedAt ??
+      checkpoint.execution.timeline?.at(-1)?.createdAt ??
+      checkpoint.execution.createdAt
+    if (!createdAt) {
+      throw new AppException({
+        code: ErrorCodes.invalidRequest,
+        msg: '这条历史没有可展示的记录时间'
+      })
+    }
+    const summary = toHistorySummary(checkpoint.execution, createdAt, request.checkpointId)
+    if (!summary) {
+      throw new AppException({
+        code: ErrorCodes.invalidRequest,
+        msg: '这条历史没有可展示的操作边界'
+      })
+    }
+    const canFork = checkpoint.view.canFork === true
+    return {
+      ...summary,
+      canFork,
+      ...(canFork ? {} : { forkReason: checkpoint.view.reason ?? '这条记录不能分叉' })
+    }
+  }
+
   async listSceneGenerationHistoryForScene(
     request: ListSceneGenerationHistoryForSceneDTO
   ): Promise<readonly SceneGenerationHistorySummaryVO[]> {
@@ -79,7 +101,6 @@ export class QuerySceneGenerationHistory implements SceneGenerationHistoryQueryS
   }
 }
 
-/** 最新记录在前；时间相同时，持久追加更后的操作在前。 */
 function byNewestThenLaterAppend(
   left: { summary: SceneGenerationHistorySummaryVO; appendIndex: number },
   right: { summary: SceneGenerationHistorySummaryVO; appendIndex: number }

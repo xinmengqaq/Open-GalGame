@@ -25,10 +25,6 @@ const lockDocumentSchema = z
     })
   })
 
-/**
- * 读取正式工程的场景锁。
- * 文件缺失或没有该场景时保持 unknown，不能默认可编辑。
- */
 export async function readSceneLock(source: SceneSourceLocation): Promise<SceneLockState> {
   let value: unknown
   try {

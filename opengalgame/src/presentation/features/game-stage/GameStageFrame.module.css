@@ -1,5 +1,3 @@
-/* 当前场景与候选共用的舞台节点。只表达调用方给出的加载/就绪/失败，不推断舞台状态。 */
-
 .frame {
   position: relative;
   width: 100%;
@@ -48,7 +46,6 @@
   opacity: 0.4;
 }
 
-/* 轻量遮罩：真实画面优先，只在未就绪时压暗并提示。 */
 .veil {
   position: absolute;
   inset: 0;
@@ -110,7 +107,6 @@
   padding: 24px;
   color: #f4ecdc;
   text-align: center;
-  /* 加载只是提示：遮罩不能挡住引擎画面，只有显式的操作按钮接收指针。 */
   pointer-events: none;
 }
 

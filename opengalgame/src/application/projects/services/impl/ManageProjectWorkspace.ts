@@ -19,10 +19,6 @@ interface ProjectWorkspaceDependencies {
   readonly baseline: ProjectBaselineGateway
 }
 
-/**
- * 编排默认身份、缺失场景文件和声明路径基线。
- * 技术失败统一变成可重试的初始化失败，不暴露内部原因。
- */
 export class ManageProjectWorkspace implements ProjectWorkspaceService {
   constructor(private readonly deps: ProjectWorkspaceDependencies) {}
 

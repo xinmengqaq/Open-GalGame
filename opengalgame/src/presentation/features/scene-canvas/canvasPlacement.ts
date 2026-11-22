@@ -4,7 +4,6 @@ export type CanvasPoint = { x: number; y: number }
 export type CanvasSize = { width: number; height: number }
 export type CanvasRect = CanvasPoint & CanvasSize
 
-/** 新卡片与已有卡片之间至少留出的画布间距。 */
 export const CANVAS_PLACEMENT_GAP = 32
 const PLACEMENT_COLUMNS = 3
 const PLACEMENT_MAX_DEPTH = 12000
@@ -26,7 +25,6 @@ export function intersectsAnyCard(
   return cards.some((card) => intersects(candidate, card.layout, gap))
 }
 
-/** 同一列里向下找到第一个不被已有卡片占用的位置。 */
 function freeYInColumn(
   cards: readonly SessionCard[],
   x: number,
@@ -46,10 +44,6 @@ function freeYInColumn(
   return y
 }
 
-/**
- * 在视口锚点附近寻找不与已有卡片重叠的位置。三列向下排布，选最靠上且靠左的空位；
- * 只有整列都超过可用深度时才返回原位并标记重叠，由调用方给出可读提示。
- */
 export function findFreeCanvasPosition(
   cards: readonly SessionCard[],
   preferred: CanvasPoint,

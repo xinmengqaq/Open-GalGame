@@ -44,7 +44,6 @@
   font-weight: 500;
 }
 
-/* 工作台弹层里的表单：浅底软控件 + 紫光焦点，不用白底方框和实边框。 */
 :global([data-theme='workbench']) .field {
   gap: 7px;
   margin: 0 0 18px;

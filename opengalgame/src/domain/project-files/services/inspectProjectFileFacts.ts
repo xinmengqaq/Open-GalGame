@@ -15,11 +15,6 @@ import type {
 import type { ProjectInputSource } from '../models/ProjectInputSource'
 import { validateProjectInputSource } from './validateProjectInputSource'
 
-/**
- * 汇总已解析工程文件事实中的格式支持和诊断。
- * 不修复文件，也不删除断开引用的卡片。
- * @throws {AppException} 工程身份为空，或问题对象没有可识别身份。
- */
 export function inspectProjectFileFacts(facts: ProjectFileInspectionFacts): ProjectFileInspection {
   if (typeof facts.projectId !== 'string' || facts.projectId.trim() === '') {
     throw new AppException({

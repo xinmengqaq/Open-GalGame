@@ -48,7 +48,6 @@ describe('DrawerTabBar 静态结构', () => {
     expect(html).not.toContain('关闭“当前生成”')
     expect(html).toContain('aria-label="打开其他视图"')
 
-    /* 两个可关闭标签各有一个菜单，`+` 入口另有自己的 Popover 触发按钮。 */
     expect(countOf(html, /aria-haspopup="menu"/g)).toBe(3)
     expect(countOf(html, /aria-expanded="false"/g)).toBe(3)
 

@@ -13,6 +13,14 @@ import type {
   SceneGenerationPromptScopeDTO
 } from '../dto/SceneGenerationDTO'
 import type { SceneGenerationInteractionVO } from '../vo/SceneGenerationVO'
+import type { SceneGenerationWorkflowCapabilities } from '../ports/SceneGenerationWorkflow'
+import {
+  canResumeUnfinishedRecovery,
+  canRetryCommittedCleanup,
+  canVerifyUnknownResult,
+  hasCommittedCleanupPending
+} from '../policies/SceneGenerationRecoveryBoundary'
+import { isActiveGenerationExecution } from '../policies/SceneGenerationStartConflict'
 import { renderStageOf } from './SceneGenerationStateProjection'
 import type {
   SceneGenerationHistoryBoundary,
@@ -42,10 +50,11 @@ const STAGE_MESSAGE: Record<SceneGenerationRenderStage, string> = {
 const INTERRUPT_MESSAGE: Record<SceneGenerationInterruptReason, string> = {
   paused: '已暂停，可继续',
   candidateConflict: '候选或基线冲突，需要重新核对',
-  commitUnknown: '提交结果待核对'
+  commitUnknown: '提交结果待核对',
+  writeUnknown: '候选写入结果待核对',
+  readInterrupted: '候选已保存，正在重新读取；继续不会重新调用模型'
 }
 
-/** 内部状态只映射到固定安全文案，不透传模型摘要、工具输出或异常原文。 */
 export function renderStage(execution: SceneGenerationExecution): SceneGenerationRenderStage {
   return renderStageOf(execution.state, execution.step, execution.interruptReason)
 }
@@ -55,7 +64,12 @@ export function renderStageMessage(
   interruptReason?: SceneGenerationInterruptReason,
   activity?: SceneGenerationExecution['live']
 ): string {
-  if (interruptReason === 'candidateConflict' || interruptReason === 'commitUnknown') {
+  if (
+    interruptReason === 'candidateConflict' ||
+    interruptReason === 'commitUnknown' ||
+    interruptReason === 'writeUnknown' ||
+    interruptReason === 'readInterrupted'
+  ) {
     return INTERRUPT_MESSAGE[interruptReason]
   }
   if (activity?.activity === 'waitingModel' && stage === 'generating') {
@@ -64,14 +78,28 @@ export function renderStageMessage(
   return STAGE_MESSAGE[stage]
 }
 
+/** 状态阶段文案：写前题组没有候选，不能显示“候选已就绪”。 */
+function statusStageMessage(
+  execution: SceneGenerationExecution,
+  stage: SceneGenerationRenderStage
+): string {
+  if (
+    execution.state === 'succeeded' &&
+    (execution.workspaceCleanupPending === true ||
+      execution.pauseBoundaryCleanupPending === true)
+  )
+    return '作品已提交，清理待重试'
+  if (execution.cancellationRequested === true && execution.state === 'interrupted')
+    return '取消尚未完成清理，请重新结束本次生成'
+  if (execution.state === 'waiting' && execution.interaction?.kind === 'decision')
+    return '等待你确认创作问题'
+  return renderStageMessage(stage, execution.interruptReason, execution.live)
+}
+
 const INPUT_DETAIL_LIMIT = 12
 const INPUT_DETAIL_TITLE_LIMIT = 40
 const INPUT_DETAIL_TEXT_LIMIT = 80
 
-/**
- * 明细最多 12 条；溢出时保留前 11 条，把剩余数量压成一条「等 N 项」。
- * 分类为空时返回 undefined，避免旧快照出现空分组。
- */
 function clampInputDetails(items: readonly string[]): readonly string[] | undefined {
   if (items.length === 0) return undefined
   if (items.length <= INPUT_DETAIL_LIMIT) return items
@@ -81,27 +109,18 @@ function clampInputDetails(items: readonly string[]): readonly string[] | undefi
   ]
 }
 
-/** 提示词作用范围只展示分类和数量，不展开卡片身份。 */
 function promptScopeText(scope: SceneGenerationPromptScopeDTO): string {
   if (scope.kind === 'scene') return '场景'
   if (scope.kind === 'cards') return `卡片×${scope.cardIds.length}`
   return '关系×1'
 }
 
-/**
- * 明细拆成名称和可选说明。重名编号只加在名称上，记录说明保持原样，
- * 例如「本场提示词 1（记录：文档）」或「未命名提示词 2 · 场景」。
- */
 type InputDetailParts = { name: string; suffix?: string }
 
 function inputDetailText(parts: InputDetailParts): string {
   return safeDisplayText(`${parts.name}${parts.suffix ?? ''}`, INPUT_DETAIL_TEXT_LIMIT)
 }
 
-/**
- * 同一类目内名称相同的条目按输入数组顺序追加序号；唯一名称保持不变。
- * 编号基于可见条目，顺序取画布快照顺序，保证同一快照的输出稳定可复现。
- */
 function withDuplicateOrdinals(parts: readonly InputDetailParts[]): InputDetailParts[] {
   const names = new Map<string, number>()
   for (const part of parts) {
@@ -116,16 +135,11 @@ function withDuplicateOrdinals(parts: readonly InputDetailParts[]): InputDetailP
   })
 }
 
-/** 一类明细的统一收口：丢弃空名称、重名编号、拼接说明、套用条数上限。 */
 function buildInputDetails(partsList: readonly InputDetailParts[]): readonly string[] | undefined {
   const visible = partsList.filter((parts) => parts.name !== '')
   return clampInputDetails(withDuplicateOrdinals(visible).map(inputDetailText))
 }
 
-/**
- * 提示词卡没有标题时适配层会用卡片 id 填充 title；这里只做显示回退，
- * 不展示正文或路径。名称统一回退为「未命名提示词」，重复名称由收口编号。
- */
 function promptInputDetailParts(
   prompt: SceneGenerationInputsDTO['prompts'][number]
 ): InputDetailParts {
@@ -138,17 +152,12 @@ function promptInputDetailParts(
   return scopes === '' ? { name } : { name, suffix: ` · ${scopes}` }
 }
 
-/** 文档明细只用标题，不补造正文、摘要或路径。 */
 function documentInputDetailParts(
   document: SceneGenerationInputsDTO['documents'][number]
 ): InputDetailParts {
   return { name: safeDisplayText(document.title, INPUT_DETAIL_TITLE_LIMIT) }
 }
 
-/**
- * 关系明细沿用画布关系标签语义：优先具体名；没有具体名时用记录名称或记录类型；
- * 有记录时追加记录标记，最后才回退到「未命名关系」。
- */
 function relationInputDetailParts(
   relation: SceneGenerationInputsDTO['relations'][number],
   documents: SceneGenerationInputsDTO['documents']
@@ -200,10 +209,6 @@ export function inputSummary(execution: SceneGenerationExecution): SceneGenerati
   }
 }
 
-/**
- * 只投影已持久化的当前操作累计 Token。缺失时保持零值，不按字符数估算。
- * 上下文窗口不进入本对象。
- */
 export function renderUsage(execution: SceneGenerationExecution): SceneGenerationUsageVO {
   return {
     inputTokens: execution.budget.inputTokens ?? 0,
@@ -222,7 +227,6 @@ const LIVE_TOOLS: Record<string, true> = {
   replaceText: true
 }
 
-/** 只投影进行中的安全活动。终态和旧记录不带活动。 */
 export function renderActivity(
   execution: SceneGenerationExecution
 ): SceneGenerationRenderStatusVO['activity'] {
@@ -259,14 +263,12 @@ function stripControlChars(value: string): string {
   return result
 }
 
-/** 展示文本去掉控制字符并限长。不保留路径、原始模型输出或执行记录。 */
 function safeDisplayText(value: string | undefined, limit = SAFE_TEXT_LIMIT): string {
   return stripControlChars(value ?? '')
     .trim()
     .slice(0, limit)
 }
 
-/** 创作决策必须携带说明；问题组携带安全题干和选项；审阅不携带创作选项。 */
 export function renderInteraction(
   interaction: SceneGenerationInteractionVO
 ): SceneGenerationRenderInteractionVO {
@@ -304,11 +306,6 @@ export function renderInteraction(
   }
 }
 
-/**
- * 已确认的修改和澄清按轮次投影。文本去掉控制字符，不保留路径或模型原文。
- * 新修复重试把原指令放在来源上下文里而不伪造回复：指令最先生效，后续回复顺延轮次，
- * 同文修改去重，最多保留指令加最近 63 条。旧记录没有上下文时保持原投影。
- */
 export function renderUserMessages(
   execution: SceneGenerationExecution
 ): SceneGenerationRenderStatusVO['userMessages'] {
@@ -337,7 +334,6 @@ export function renderUserMessages(
   return messages
 }
 
-/** 已接受的问题组按持久化事实重建，不从请求标题或本地草稿补造。 */
 export function renderAnsweredQuestions(
   execution: SceneGenerationExecution
 ): SceneGenerationRenderStatusVO['answeredQuestions'] {
@@ -377,10 +373,6 @@ const KNOWN_ISSUE_MESSAGE: Record<string, string> = {
   'baseline-unknown': '目标场景基线不明，不能覆盖'
 }
 
-/**
- * 已知问题只返回固定说明。未知码和原始文本都不能进入渲染或修正提示。
- * 素材引用增强字段只透出契约事实；工程路径 nearestAssetPath 不进渲染状态。
- */
 export function safeSceneValidationIssueMessage(code: string): string | undefined {
   return KNOWN_ISSUE_MESSAGE[code]
 }
@@ -414,23 +406,17 @@ const RECENT_PROGRESS_LIMIT = 6
 
 const WAITING_MODEL_MESSAGE = '等待模型响应（连接较慢时可继续等待或取消）'
 
-/**
- * 时间线只接受固定安全文案。执行记录可能来自旧版本或被人工改写，
- * 不能把时间线里的任意字符串直接写给页面。
- */
 const SAFE_PROGRESS_MESSAGE: Record<string, true> = {
   ...Object.fromEntries(Object.values(STAGE_MESSAGE).map((message) => [message, true])),
   ...Object.fromEntries(Object.values(INTERRUPT_MESSAGE).map((message) => [message, true])),
   [WAITING_MODEL_MESSAGE]: true
 }
 
-/** 进度时间必须是可解析时间，统一重写为 ISO；旧记录里的异常原文不进入状态。 */
 function safeProgressTime(value: string): string | undefined {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
 }
 
-/** 最近 6 条执行时间线安全进度；没有时间线或没有安全文案的旧记录保持缺失。 */
 export function recentProgress(
   execution: SceneGenerationExecution
 ): readonly SceneGenerationRecentProgressVO[] | undefined {
@@ -442,10 +428,6 @@ export function recentProgress(
   return timeline.length === 0 ? undefined : timeline.slice(-RECENT_PROGRESS_LIMIT)
 }
 
-/**
- * 失败、取消和待核对中断可按后端明确的只读授权查看已有候选；
- * 暂停仍走恢复语义，不在这里授予只读候选入口。
- */
 function previewAuthorizationOf(
   execution: SceneGenerationExecution,
   previewAvailable: boolean
@@ -460,11 +442,17 @@ function previewAuthorizationOf(
 
 /**
  * 渲染状态只保留稳定身份、数量摘要、累计 Token、固定文案和安全校验问题。
- * `previewAvailable` 表示候选已发布且生成校验没有阻断问题。
+ * `previewAvailable` 表示候选已发布且生成校验没有阻断问题；只有真实问题列表为空
+ * 才算通过，不用展示过滤后的子集冒充通过。
  */
 export function toRenderStatusVO(
   execution: SceneGenerationExecution,
-  checkpointCanContinue = false
+  checkpointCanContinue = false,
+  capabilities: Pick<SceneGenerationWorkflowCapabilities, 'resume' | 'pause'> = {
+    resume: true,
+    pause: true
+  },
+  activeGeneration = false
 ): SceneGenerationRenderStatusVO {
   const stage = renderStage(execution)
   const terminal =
@@ -489,8 +477,15 @@ export function toRenderStatusVO(
   const previewAvailable =
     execution.candidateSnapshotId !== undefined &&
     execution.artifactValidation !== undefined &&
-    knownIssues.length === 0
+    execution.artifactValidation.issues.length === 0
   const previewAuthorization = previewAuthorizationOf(execution, previewAvailable)
+  // 终态取消已经完成清理，不能继续把历史取消标志当成待处理原因。
+  const cancellationPending = execution.cancellationRequested === true && !terminal
+  const cleanupPending = hasCommittedCleanupPending(execution)
+  const canResumeUnfinished = canResumeUnfinishedRecovery(execution, activeGeneration)
+  const canVerifyResult = canVerifyUnknownResult(execution, activeGeneration)
+  // 与 StartSceneGeneration 的场景级预检共用同一判定，界面不再自行猜测列表含义。
+  const blocksNewGeneration = isActiveGenerationExecution(execution)
   return {
     projectId: execution.projectId,
     sceneId: execution.sceneId,
@@ -500,21 +495,42 @@ export function toRenderStatusVO(
     ...(execution.checkpointId ? { checkpointId: execution.checkpointId } : {}),
     state: execution.state,
     stage,
-    stageMessage: renderStageMessage(stage, execution.interruptReason, execution.live),
+    stageMessage: statusStageMessage(execution, stage),
     attempt: execution.attempt,
     sequence: execution.sequence,
     ...(execution.updatedAt ? { updatedAt: execution.updatedAt } : {}),
-    canPause: canRequestSceneGenerationPause(execution),
+    canPause: capabilities.pause && canRequestSceneGenerationPause(execution),
+    // 取消已受理后的记录不能再充当可续跑暂停；提交中也不能再声称可以取消。
     canResume:
-      canResumePausedSceneGeneration(execution, checkpoint) ||
-      canResumeInterruptedSceneGeneration(execution, checkpoint),
-    canCancel: !terminal && execution.state !== 'cancelling',
-    resumeReason: execution.resumeReason,
+      capabilities.resume &&
+      !cancellationPending &&
+      execution.state !== 'cancelling' &&
+      (canResumePausedSceneGeneration(execution, checkpoint) ||
+        canResumeInterruptedSceneGeneration(execution, checkpoint)),
+    // 写入/提交回执不明的现场禁止普通取消；保持待核对，由证据核对路径结算。
+    canCancel:
+      !terminal &&
+      execution.state !== 'committing' &&
+      execution.interruptReason !== 'writeUnknown' &&
+      execution.interruptReason !== 'commitUnknown',
+    ...(canResumeUnfinished ? { canResumeUnfinished } : {}),
+    ...(canVerifyResult ? { canVerifyResult } : {}),
+    ...(blocksNewGeneration ? { blocksNewGeneration } : {}),
+    ...(cleanupPending
+      ? {
+          cleanupPending,
+          canRetryCleanup: canRetryCommittedCleanup(execution, activeGeneration)
+        }
+      : {}),
+    resumeReason: cancellationPending
+      ? '取消尚未完成清理，请重新结束本次生成；不能继续原任务。'
+      : capabilities.resume
+        ? execution.resumeReason
+        : (execution.resumeReason ?? '当前构建尚未启用继续执行'),
     inputSummary: inputSummary(execution),
     usage: renderUsage(execution),
     ...(activity ? { activity } : {}),
     ...(recent ? { recentProgress: recent } : {}),
-    // running 表示上一轮人工交互已结算，运行期不再透出审阅入口；waiting 仍必须输出。
     interaction:
       execution.state === 'running'
         ? undefined
@@ -536,9 +552,14 @@ export function toRenderStatusVO(
 
 export function toRenderProgressEvent(
   execution: SceneGenerationExecution,
-  checkpointCanContinue = false
+  checkpointCanContinue = false,
+  capabilities: Pick<SceneGenerationWorkflowCapabilities, 'resume' | 'pause'> = {
+    resume: true,
+    pause: true
+  }
 ): SceneGenerationRenderProgressEventVO {
-  const status = toRenderStatusVO(execution, checkpointCanContinue)
+  // 进度事件只属于正在执行代次；不能把本次运行暴露成可再次恢复的崩溃现场。
+  const status = toRenderStatusVO(execution, checkpointCanContinue, capabilities, true)
   return { ...status, message: status.stageMessage }
 }
 
@@ -552,7 +573,12 @@ export function historyBoundary(
   execution: SceneGenerationExecution
 ): SceneGenerationHistoryBoundary | undefined {
   if (execution.state === 'succeeded') return 'committed'
-  if (execution.state === 'failed' || execution.interruptReason === 'commitUnknown') return 'failed'
+  if (
+    execution.state === 'failed' ||
+    execution.interruptReason === 'commitUnknown' ||
+    execution.interruptReason === 'writeUnknown'
+  )
+    return 'failed'
   if (execution.state === 'cancelled') return 'cancelled'
   if (execution.interruptReason === 'paused') return 'paused'
   if (execution.interruptReason === 'candidateConflict') return 'failed'
@@ -567,10 +593,11 @@ export function historyBoundary(
 
 export function toHistorySummary(
   execution: SceneGenerationExecution,
-  createdAt: string
+  createdAt: string,
+  checkpointId = execution.checkpointId
 ): SceneGenerationHistorySummaryVO | undefined {
   const boundary = historyBoundary(execution)
-  if (!boundary || !execution.checkpointId) return undefined
+  if (!boundary || !checkpointId) return undefined
   const stage = renderStage(execution)
   return {
     projectId: execution.projectId,
@@ -578,14 +605,18 @@ export function toHistorySummary(
     operationId: execution.operationId,
     threadId: execution.threadId,
     branchId: execution.branchId,
-    checkpointId: execution.checkpointId,
+    checkpointId,
     boundary,
     stage,
-    message: renderStageMessage(stage, execution.interruptReason),
+    // 题组等待没有候选，不能沿用等待审阅的“候选已就绪”文案。
+    message:
+      boundary === 'waitingDecision'
+        ? '等待你确认创作问题'
+        : renderStageMessage(stage, execution.interruptReason),
     createdAt,
     candidateSnapshotId: execution.candidateSnapshotId,
     commitId: execution.result?.commitId,
-    // 只在真实失败终态补原因；待核对中断保留“提交结果待核对”，不把底层原因当失败原因。
+    // 只在真实失败终态补原因；待核对中断保留固定核对文案，不把底层原因当失败原因。
     ...(boundary === 'failed' && execution.state === 'failed' && execution.failure?.reason
       ? { failureReason: execution.failure.reason }
       : {})
@@ -617,7 +648,6 @@ const SAFE_FAILURE_MESSAGE: Record<string, true> = {
   提交结果待核对: true
 }
 
-/** 原因优先固定文案；其它未知原文回退阶段文案。 */
 function safeFailureMessage(execution: SceneGenerationExecution): string | undefined {
   const failure = execution.failure
   if (!failure) return undefined
@@ -628,7 +658,6 @@ function safeFailureMessage(execution: SceneGenerationExecution): string | undef
   return renderStageMessage(renderStage(execution))
 }
 
-/** 失败分类和动作只透出执行记录已持久化的事实；缺失保持缺失，不补造。 */
 function safeRenderFailure(
   execution: SceneGenerationExecution
 ): NonNullable<SceneGenerationRenderStatusVO['failure']> | undefined {
@@ -650,11 +679,30 @@ function safeRenderFailure(
       ...safeFacts
     }
   }
+  if (execution.interruptReason === 'writeUnknown') {
+    return {
+      code: ErrorCodes.operationConflict,
+      message: INTERRUPT_MESSAGE.writeUnknown,
+      ...(failure?.reason ? { reason: failure.reason } : {}),
+      ...(reference ? { reference } : {}),
+      unverified: true,
+      ...safeFacts
+    }
+  }
   if (execution.interruptReason === 'candidateConflict') {
     return {
       code: ErrorCodes.operationConflict,
       message: INTERRUPT_MESSAGE.candidateConflict,
       ...(failure?.reason ? { reason: failure.reason } : {}),
+      ...(reference ? { reference } : {}),
+      unverified: false,
+      ...safeFacts
+    }
+  }
+  if (execution.interruptReason === 'readInterrupted') {
+    return {
+      code: ErrorCodes.operationConflict,
+      message: INTERRUPT_MESSAGE.readInterrupted,
       ...(reference ? { reference } : {}),
       unverified: false,
       ...safeFacts

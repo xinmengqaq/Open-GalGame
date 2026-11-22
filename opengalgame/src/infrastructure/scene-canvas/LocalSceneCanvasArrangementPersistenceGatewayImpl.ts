@@ -50,14 +50,12 @@ export type SceneCanvasProjectLocation = {
   directory: string
 }
 
-/** 本机编排读写。不复制来源正文，不调用 Git。 */
 export class LocalSceneCanvasArrangementPersistenceGatewayImpl implements SceneCanvasArrangementPersistenceGateway {
   constructor(
     private readonly locateProject: (projectId: string) => Promise<SceneCanvasProjectLocation>,
     private readonly migration: CanvasArrangementMigration
   ) {}
 
-  /** 读取指定编排与同一份文件的保真快照。确认文件不存在时返回 null。 */
   async readArrangement(
     projectId: string,
     sceneId: string,
@@ -74,7 +72,6 @@ export class LocalSceneCanvasArrangementPersistenceGatewayImpl implements SceneC
           trigger: 'open'
         })
       } catch {
-        // 迁移失败不回退旧读；未能升级的旧格式随后按 unsupportedFormat 明确拒绝。
       }
     }
     try {
@@ -99,11 +96,6 @@ export class LocalSceneCanvasArrangementPersistenceGatewayImpl implements SceneC
     }
   }
 
-  /**
-   * 在允许目录内原子写入紧凑 JSON。
-   * 先校验请求并序列化，再定位工程与路径，最后写入，保持原错误优先级。
-   * VO 不承载的当前业务字段只从同一次读取的 base 保留；不再次读取既有文件。
-   */
   async writeArrangement(
     arrangement: SceneCanvasArrangementVO,
     base: SceneCanvasArrangementRead | null
@@ -157,7 +149,6 @@ async function arrangementFileExists(
   return scene.members.some((member) => member.name === fileName)
 }
 
-/** 读取当前 v5 文档并校验为唯一当前模型。旧格式迁移失败后明确不支持。 */
 function readArrangementModel(
   text: string,
   projectId: string,
@@ -221,7 +212,6 @@ function assertSameIdentity(
   }
 }
 
-/** 从同一次读取的当前模型提取 VO 不承载的保真字段。 */
 function preservedArrangementFields(
   arrangement: SceneCanvasArrangement
 ): SceneCanvasPreservedArrangementFields {
@@ -311,11 +301,6 @@ function mapReadError(error: unknown): AppException {
   return error
 }
 
-/**
- * VO 转唯一当前模型。VO 承载的字段取请求值；
- * 提示词/字段卡标题与全部卡片 usage、关系 defaultRelation 取已保存值，
- * 没有已保存值时使用既有默认语义（标题=cardId、简介空、usage 空、关系 associated）。
- */
 function toCurrentModel(
   arrangement: SceneCanvasArrangementVO,
   preserved: SceneCanvasPreservedArrangementFields | null
@@ -414,7 +399,6 @@ function toCurrentCard(
   }
 }
 
-/** 当前模型投影为应用层 VO。VO 不承载 usage/defaultRelation 与提示词/字段卡 title/summary。 */
 function toArrangementVO(arrangement: SceneCanvasArrangement): SceneCanvasArrangementVO {
   return {
     projectId: arrangement.projectId,

@@ -142,8 +142,6 @@ test('拉取模型列表失败就地显示', async ({ page }) => {
   await expect(page.getByRole('option')).toHaveCount(0)
 })
 
-// 保存成功按 2026-11-13 用户决定：关闭弹窗，只在应用内容区显示一次约 4 秒的
-// 悬浮成功通知，自动消失，不占布局、不持久保留；重开弹窗不要求旧成功提示继续存在。
 test('保存成功关闭弹窗并单次悬浮通知后自动消失', async ({ page }) => {
   await openHome(page)
   await page.getByRole('button', { name: '连接设置' }).click()
@@ -161,7 +159,6 @@ test('保存成功关闭弹窗并单次悬浮通知后自动消失', async ({ pa
   await expect(page.locator('[data-sonner-toaster]')).toHaveCSS('position', 'fixed')
 
   const layoutWithToast = await homeLayout(page)
-  // 不悬停也不聚焦通知，让既有 4 秒计时自然走完。
   await page.mouse.move(0, 0)
   const toastHasFocus = await page.evaluate(() => {
     const toast = document.querySelector('[data-sonner-toast]')

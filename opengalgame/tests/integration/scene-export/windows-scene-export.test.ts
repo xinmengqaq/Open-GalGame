@@ -1,5 +1,6 @@
-import { execFile, execFileSync, spawn } from 'node:child_process'
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { execFile, execFileSync, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,9 +10,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { ManageProjectVersioning } from '@application/project-versioning/services/impl/ManageProjectVersioning'
 import { ExportSavedScene } from '@application/scene-export/services/impl/ExportSavedScene'
+import type { WindowsScenePackager } from '@application/scene-export/ports/WindowsScenePackager'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
 import { encodeStorageKey } from '@infrastructure/project-files/projectFilePaths'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
+import { LocalSceneExportDestinationGateway } from '@infrastructure/scene-export/LocalSceneExportDestinationGateway'
 import { LocalSceneExportSourceGateway } from '@infrastructure/scene-export/LocalSceneExportSourceGateway'
 import {
   maximizeCopiedTemplateWindow,
@@ -33,6 +36,7 @@ import { SceneExportErrorCodes } from '@domain/scene-export/errors/SceneExportEr
 const roots: string[] = []
 const scene = { projectId: 'project-1', sceneId: 'scene-1' }
 const script = '小明:已保存的一句 -next;\r\nchangeBg:room.webp;\r\nchangeFigure:hero.png;\r\n'
+const committedScript = '小明:生成提交导出的一句 -next;\r\nchangeBg:room.webp;\r\nchangeFigure:hero.png;\r\n'
 const logger: LoggerGateway = {
   debug: () => undefined,
   info: () => undefined,
@@ -44,6 +48,9 @@ const unsaved = {
   contentBasis: { digest: 'a'.repeat(64), parserVersion: '4.6.5', engineVersion: '4.6.5' },
   versionReference: { kind: 'preview-save' as const, requestId: 'missing-save' }
 }
+
+// 成品启动验收默认跳过：只有显式开启时才运行一次，避免日常回归打开导出的游戏。
+const launchAcceptance = process.env.OPENGALGAME_SCENE_EXPORT_LAUNCH_ACCEPTANCE === '1'
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -91,7 +98,7 @@ describe('最小 Windows 场景导出', () => {
     await expect(readFile(join(world.userDirectory, 'WebGAL.exe'))).rejects.toThrow()
   })
 
-  it('Electron 主进程导出和覆盖已有 Windows 包时保留真实 ASAR 文件及保存内容', async () => {
+  it('Electron 主进程导出到工程 exports，复用完整产物且不改正式内容', async () => {
     const release = process.env.LOCALAPPDATA
       ? join(
           process.env.LOCALAPPDATA,
@@ -103,69 +110,77 @@ describe('最小 Windows 场景导出', () => {
       : ''
     const world = await registeredScene()
     const saved = await saveScene(world)
+    const headBefore = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: world.projectRoot,
+      encoding: 'utf8'
+    }).trim()
+    const sceneBefore = await readFile(join(world.projectRoot, 'game/scene/start.txt'))
     const previous = process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE
     process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = release
     try {
-      const electronMain = join(world.root, 'export-main.mjs')
-      const sourceFile = join(world.root, 'export-source.json')
-      const resultFile = join(world.root, 'export-result.json')
-      await symlink(
-        join(process.cwd(), 'node_modules'),
-        join(world.root, 'node_modules'),
-        'junction'
-      )
-      await build({
-        stdin: {
-          contents: `
-            import { app } from 'electron'
-            import { readFile, writeFile } from 'node:fs/promises'
-            import { TerreWindowsScenePackager } from './src/infrastructure/scene-export/TerreWindowsScenePackager'
-            async function main() {
-              await app.whenReady()
-              const source = JSON.parse(await readFile(process.argv[2], 'utf8'))
-              const logger = { debug() {}, info() {}, warn() {}, error() {} }
-              const result = await new TerreWindowsScenePackager(logger, process.argv[4]).packageWindowsScene(source)
-              await writeFile(process.argv[3], JSON.stringify(result))
-              app.exit(result.status === 'succeeded' ? 0 : 1)
-            }
-            void main().catch(error => {
-              console.error(error)
-              app.exit(1)
-            })
-          `,
-          resolveDir: process.cwd()
-        },
-        outfile: electronMain,
-        tsconfig: join(process.cwd(), 'tsconfig.node.json'),
-        bundle: true,
-        platform: 'node',
-        format: 'esm',
-        packages: 'external'
-      })
-      const service = exporter(world.userDirectory, {
-        async packageWindowsScene(source) {
-          await writeFile(sourceFile, JSON.stringify(source))
-          const env = { ...process.env }
-          delete env.ELECTRON_RUN_AS_NODE
-          await promisify(execFile)(
-            createRequire(import.meta.url)('electron') as string,
-            [electronMain, sourceFile, resultFile, world.userDirectory],
-            { env, timeout: 30_000, windowsHide: true }
-          )
-          return JSON.parse(await readFile(resultFile, 'utf8'))
-        }
-      })
+      const packager = await electronPackager(world, release)
+      const service = exporter(world.userDirectory, packager)
       await expect(service.exportSavedScene(saved)).resolves.toMatchObject({ status: 'succeeded' })
       const result = await service.exportSavedScene(saved)
       expect(result.status).toBe('succeeded')
+      expect(packager.packageCalls()).toBe(1)
       if (result.status !== 'succeeded') return
       expect(result.artifact.executableName).toBe('WebGAL.exe')
       expect(result.artifact.bytes).toBeGreaterThan(0)
       expect(result.artifact.directoryName).toMatch(/^scene-[a-f0-9]{16}$/)
       expect(result.artifact.entryRelativePath).toBe('game/scene/start.txt')
-      const output = join(world.userDirectory, 'exports', result.artifact.directoryName)
+      const output = join(
+        world.projectRoot,
+        'exports',
+        result.artifact.directoryName
+      )
       expect(result.artifact.directoryPath).toBe(output)
-      expect(JSON.stringify(result)).not.toContain(world.projectRoot)
+      await expect(stat(join(world.userDirectory, 'exports'))).rejects.toThrow()
+      expect(
+        execFileSync('git', ['rev-parse', 'HEAD'], {
+          cwd: world.projectRoot,
+          encoding: 'utf8'
+        }).trim()
+      ).toBe(headBefore)
+      expect(await readFile(join(world.projectRoot, 'game/scene/start.txt'))).toEqual(sceneBefore)
+      for (const directory of ['game', 'assets', '.opengalgame']) {
+        const entries = await readdir(join(world.projectRoot, directory), {
+          withFileTypes: true
+        }).catch(() => [])
+        expect(
+          entries.filter((entry) => entry.isDirectory() && entry.name.startsWith('scene-'))
+        ).toEqual([])
+      }
+      const marker = JSON.parse(
+        await readFile(join(output, '.scene-export.json'), 'utf8')
+      ) as {
+        projectId: string
+        sceneId: string
+        directoryName: string
+        files: readonly { relativePath: string; bytes: number; sha256: string }[]
+      }
+      expect(marker).toMatchObject({
+        projectId: scene.projectId,
+        sceneId: scene.sceneId,
+        directoryName: result.artifact.directoryName
+      })
+      const manifest = new Map(marker.files.map((file) => [file.relativePath, file]))
+      for (const relative of [
+        'WebGAL.exe',
+        'resources/app.asar',
+        'resources.pak',
+        'ffmpeg.dll',
+        'locales/zh-CN.pak'
+      ]) {
+        expect(manifest.has(relative)).toBe(true)
+      }
+      const pak = manifest.get('resources.pak')!
+      expect(pak.bytes).toBe((await stat(join(output, 'resources.pak'))).size)
+      expect(pak.sha256).toBe(
+        createHash('sha256')
+          .update(await readFile(join(output, 'resources.pak')))
+          .digest('hex')
+      )
       const packed = await readFile(join(output, 'resources', 'app.asar'))
       expect(packed.byteLength).toBeGreaterThan(0)
       const listing = execFileSync(
@@ -189,21 +204,254 @@ describe('最小 Windows 场景导出', () => {
       expect(listing).not.toMatch(/#root\s*\{|\.App\s*\{|#pixiCont|canvas\s*\{[^}]*width/i)
       expect(listing).toMatch(/__MAIN__[\s\S]*setBounds\(area\);\s*win\.maximize\(\)/)
       expect(listing).not.toMatch(/__MAIN__[\s\S]*width:\s*1600/)
-      const child = spawn(join(output, 'WebGAL.exe'), [], {
-        cwd: output,
-        windowsHide: false,
-        stdio: 'ignore',
-        detached: true
+    } finally {
+      if (previous === undefined) delete process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE
+      else process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = previous
+    }
+  }, 40_000)
+
+  /**
+   * 隔离成品启动验收，默认跳过；显式设置
+   * `OPENGALGAME_SCENE_EXPORT_LAUNCH_ACCEPTANCE=1` 后单独运行（可配合 `-t`）。
+   * 只启动本次隔离导出产物一次，用 `--version` 让 Electron 立即正常退出；
+   * 不调用 taskkill、不结束用户进程、不反复重启，也不触碰用户工作台。
+   */
+  it.skipIf(!launchAcceptance)(
+    '隔离成品单实例正常退出，不结束用户进程',
+    async () => {
+      const release = process.env.LOCALAPPDATA
+        ? join(
+            process.env.LOCALAPPDATA,
+            'opengalgame',
+            'templates',
+            'terre-4.6.5',
+            'WebGAL_Terre_Windows_4.6.5.zip'
+          )
+        : ''
+      const world = await registeredScene()
+      const saved = await saveScene(world)
+      const previous = process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE
+      process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = release
+      try {
+        const service = exporter(world.userDirectory, await electronPackager(world, release))
+        const result = await service.exportSavedScene(saved)
+        expect(result.status).toBe('succeeded')
+        if (result.status !== 'succeeded') return
+        const output = join(world.projectRoot, 'exports', result.artifact.directoryName)
+        expect(result.artifact.directoryPath).toBe(output)
+        const marker = JSON.parse(
+          await readFile(join(output, '.scene-export.json'), 'utf8')
+        ) as { directoryName: string }
+        expect(marker.directoryName).toBe(result.artifact.directoryName)
+
+        const profile = await mkdtemp(join(tmpdir(), 'scene-export-launch-profile-'))
+        try {
+          const env = { ...process.env }
+          delete env.ELECTRON_RUN_AS_NODE
+          const child = spawnSync(
+            join(output, 'WebGAL.exe'),
+            ['--version', `--user-data-dir=${profile}`],
+            {
+              cwd: output,
+              env,
+              windowsHide: true,
+              timeout: 20_000,
+              encoding: 'utf8'
+            }
+          )
+          expect(child.error).toBeUndefined()
+          expect(child.signal).toBeNull()
+          expect(child.status).toBe(0)
+        } finally {
+          await rm(profile, { recursive: true, force: true })
+        }
+      } finally {
+        if (previous === undefined) delete process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE
+        else process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = previous
+      }
+    },
+    120_000
+  )
+
+  it('同一版本导出到两个父目录时两边产物存在且字节一致', async () => {
+    const release = process.env.LOCALAPPDATA
+      ? join(
+          process.env.LOCALAPPDATA,
+          'opengalgame',
+          'templates',
+          'terre-4.6.5',
+          'WebGAL_Terre_Windows_4.6.5.zip'
+        )
+      : ''
+    const world = await registeredScene()
+    const saved = await saveScene(world)
+    const firstParent = join(world.root, 'destination-a')
+    const secondParent = join(world.root, 'destination-b')
+    await mkdir(firstParent)
+    await mkdir(secondParent)
+    const previous = process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE
+    process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = release
+    try {
+      const packager = await electronPackager(world, release)
+      const firstGateway = new LocalSceneExportDestinationGateway({
+        userDirectory: world.userDirectory,
+        chooseDirectory: async () => firstParent
       })
-      child.unref()
-      const started = await new Promise<boolean>((resolve) => {
-        child.once('spawn', () => resolve(true))
-        child.once('error', () => resolve(false))
+      const secondGateway = new LocalSceneExportDestinationGateway({
+        userDirectory: world.userDirectory,
+        chooseDirectory: async () => secondParent
       })
-      expect(started).toBe(true)
-      expect(child.pid).toBeGreaterThan(0)
-      execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true })
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      const firstChoice = await firstGateway.chooseParentDirectory(scene)
+      const secondChoice = await secondGateway.chooseParentDirectory(scene)
+      if (firstChoice.status !== 'selected' || secondChoice.status !== 'selected') {
+        throw new Error('没有选中导出父目录')
+      }
+      const firstRequest = {
+        ...saved,
+        destination: {
+          kind: 'selected' as const,
+          selectionId: firstChoice.selectionId
+        }
+      }
+      const secondRequest = {
+        ...saved,
+        destination: {
+          kind: 'selected' as const,
+          selectionId: secondChoice.selectionId
+        }
+      }
+      expect(JSON.stringify(firstRequest)).not.toContain(firstParent)
+      const first = await exporter(
+        world.userDirectory,
+        packager,
+        undefined,
+        firstGateway
+      ).exportSavedScene(firstRequest)
+      const second = await exporter(
+        world.userDirectory,
+        packager,
+        undefined,
+        secondGateway
+      ).exportSavedScene(secondRequest)
+      expect(first.status).toBe('succeeded')
+      expect(second.status).toBe('succeeded')
+      if (first.status !== 'succeeded' || second.status !== 'succeeded') return
+      expect(first.artifact.directoryName).toBe(second.artifact.directoryName)
+      const firstOutput = join(firstParent, first.artifact.directoryName)
+      const secondOutput = join(secondParent, second.artifact.directoryName)
+      expect(first.artifact.directoryPath).toBe(firstOutput)
+      expect(second.artifact.directoryPath).toBe(secondOutput)
+      for (const relative of ['WebGAL.exe', join('resources', 'app.asar')]) {
+        const [firstBytes, secondBytes] = await Promise.all([
+          readFile(join(firstOutput, relative)),
+          readFile(join(secondOutput, relative))
+        ])
+        expect(createHash('sha256').update(firstBytes).digest('hex')).toBe(
+          createHash('sha256').update(secondBytes).digest('hex')
+        )
+      }
+    } finally {
+      if (previous === undefined) delete process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE
+      else process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = previous
+    }
+  }, 90_000)
+
+  it('生成提交在没有预览保存时也能通过真实 Electron 打包，并把提交内容写入 ASAR', async () => {
+    const release = process.env.LOCALAPPDATA
+      ? join(
+          process.env.LOCALAPPDATA,
+          'opengalgame',
+          'templates',
+          'terre-4.6.5',
+          'WebGAL_Terre_Windows_4.6.5.zip'
+        )
+      : ''
+    const world = await registeredScene()
+    const versioningService = versioning(world.userDirectory)
+    const callerOperationId = 'generation-export-1'
+    const targets = [{ kind: 'scene', id: scene.sceneId }]
+    const changePaths = ['game/scene/start.txt']
+    const prepared = await versioningService.prepareOperation({
+      projectId: scene.projectId,
+      sourceModule: 'scene-generation',
+      targets,
+      changePaths,
+      watchedPaths: []
+    })
+    await versioningService.bindCallerOperation({
+      projectId: scene.projectId,
+      sourceModule: 'scene-generation',
+      callerOperationId,
+      operationId: prepared.operationId,
+      targets,
+      changePaths,
+      watchedPaths: []
+    })
+    const committed = await versioningService.commitOperation(
+      {
+        projectId: scene.projectId,
+        operationId: prepared.operationId,
+        callerOperationId,
+        baselineRef: prepared.baselineRef,
+        input: {
+          kind: 'files',
+          changes: [
+            {
+              relativePath: 'game/scene/start.txt',
+              action: 'modify',
+              content: { kind: 'bytes', bytes: new TextEncoder().encode(committedScript) }
+            }
+          ]
+        },
+        saveMode: 'manual',
+        contentSource: 'ai',
+        title: '确认场景生成',
+        summary: '已确认的场景脚本进入作品'
+      },
+      () => undefined
+    )
+    await expect(
+      stat(join(world.projectRoot, '.git/opengalgame/scene-preview-saves'))
+    ).rejects.toThrow()
+    const reader = new LocalScenePreviewSourceGateway(
+      new RegisteredSceneLocationGatewayImpl(world.userDirectory),
+      new SceneSourceReaderGatewayImpl(),
+      new SceneScriptParserGatewayImpl(),
+      new SceneAssetReferenceGatewayImpl()
+    )
+    const preview = await reader.readScenePreviewSource(scene)
+    const previous = process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE
+    process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = release
+    try {
+      const service = exporter(world.userDirectory, await electronPackager(world, release))
+      const request = {
+        ...scene,
+        contentBasis: preview.contentBasis,
+        versionReference: {
+          kind: 'generation-commit' as const,
+          operationId: callerOperationId,
+          commitId: committed.revisionRef
+        }
+      }
+      const result = await service.exportSavedScene(request)
+      expect(result.status).toBe('succeeded')
+      if (result.status !== 'succeeded') return
+      const output = join(world.projectRoot, 'exports', result.artifact.directoryName)
+      expect(result.artifact.versionReference).toEqual(request.versionReference)
+      expect(result.artifact.entryRelativePath).toBe('game/scene/start.txt')
+      expect((await stat(join(output, 'WebGAL.exe'))).size).toBeGreaterThan(0)
+      const listing = execFileSync(
+        process.execPath,
+        [
+          '-e',
+          "const asar=require('@electron/asar'); const dest=require('node:os').tmpdir()+'/terre-check-generation'; asar.extractAll(process.argv[1]+'/resources/app.asar', dest); const fs=require('node:fs'); const base=dest+'/public/game/'; console.log(fs.readFileSync(base+'scene/start.txt','utf8')); console.log(fs.readFileSync(base+'figure/hero.png').toString('hex'));",
+          output
+        ],
+        { cwd: join(process.cwd(), 'node_modules', '@electron', 'asar'), encoding: 'utf8' }
+      )
+      expect(listing).toContain('生成提交导出的一句')
+      expect(listing).not.toContain('已保存的一句')
+      expect(listing).toContain('010203')
     } finally {
       if (previous === undefined) delete process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE
       else process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = previous
@@ -333,7 +581,9 @@ describe('最小 Windows 场景导出', () => {
 
 function exporter(
   userDirectory: string,
-  packager: ConstructorParameters<typeof ExportSavedScene>[0]['packager']
+  packager: ConstructorParameters<typeof ExportSavedScene>[0]['packager'],
+  chooseDirectory: () => Promise<string | null> = async () => null,
+  destinationGateway?: ConstructorParameters<typeof ExportSavedScene>[0]['destinations']
 ): ExportSavedScene {
   const locations = new RegisteredSceneLocationGatewayImpl(userDirectory)
   const sources = new SceneSourceReaderGatewayImpl()
@@ -349,8 +599,77 @@ function exporter(
         new SceneAssetReferenceGatewayImpl()
       )
     ),
+    destinations:
+      destinationGateway ??
+      new LocalSceneExportDestinationGateway({
+        userDirectory,
+        chooseDirectory
+      }),
     packager
   })
+}
+
+/**
+ * 用真实 Electron 主进程运行 Terre 打包器。
+ * 测试工程挂到仓库 node_modules 的 junction，只读复用已安装依赖。
+ */
+async function electronPackager(
+  world: { root: string; userDirectory: string },
+  release: string
+): Promise<WindowsScenePackager & { readonly packageCalls: () => number }> {
+  const electronMain = join(world.root, 'export-main.mjs')
+  const sourceFile = join(world.root, 'export-source.json')
+  const resultFile = join(world.root, 'export-result.json')
+  await symlink(join(process.cwd(), 'node_modules'), join(world.root, 'node_modules'), 'junction')
+  await build({
+    stdin: {
+      contents: `
+        import { app } from 'electron'
+        import { readFile, writeFile } from 'node:fs/promises'
+        import { TerreWindowsScenePackager } from './src/infrastructure/scene-export/TerreWindowsScenePackager'
+        async function main() {
+          await app.whenReady()
+          const payload = JSON.parse(await readFile(process.argv[2], 'utf8'))
+          const logger = { debug() {}, info() {}, warn() {}, error() {} }
+          const result = await new TerreWindowsScenePackager(logger, process.argv[4]).packageWindowsScene(payload.source, payload.destination)
+          await writeFile(process.argv[3], JSON.stringify(result))
+          app.exit(result.status === 'succeeded' ? 0 : 1)
+        }
+        void main().catch(error => {
+          console.error(error)
+          app.exit(1)
+        })
+      `,
+      resolveDir: process.cwd()
+    },
+    outfile: electronMain,
+    tsconfig: join(process.cwd(), 'tsconfig.node.json'),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    packages: 'external'
+  })
+  process.env.OPENGALGAME_TERRE_WINDOWS_RELEASE = release
+  const verifier = new TerreWindowsScenePackager(logger, world.userDirectory)
+  let packaged = 0
+  return {
+    async packageWindowsScene(source, destination) {
+      packaged += 1
+      await writeFile(sourceFile, JSON.stringify({ source, destination }))
+      const env = { ...process.env }
+      delete env.ELECTRON_RUN_AS_NODE
+      await promisify(execFile)(
+        createRequire(import.meta.url)('electron') as string,
+        [electronMain, sourceFile, resultFile, world.userDirectory],
+        { env, timeout: 30_000, windowsHide: true }
+      )
+      return JSON.parse(await readFile(resultFile, 'utf8'))
+    },
+    verifyWindowsScene(source, destination, artifact) {
+      return verifier.verifyWindowsScene(source, destination, artifact)
+    },
+    packageCalls: () => packaged
+  }
 }
 
 function versioning(userDirectory: string): ManageProjectVersioning {

@@ -1,7 +1,3 @@
-/*
- * 作品历史面板与撤销/清理确认框。所有选择器限定在 .wb-drawer / .wb-drawer--dialog
- * 根作用域，避免影响首页、项目页和工作台画布。
- */
 .wb-drawer .works-panel {
   display: flex;
   min-height: 0;
@@ -10,7 +6,6 @@
   padding-top: 12px;
 }
 
-/* 标题与范围 */
 .wb-drawer .works-head {
   display: flex;
   flex: none;
@@ -58,7 +53,6 @@
   white-space: nowrap;
 }
 
-/* 统计带：不加卡片外框，只保留数字与分隔线。 */
 .wb-drawer .works-stats {
   display: flex;
   flex: none;
@@ -108,7 +102,6 @@
   color: var(--wb-danger);
 }
 
-/* 筛选与刷新 */
 .wb-drawer .works-toolbar {
   display: flex;
   flex: none;
@@ -220,7 +213,6 @@
   height: 15px;
 }
 
-/* 记录区：独立滚动，滚动条可见。 */
 .wb-drawer .works-scroll {
   min-height: 0;
   flex: 1;
@@ -257,7 +249,6 @@
   overflow: visible;
 }
 
-/* 日期章节 */
 .wb-drawer .works-date {
   display: flex;
   align-items: center;
@@ -285,7 +276,6 @@
   letter-spacing: 0.02em;
 }
 
-/* 记录行与自动保存分组行 */
 .wb-drawer .works-row,
 .wb-drawer .works-group {
   display: grid;
@@ -440,7 +430,6 @@
   transform: rotate(180deg);
 }
 
-/* 自动保存分组 */
 .wb-drawer .works-group__title {
   display: flex;
   align-items: center;
@@ -556,7 +545,6 @@
   transform: rotate(-90deg);
 }
 
-/* 状态标签 */
 .wb-drawer .works-badge {
   display: inline-flex;
   flex: none;
@@ -589,7 +577,6 @@
   transform: rotate(-1.2deg);
 }
 
-/* 详情区：固定在记录区下方，自身可滚动，不撑高抽屉。 */
 .wb-drawer .works-detail {
   display: flex;
   max-height: 44%;
@@ -740,7 +727,6 @@
   margin-left: auto;
 }
 
-/* 按钮 */
 .wb-drawer .works-primary,
 .wb-drawer .works-secondary,
 .wb-drawer .works-danger {
@@ -837,7 +823,6 @@
   height: 15px;
 }
 
-/* 窄窗口：统计带换行，记录行收紧，不横向溢出。 */
 @media (max-width: 720px) {
   .wb-drawer .works-stats {
     display: grid;
@@ -897,7 +882,6 @@
   }
 }
 
-/* 减少动态效果时只保留短淡入，不位移、不循环。 */
 @media (prefers-reduced-motion: reduce) {
   .wb-drawer .works-filter__indicator,
   .wb-drawer .works-row__chevron,

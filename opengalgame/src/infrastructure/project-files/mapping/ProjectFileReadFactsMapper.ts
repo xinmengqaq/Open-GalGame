@@ -6,9 +6,6 @@ import type { ProjectInputSourceDocument } from '../documents/ProjectInputSource
 import { digestVersionParts } from '../projectFilePaths'
 import type { SourceCatalogRecord } from '../reading/ProjectInputSourceCatalog'
 
-/**
- * @param content - 正文；文件素材不使用该值。
- */
 export function toProjectInputSource(
   document: ProjectInputSourceDocument,
   content: string,
@@ -37,10 +34,6 @@ export function toProjectInputSource(
   }
 }
 
-/**
- * 把目录记录转换成扫描摘要。无法识别类别时为 null。
- * @returns 摘要；描述损坏且没有类别时为 null。
- */
 export function toSourceSummary(
   record: SourceCatalogRecord,
   readable: boolean

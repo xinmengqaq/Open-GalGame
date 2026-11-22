@@ -15,9 +15,6 @@ import type { AjaxResult } from '@common/contracts/AjaxResult'
 export class ConnectionSettingsController {
   private readonly handle: IpcRequestHandler
 
-  /**
-   * @param exceptions - 统一失败出口。
-   */
   constructor(
     private readonly settings: ConnectionSettingsApplicationService,
     exceptions: IpcExceptionHandler
@@ -25,9 +22,6 @@ export class ConnectionSettingsController {
     this.handle = createRequestHandler(exceptions)
   }
 
-  /**
-   * @param input - 无参数请求。
-   */
   getSettingsSummary(
     input: unknown,
     access: IpcRequestAccess

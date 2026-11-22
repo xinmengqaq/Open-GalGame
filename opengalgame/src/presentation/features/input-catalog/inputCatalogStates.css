@@ -1,8 +1,3 @@
-/*
- * 目录的等待、剪贴板、轻提示、拖入、空态与失败态。
- * 全部使用柔光洗光、状态点和短句，不用左侧色条、告警卡、虚线框或纸片插画。
- */
-
 .clipBanner {
   display: flex;
   flex: none;
@@ -126,7 +121,6 @@
   background: color-mix(in srgb, var(--wb-surface-solid) 84%, transparent);
 }
 
-/* 空态与失败态：用光晕和状态图形组织画面，标题回到系统无衬线。 */
 
 .state {
   display: flex;
@@ -366,7 +360,6 @@
   height: 26px;
 }
 
-/* 读取中的骨架与真实行保持同一节奏。 */
 
 .skeleton {
   display: flex;
@@ -497,7 +490,6 @@
   content: '';
 }
 
-/* 拖入：整面青绿柔光，没有虚线边框和内部白卡。 */
 
 .dropOverlay {
   position: absolute;

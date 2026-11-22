@@ -1,7 +1,3 @@
-/*
- * 作品历史的加载骨架、空态、失败态与分页。选择器限定在 .wb-drawer 根作用域。
- */
-/* 加载骨架 */
 .wb-drawer .works-skeleton {
   position: relative;
   display: flex;
@@ -96,7 +92,6 @@
   }
 }
 
-/* 空态与失败态 */
 .wb-drawer .works-empty {
   position: relative;
   display: flex;
@@ -214,7 +209,6 @@
   margin-top: 6px;
 }
 
-/* 分页 */
 .wb-drawer .works-pagination {
   display: flex;
   align-items: center;

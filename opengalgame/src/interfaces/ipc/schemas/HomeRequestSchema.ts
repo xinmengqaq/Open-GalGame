@@ -29,7 +29,6 @@ const connectionApiKeySchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('keep') }),
   z.strictObject({ kind: z.literal('replace'), value: z.string() })
 ])
-/** 扩展原文上限与领域 8 KiB 一致，协议层先挡住超长字符串。 */
 const connectionExtensionMaxChars = 8 * 1024
 const connectionExtensionSchema = z
   .discriminatedUnion('kind', [

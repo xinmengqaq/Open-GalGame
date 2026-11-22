@@ -1,6 +1,5 @@
-import { randomUUID } from 'node:crypto'
-import { lstat, mkdir, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative } from 'node:path'
+import { lstat, mkdir, readdir, realpath } from 'node:fs/promises'
+import { isAbsolute, join, relative } from 'node:path'
 
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -21,10 +20,6 @@ export const workflowStorageFailure: StorageFailure = {
   msg: '工作流状态读写失败'
 }
 
-/**
- * 确认状态根目录存在并返回真实路径。
- * @throws {AppException} 目录不是绝对路径，或无法创建。
- */
 export async function ensureStateRoot(stateRoot: string): Promise<string> {
   if (typeof stateRoot !== 'string' || !isAbsolute(stateRoot)) {
     throw new AppException({ code: ErrorCodes.invalidRequest, msg: '状态目录必须是绝对路径' })
@@ -33,19 +28,10 @@ export async function ensureStateRoot(stateRoot: string): Promise<string> {
   return realpath(stateRoot)
 }
 
-/**
- * @returns 确认仍在根内的绝对路径。
- * @throws {AppException} 路径越界或指向链接外部。
- */
 export async function resolveStatePath(stateRoot: string, relativePath: string): Promise<string> {
   return resolveContained(stateRoot, relativePath)
 }
 
-/**
- * 把检查点命名空间编码为单个路径片段。
- * @param namespace - LangGraph 检查点命名空间。空字符串表示根图。
- * @throws {AppException} 命名空间不是字符串或过长。
- */
 export function namespaceToken(namespace: string): string {
   if (typeof namespace !== 'string' || namespace.includes('\0') || namespace.length > 512) {
     throw new AppException({ code: ErrorCodes.invalidRequest, msg: '检查点命名空间无效' })
@@ -54,10 +40,6 @@ export function namespaceToken(namespace: string): string {
   return `n_${Buffer.from(namespace, 'utf8').toString('base64url')}`
 }
 
-/**
- * 从目录名还原命名空间。无法识别时返回 undefined。
- * @returns 命名空间；不是本存储写入的目录时为 undefined。
- */
 export function namespaceFromToken(token: string): string | undefined {
   if (token === '_') return ''
   if (!token.startsWith('n_')) return undefined
@@ -68,9 +50,6 @@ export function namespaceFromToken(token: string): string | undefined {
   }
 }
 
-/**
- * @throws {AppException} 标识不合法。
- */
 export function branchCheckpointRelative(scope: {
   projectId: string
   threadId: string
@@ -79,10 +58,6 @@ export function branchCheckpointRelative(scope: {
   return `${threadRelative(scope)}/branches/${assertWorkflowSegment(scope.branchId, 'branchId')}/checkpoints`
 }
 
-/**
- * @param namespace - 检查点命名空间。
- * @throws {AppException} 标识或命名空间不合法。
- */
 export function checkpointRelative(
   scope: { projectId: string; threadId: string; branchId: string },
   namespace: string,
@@ -91,41 +66,6 @@ export function checkpointRelative(
   return `${branchCheckpointRelative(scope)}/${namespaceToken(namespace)}/${assertWorkflowSegment(checkpointId, 'checkpointId')}.json`
 }
 
-/**
- * @param namespace - 检查点命名空间。
- * @param index - 写入序号，特殊写入可以为负数。
- * @throws {AppException} 标识不合法。
- */
-export function writeRelative(
-  scope: { projectId: string; threadId: string; branchId: string },
-  namespace: string,
-  checkpointId: string,
-  index: number,
-  taskId: string
-): string {
-  if (!Number.isSafeInteger(index)) {
-    throw new AppException({ code: ErrorCodes.invalidRequest, msg: '检查点写入序号无效' })
-  }
-  const taskToken = Buffer.from(taskId, 'utf8').toString('base64url')
-  return `${branchCheckpointRelative(scope)}/${namespaceToken(namespace)}/writes/${assertWorkflowSegment(checkpointId, 'checkpointId')}/${index}__${taskToken}.json`
-}
-
-/**
- * @param contentId - 外置内容标识。
- * @throws {AppException} 标识不合法。
- */
-export function externalContentRelative(
-  scope: { projectId: string; threadId: string },
-  contentId: string
-): string {
-  return `${threadRelative(scope)}/context/${assertWorkflowSegment(contentId, 'externalContentId')}`
-}
-
-/**
- * 打开指定项目线程的真实目录。线程目录本身是联接时拒绝。
- * @returns 线程真实目录。目录不存在时为 undefined。
- * @throws {AppException} 路径越出该线程。
- */
 export async function openThreadDirectory(
   stateRoot: string,
   scope: { projectId: string; threadId: string }
@@ -150,10 +90,6 @@ export async function openThreadDirectory(
   return real
 }
 
-/**
- * 确认目标的真实路径仍在指定线程内。
- * @throws {AppException} 目标不存在，或真实路径越出线程。
- */
 export async function resolveInsideThread(
   threadDirectory: string,
   target: string
@@ -170,9 +106,6 @@ export async function resolveInsideThread(
   return real
 }
 
-/**
- * @throws {AppException} 路径或写入失败。
- */
 export async function recordOperationPhase(
   stateRoot: string,
   identity: WorkflowIdentity,
@@ -193,10 +126,6 @@ export async function recordOperationPhase(
   )
 }
 
-/**
- * @returns 已记录的阶段。目录不存在时为空。
- * @throws {AppException} 阶段文件损坏或路径越界。
- */
 export async function readOperationPhases(
   stateRoot: string,
   scope: { projectId: string; threadId: string }
@@ -221,39 +150,11 @@ export async function readOperationPhases(
   return phases
 }
 
-/**
- * 用临时文件和原子改名写入字节。
- * @throws {AppException} 写入或改名失败。
- */
-export async function writeAtomicBytes(path: string, bytes: Uint8Array): Promise<void> {
-  const temporary = join(dirname(path), `${TEMPORARY_NAME_PREFIX}${randomUUID()}`)
-  try {
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(temporary, bytes, { flag: 'wx', flush: true })
-    await rename(temporary, path)
-  } catch (error) {
-    await rm(temporary, { force: true }).catch(() => undefined)
-    throw new AppException({
-      code: ErrorCodes.internalError,
-      msg: '工作流状态读写失败',
-      cause: error
-    })
-  }
-}
-
-/**
- * 判断目标真实路径是否仍在根目录内。
- * @param root - 已解析的根目录。
- */
 function staysInside(root: string, target: string): boolean {
   const fromRoot = relative(root, target)
   return fromRoot === '' || (!fromRoot.startsWith('..') && !isAbsolute(fromRoot))
 }
 
-/**
- * 创建缺失的线程目录，并再次确认它没有被联接到其他线程。
- * @throws {AppException} 路径越出该线程。
- */
 async function ensureThreadDirectory(
   stateRoot: string,
   scope: { projectId: string; threadId: string }
@@ -269,16 +170,10 @@ async function ensureThreadDirectory(
   return created
 }
 
-/**
- * @throws {AppException} 标识不合法。
- */
 function threadRelative(scope: { projectId: string; threadId: string }): string {
   return `projects/${assertWorkflowSegment(scope.projectId, 'projectId')}/threads/${assertWorkflowSegment(scope.threadId, 'threadId')}`
 }
 
-/**
- * @throws {AppException} 文档缺少字段或阶段无法识别。
- */
 function parseOperationPhase(value: unknown): {
   operationId: string
   branchId: string

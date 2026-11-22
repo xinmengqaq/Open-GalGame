@@ -2,10 +2,6 @@ import { copyUsage } from '@infrastructure/scene-canvas/sceneArrangementCurrentM
 import type { SceneCanvasArrangementDocument } from '../documents/LegacySceneCanvasArrangementDocument'
 import type { ProjectCanvasArrangement } from '../models/LegacyProjectCanvasArrangement'
 
-/**
- * 旧 v3 存储文档转旧 v3 事实模型。仅供迁移工具读取旧文件。
- * @returns 不含来源正文的编排事实。提示词正文保留在提示词卡片中。
- */
 export function toCanvasArrangement(
   document: SceneCanvasArrangementDocument,
   version: string

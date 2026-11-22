@@ -62,6 +62,8 @@ function renderConversation(
       projectName: '测试项目',
       sceneLabel: '测试场景',
       startBlockedReason: null,
+      startBlockedByGeneration: false,
+      repairBlockedReason: null,
       startPhase: null,
       reviseOpen: false,
       onStart: () => undefined,
@@ -86,7 +88,6 @@ function renderConversation(
   )
 }
 
-/** 取文案下标；缺文案时直接失败，避免 -1 < n 造成假通过。 */
 function textIndex(html: string, text: string): number {
   const index = html.indexOf(text)
   expect(index, `渲染结果缺少文案：${text}`).toBeGreaterThanOrEqual(0)
@@ -111,7 +112,6 @@ describe('GenerationConversation 消息顺序', () => {
     expect(initialIndex).toBeLessThan(labelIndex)
     expect(labelIndex).toBeLessThan(bodyIndex)
     expect(bodyIndex).toBeLessThan(runStripIndex)
-    // 运行中仍渲染进度卡，顺序调整没有把它隐藏掉。
     expect(html).toContain('查看运行详情')
   })
 
@@ -327,8 +327,6 @@ describe('GenerationConversation pending resume 视图', () => {
   it('pending resume 期间保留旧会话输入与暂停终态，不被新会话门控收起', () => {
     const html = renderConversation(pausedStatus, { pending: true, pendingAction: 'resume' })
 
-    // resume 的 pendingAction 是 'resume'，pendingStart=false，新会话门控不生效：
-    // 继续生成必须沿用旧会话的回答、修改要求和暂停终态。
     expect(html).not.toContain('正在准备生成…')
 
     const initialIndex = textIndex(html, initialBubbleText)
@@ -342,7 +340,6 @@ describe('GenerationConversation pending resume 视图', () => {
     expect(reviseIndex).toBeLessThan(pausedIndex)
     expect(html).toContain('可以继续这次生成')
     expect(html).toContain('继续会沿用原任务、线程和检查点，不新建第二套记忆。')
-    // 暂停气泡的「继续生成」按钮处于续跑请求中，显示进行中文案而非准备新会话。
     expect(html).toContain('正在继续…')
     expect(html).toContain('查看运行详情')
   })
@@ -384,10 +381,8 @@ describe('GenerationConversation start 失败重试入口', () => {
     expect(html).toContain('重试生成')
     expect(html).toContain('wb-gen-quiet')
     expect(html).toContain('type="button"')
-    // 上一轮「按画布重新生成」仍随旧终态气泡收起，重试入口是唯一直接启动入口。
     expect(html).not.toContain('按画布重新生成')
 
-    // 静态渲染不执行事件监听，直接调用无状态组件核对接线后再触发一次点击。
     const button = GenerationStartRetry({
       pending: false,
       startBlockedReason: null,

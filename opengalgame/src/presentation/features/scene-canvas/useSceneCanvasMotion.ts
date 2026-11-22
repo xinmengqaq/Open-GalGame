@@ -10,10 +10,6 @@ interface SceneCanvasMotionOptions {
   emptyVisible: boolean
 }
 
-/**
- * 画布工具的入场与关系标签出现。
- * 减少动态效果时只做短淡入；结束后清掉内联 transform/opacity。
- */
 export function useSceneCanvasMotion({
   root,
   relationKey,

@@ -19,7 +19,6 @@ export function toOperationVO(execution: SceneGenerationOperationVO): SceneGener
   }
 }
 
-/** 映射安全状态，隐藏路径、输入快照和内部检查点数据。 */
 export function toStatusVO(
   execution: SceneGenerationExecution,
   running: boolean
@@ -30,8 +29,16 @@ export function toStatusVO(
     phase: phaseOf(execution.state, execution.step),
     attempt: execution.attempt,
     sequence: execution.sequence,
-    canResume: !running && !isTerminal(execution) && execution.state !== 'waiting',
-    // running 时上一轮审阅交互已结算，状态查询不能继续返回旧入口；waiting 仍必须返回。
+    canResume:
+      !running &&
+      !isTerminal(execution) &&
+      execution.state !== 'waiting' &&
+      execution.state !== 'cancelling' &&
+      execution.cancellationRequested !== true &&
+      execution.requiresCleanup !== true &&
+      execution.interruptReason !== 'writeUnknown' &&
+      execution.interruptReason !== 'commitUnknown' &&
+      execution.interruptReason !== 'candidateConflict',
     interaction: execution.state === 'running' ? undefined : execution.interaction,
     result: execution.result,
     failure: execution.failure
@@ -49,7 +56,8 @@ export function toStatusVO(
                 }
               : {})
           },
-          execution.interruptReason === 'commitUnknown'
+          execution.interruptReason === 'commitUnknown' ||
+            execution.interruptReason === 'writeUnknown'
         )
       : undefined,
     rollbackCommitId: execution.rollbackCommitId,
@@ -81,6 +89,8 @@ export function toCheckpointVO(view: SceneGenerationCheckpointVO): SceneGenerati
     preview: view.preview,
     canView: view.canView,
     canContinue: view.canContinue,
+    canFork: view.canFork,
+    ...(view.canReply === undefined ? {} : { canReply: view.canReply }),
     reason: view.reason
   })
 }

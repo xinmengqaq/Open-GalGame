@@ -128,7 +128,6 @@ describe('drawerTabsReducer 候选自动加入', () => {
     expect(baselined.candidateAvailable).toBe(true)
     expect(baselined.candidateId).toBe('candidate-1')
 
-    /* 同一候选的后续报告仍不是 false→true，不补标签。 */
     expect(candidateReport(baselined, true, 'candidate-1').open).toEqual(['current'])
   })
 
@@ -170,7 +169,6 @@ describe('drawerTabsReducer 候选自动加入', () => {
     expect(gone.candidateId).toBeNull()
     expect(gone.closedCandidateId).toBeNull()
 
-    /* 再次可用仍按 false→true 加入，用户没有关闭过它。 */
     expect(candidateReport(gone, true, 'candidate-1').open).toEqual([
       'current',
       'summary',

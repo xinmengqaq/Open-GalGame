@@ -10,10 +10,6 @@ import type {
 } from '@application/scene-preview/ports/PreviewRuntimeGateway'
 import type { PreviewRuntimeEventVO } from '@application/scene-preview/vo/PreviewRuntimeVO'
 import { PreviewRuntimeGatewayImpl } from '@infrastructure/scene-preview/PreviewRuntimeGatewayImpl'
-import type {
-  CandidateScreenFacts,
-  CandidateTrustedInputSource
-} from '@infrastructure/webgal/compatibility/candidateGameStart'
 import { WEBGAL_COMPATIBILITY_PROFILE } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
 import {
   MISSING_PREVIEW_CONTROL_COMMANDS,
@@ -76,7 +72,7 @@ describe('固定 WebGAL 预览控制能力', () => {
     )
   })
 
-  it('准备返回真实宿主地址，定位等待注册和就绪后才发送命令', async () => {
+  it('准备只返回宿主资源地址，iframe 装载后的定位阶段才等待真实游戏', async () => {
     const host = new ScriptedPreviewHost()
     host.installHandle()
     const gateway = gatewayFor(host)
@@ -100,6 +96,7 @@ describe('固定 WebGAL 预览控制能力', () => {
 
     host.markFrameLoaded()
     host.registerAndReady()
+    emitGameStarted(host)
     await expect(playing).resolves.toMatchObject({
       status: 'confirmed',
       stage: { phase: 'unknown', position: { kind: 'dialogue', dialogueId: '0' } }
@@ -109,42 +106,41 @@ describe('固定 WebGAL 预览控制能力', () => {
     await gateway.dispose()
   })
 
-  it('当前场景先按可信输入进入游戏，真实游戏快照之前不发送定位', async () => {
+  it('当前场景等待真实游戏快照，标题快照之前不发送定位', async () => {
     const host = new ScriptedPreviewHost()
     host.installHandle()
     const gateway = new PreviewRuntimeGatewayImpl({
       host,
       bridge: new WebgalPreviewControlBridge(host),
       timeoutMs: 50,
-      startupTimeoutMs: 200,
-      trustedInput: trustedInputOf(() =>
-        host.emitSnapshot({
-          sceneName: 'start.txt',
-          sentenceId: 1,
-          stageState: { showText: '放学后的空地渐渐安静下来。' }
-        })
-      )
+      startupTimeoutMs: 200
     })
     host.markFrameLoaded()
     host.registerAndReady()
     const prepared = await gateway.prepare(prepareRequest('scene-a'))
     expect(prepared).toMatchObject({
       status: 'ready',
-      stageUrl: 'http://127.0.0.1:9/__opengalgame/stage-input/test'
+      stageUrl: 'http://127.0.0.1:9/index.html'
     })
     host.emitSnapshot({
       sceneName: 'start.txt',
       sentenceId: 0,
       stageState: { currentDialogKey: 'initial' }
     })
-    host.answerSync({ sceneName: 'start.txt', sentenceId: 1 })
-
     const playing = gateway.playDialogue({
       ...prepareRequest('scene-a'),
       expectedRuntimeGeneration: 1,
       dialogueId: '0',
       scene: sceneFor('0')
     })
+    await Promise.resolve()
+    expect(host.sentTypes()).not.toContain('preview.command.sync-scene')
+    host.emitSnapshot({
+      sceneName: 'start.txt',
+      sentenceId: 1,
+      stageState: { showText: '放学后的空地渐渐安静下来。' }
+    })
+    host.answerSync({ sceneName: 'start.txt', sentenceId: 1 })
     const played = await playing
     expect(played).toMatchObject({
       status: 'confirmed',
@@ -161,50 +157,7 @@ describe('固定 WebGAL 预览控制能力', () => {
       host,
       bridge: new WebgalPreviewControlBridge(host),
       timeoutMs: 50,
-      startupTimeoutMs: 20,
-      trustedInput: trustedInputOf(() => undefined)
-    })
-    host.markFrameLoaded()
-    host.registerAndReady()
-    await gateway.prepare(prepareRequest('scene-a'))
-    host.emitSnapshot({
-      sceneName: 'start.txt',
-      sentenceId: 0,
-      stageState: { currentDialogKey: 'initial' }
-    })
-    host.answerSync({ sceneName: 'start.txt', sentenceId: 1 })
-
-    await expect(
-      gateway.playDialogue({
-        ...prepareRequest('scene-a'),
-        expectedRuntimeGeneration: 1,
-        dialogueId: '0',
-        scene: sceneFor('0')
-      })
-    ).resolves.toMatchObject({ status: 'failed', failure: { code: 'commandTimeout' } })
-    expect(host.sentTypes()).not.toContain('preview.command.sync-scene')
-    await gateway.dispose()
-  })
-
-  it('Electron 读不到画面时不发送定位，超时后才失败', async () => {
-    const host = new ScriptedPreviewHost()
-    host.installHandle()
-    const gateway = new PreviewRuntimeGatewayImpl({
-      host,
-      bridge: new WebgalPreviewControlBridge(host),
-      timeoutMs: 50,
-      startupTimeoutMs: 20,
-      trustedInput: () => ({
-        async readScreen() {
-          return null
-        },
-        async click() {
-          return undefined
-        },
-        async waitForLanguageDismissed() {
-          return undefined
-        }
-      })
+      startupTimeoutMs: 20
     })
     host.markFrameLoaded()
     host.registerAndReady()
@@ -275,6 +228,7 @@ describe('固定 WebGAL 预览控制能力', () => {
     host.markFrameLoaded()
     await gateway.prepare(prepareRequest('scene-a'))
     host.registerAndReady()
+    emitGameStarted(host)
     gateway.subscribe({ previewSessionId: 'scene-a' }, (event) =>
       seen.push(event.runtimeGeneration)
     )
@@ -301,6 +255,7 @@ describe('固定 WebGAL 预览控制能力', () => {
     host.markFrameLoaded()
     await gateway.prepare(prepareRequest('scene-a'))
     host.registerAndReady()
+    emitGameStarted(host)
     gateway.subscribe({ previewSessionId: 'scene-a' }, (event) =>
       seen.push(event.runtimeGeneration)
     )
@@ -389,12 +344,14 @@ describe('固定 WebGAL 预览控制能力', () => {
     host.markFrameLoaded()
     await gateway.prepare(prepareRequest('scene-a'))
     host.registerAndReady()
+    emitGameStarted(host)
     const timed = gateway.playDialogue({
       ...prepareRequest('scene-a'),
       expectedRuntimeGeneration: 1,
       dialogueId: '0',
       scene: sceneFor('0')
     })
+    await new Promise((resolve) => setTimeout(resolve, 0))
     host.connection.emit({
       kind: 'response',
       type: 'preview.command.sync-scene',
@@ -481,6 +438,7 @@ describe('固定 WebGAL 预览控制能力', () => {
     host.markFrameLoaded()
     await gateway.prepare(prepareRequest('current'))
     host.registerAndReady()
+    emitGameStarted(host)
     const candidate = await gateway.prepareCandidate({
       candidateSessionId: 'candidate-1',
       candidateSnapshotId: 'snapshot-1',
@@ -762,6 +720,7 @@ describe('预览运行时网关的连接与事件过滤', () => {
     expect(countSent(connection, 'response', 'session.register-preview')).toBe(1)
 
     await gateway.prepare(prepareRequest('scene-a'))
+    emitGameStartedOn(connection)
     connection.answerSync({ sceneName: 'start.txt', sentenceId: 1 })
     await expect(
       gateway.playDialogue({
@@ -784,6 +743,7 @@ describe('预览运行时网关的连接与事件过滤', () => {
     host.markReady(0)
     host.markReady(1)
     await gateway.prepare(prepareRequest('scene-a'))
+    emitGameStartedOn(host.connectionList[0])
     host.connectionList[0].answerSync({ sceneName: 'start.txt', sentenceId: 1 })
     await expect(
       gateway.playDialogue({
@@ -795,6 +755,7 @@ describe('预览运行时网关的连接与事件过滤', () => {
     ).resolves.toMatchObject({ status: 'confirmed' })
 
     await gateway.prepare(prepareRequest('scene-b'))
+    emitGameStartedOn(host.connectionList[0])
     await expect(
       gateway.playDialogue({
         ...prepareRequest('scene-b'),
@@ -878,6 +839,7 @@ describe('预览运行时网关的连接与事件过滤', () => {
     host.markReady(0)
     await gateway.prepare(prepareRequest('scene-a'))
     const connection = host.connectionList[0]
+    emitGameStartedOn(connection)
     const seen: PreviewRuntimeEventVO[] = []
     gateway.subscribe({ previewSessionId: 'scene-a' }, (event) => seen.push(event))
 
@@ -887,6 +849,7 @@ describe('预览运行时网关的连接与事件过滤', () => {
       dialogueId: '0',
       scene: sceneFor('0')
     })
+    await new Promise((resolve) => setTimeout(resolve, 0))
     const requestId = lastRequestId(connection, 'preview.command.sync-scene')
     connection.emit({
       kind: 'event',
@@ -932,7 +895,7 @@ describe('预览运行时网关的连接与事件过滤', () => {
       type: 'stage',
       previewSessionId: 'scene-a',
       runtimeGeneration: 1,
-      sequence: 2,
+      sequence: 3,
       position: { kind: 'dialogue', dialogueId: '0' }
     })
 
@@ -951,6 +914,7 @@ describe('预览运行时网关的连接与事件过滤', () => {
         settled = true
       }
     )
+    await new Promise((resolve) => setTimeout(resolve, 0))
     const secondRequestId = lastRequestId(connection, 'preview.command.sync-scene')
     connection.emit({
       kind: 'response',
@@ -1047,18 +1011,12 @@ describe('预览运行时网关的连接与事件过滤', () => {
     expect(countSent(connection, 'response', 'session.register-preview')).toBe(0)
   })
 
-  it('未显式配置时命令超时保持 5 秒、启动超时保持 20 秒', async () => {
+  it('未显式配置时连接超时保持 5 秒、启动超时保持 20 秒', async () => {
     vi.useFakeTimers()
     const host = new ControlledRuntimeHost(1)
     const gateway = new PreviewRuntimeGatewayImpl({
       host,
-      bridge: new WebgalPreviewControlBridge(host),
-      trustedInput: () => ({
-        stagePageUrl: 'http://127.0.0.1:9/__opengalgame/stage-input/test',
-        readScreen: async () => null,
-        click: async () => undefined,
-        waitForLanguageDismissed: async () => undefined
-      })
+      bridge: new WebgalPreviewControlBridge(host)
     })
     try {
       await gateway.prepare(prepareRequest('scene-a'))
@@ -1103,6 +1061,26 @@ describe('预览运行时网关的连接与事件过滤', () => {
   })
 })
 
+function emitGameStarted(host: ScriptedPreviewHost): void {
+  host.emitSnapshot({
+    sceneName: 'start.txt',
+    sentenceId: 1,
+    stageState: { showText: '游戏已经开始。' }
+  })
+}
+
+function emitGameStartedOn(connection: ScriptedConnection): void {
+  connection.emit({
+    kind: 'event',
+    type: 'stage.snapshot.updated',
+    payload: {
+      sceneName: 'start.txt',
+      sentenceId: 1,
+      stageState: { showText: '游戏已经开始。' }
+    }
+  })
+}
+
 function gatewayFor(host: ScriptedPreviewHost): PreviewRuntimeGatewayImpl {
   return new PreviewRuntimeGatewayImpl({
     host,
@@ -1116,7 +1094,6 @@ function gatewayWith(
   options: {
     readonly timeoutMs?: number
     readonly startupTimeoutMs?: number
-    readonly trustedInput?: CandidateTrustedInputSource
   } = {}
 ): PreviewRuntimeGatewayImpl {
   return new PreviewRuntimeGatewayImpl({
@@ -1212,27 +1189,6 @@ function sceneFor(dialogueId: string): PlayPreviewDialogueRequest['scene'] {
   }
 }
 
-function trustedInputOf(onStart: () => void): CandidateTrustedInputSource {
-  return ({ signal }) => {
-    if (signal.aborted) return null
-    return {
-      stagePageUrl: 'http://127.0.0.1:9/__opengalgame/stage-input/test',
-      readScreen: async (): Promise<CandidateScreenFacts> => ({
-        languageButtons: [],
-        titleButtons: [{ text: '开始游戏', x: 1, y: 1, disabled: false }]
-      }),
-      async click() {
-        onStart()
-      },
-      async activate() {
-        onStart()
-      },
-      async waitForLanguageDismissed() {
-        return undefined
-      }
-    }
-  }
-}
 
 function prepareRequest(previewSessionId: string): {
   previewSessionId: string
@@ -1349,7 +1305,8 @@ class ScriptedPreviewHost implements WebgalRuntimeHost {
             distFileCount: 1,
             distBytes: 1,
             distDigest: 'test'
-          }
+          },
+          autoStart: true
         }
       : undefined
   }
@@ -1471,7 +1428,8 @@ const controlledRuntimeHandle: WebgalRuntimeHandle = {
     distFileCount: 1,
     distBytes: 1,
     distDigest: 'test'
-  }
+  },
+  autoStart: true
 }
 
 class ControlledRuntimeHost implements WebgalRuntimeHost {

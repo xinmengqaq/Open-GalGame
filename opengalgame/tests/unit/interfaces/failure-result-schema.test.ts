@@ -18,14 +18,13 @@ import { parseProjectFileNullResult } from '@interfaces/project-files/contracts/
 import { parseVersionHistoryClearResult } from '@interfaces/project-versioning/contracts/ProjectVersioningResponseSchema'
 import { parseSceneCanvasSaveResult } from '@interfaces/scene-canvas/contracts/SceneCanvasResponseSchema'
 import {
-  parseLatestPreviewSaveResult,
+  parseLatestSavedSceneVersionResult,
   parseSceneExportResult
 } from '@interfaces/scene-export/contracts/SceneExportResponseSchema'
 import { parseSceneGenerationNullResult } from '@interfaces/scene-generation/contracts/SceneGenerationResponseSchema'
 import { parseScenePreviewNullResult } from '@interfaces/scene-preview/contracts/ScenePreviewResponseSchema'
 import { parseOpenDirectoryResult } from '@interfaces/system-path/contracts/SystemPathResponseSchema'
 
-/** 失败信封的公共形状；data 只在成功时存在。 */
 type FailureEnvelope = { code: number; msg: string; reason?: string; data?: unknown }
 
 const failure = { code: 4401, msg: '安全失败消息' }
@@ -34,14 +33,8 @@ const reasonedFailure = {
   msg: '安全失败消息',
   reason: FailureReasons.promptReferenceDuplicate
 }
-/** 未知、且长于旧 1..64 约束的结构化原因；schema 与消费方都必须原样放行。 */
 const unknownStructuralReason = `r18-future-structural-reason-${'x'.repeat(96)}`
 
-/**
- * 所有已注册 IPC 域的失败信封解析入口。
- * 覆盖 app-update、home/project、project-files、project-versioning、scene-canvas、
- * scene-export、scene-generation、scene-preview、system-path；新增注册域必须补进本表。
- */
 const channelFailureParsers: ReadonlyArray<
   readonly [string, (value: unknown) => FailureEnvelope | null]
 > = [
@@ -57,10 +50,6 @@ const channelFailureParsers: ReadonlyArray<
   ['system-path:open-directory', parseOpenDirectoryResult]
 ]
 
-/**
- * 旧失败信封本就限制 `msg≤200` 的解析入口；其余已注册通道的旧边界没有该上限。
- * 两组都直接使用真实解析函数，不经过客户端接线或 mock 回声。
- */
 const boundedMsgFailureParsers: ReadonlyArray<
   readonly [string, (value: unknown) => FailureEnvelope | null]
 > = [
@@ -68,7 +57,7 @@ const boundedMsgFailureParsers: ReadonlyArray<
   ['app-update:check', parseUpdateCheckResult],
   ['app-update:install', parseInstallUpdateResult],
   ['scene-export:export', parseSceneExportResult],
-  ['scene-export:latest-preview-save', parseLatestPreviewSaveResult],
+  ['scene-export:latest-saved-scene-version', parseLatestSavedSceneVersionResult],
   ['system-path:open-directory', parseOpenDirectoryResult]
 ]
 

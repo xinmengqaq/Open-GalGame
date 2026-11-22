@@ -1,6 +1,5 @@
 import { toast } from 'sonner'
 
-/** 关系动作反馈只走既有 sonner 通道，由全局反馈层统一呈现。 */
 export const relationFeedback = {
   connected: () => toast.success('已建立关联，点击线上标签写关系'),
   connectSelfRejected: () => toast.error('连接未建立：不能连接到自身'),

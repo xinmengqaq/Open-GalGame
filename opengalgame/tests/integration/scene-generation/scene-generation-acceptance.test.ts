@@ -46,7 +46,6 @@ interface P1SafeContext {
   reviseCount: number
 }
 
-// 用户裁决：长生成不测时限；只关闭当前文件的 runner deadline，不影响其他文件。
 vi.setConfig({ testTimeout: 0 })
 
 it.runIf(process.env.OPENGALGAME_RUN_EXISTING_SCENE_ENGINE === '1')(
@@ -127,7 +126,6 @@ it.runIf(process.env.OPENGALGAME_RUN_REAL_MODEL === '1')(
     let app: SceneGenerationServices | undefined
     let sdkException: unknown
     try {
-      /** 透传请求并先记录每个 chunk；不 clone、不生成会拒绝的取证 promise。 */
       const capturingFetch: typeof fetch = async (input, init) => {
         const tools = toolNamesOf(init?.body)
         const response = await fetch(input, init)
@@ -399,7 +397,6 @@ it.runIf(process.env.OPENGALGAME_RUN_REAL_MODEL === '1')(
   }
 )
 
-/** 读取请求体里的工具名；兼容 OpenAI 的 `function.name` 与 Anthropic 的顶层 `name`。解析失败直接抛出，避免空工具集让反向断言空过。 */
 function toolNamesOf(body: unknown): readonly string[] {
   if (typeof body !== 'string') throw new Error('模型请求体不是字符串，无法核对工具集')
   let parsed: { tools?: unknown }
@@ -419,14 +416,12 @@ function toolNamesOf(body: unknown): readonly string[] {
   })
 }
 
-/** 本用例认可的终态动作；只从结构化响应事件读取，不匹配原始文本。 */
 const TERMINAL_ACTIONS = ['submit_scene_result', 'report_blocked'] as const
 
 function isTerminalAction(action: string): action is (typeof TERMINAL_ACTIONS)[number] {
   return (TERMINAL_ACTIONS as readonly string[]).includes(action)
 }
 
-/** 只统计 payload 数量和解析失败数，不输出内容。 */
 function inspectResponseCounts(text: string): {
   payloadCount: number
   parseErrorCount: number
@@ -456,7 +451,6 @@ function inspectResponseCounts(text: string): {
   return { payloadCount, parseErrorCount }
 }
 
-/** 解析一次响应里的动作名：工具调用名与结构化正文的 action 字段。流式响应按 delta 正文拼接。 */
 function responseActions(text: string): readonly string[] {
   const names = new Set<string>()
   const contents: string[] = []
@@ -475,12 +469,10 @@ function responseActions(text: string): readonly string[] {
     const structured = JSON.parse(contents.join('')) as { action?: unknown }
     if (typeof structured.action === 'string') names.add(structured.action)
   } catch {
-    // 非结构化正文不参与动作取证。
   }
   return [...names]
 }
 
-/** 汇总各次响应 usage；支持普通 JSON 响应与 SSE data 行，缺失时返回未采集。 */
 function sumTokenUsage(
   responses: readonly string[]
 ): { promptTokens: number; completionTokens: number; totalTokens: number } | '未采集' {
@@ -513,7 +505,6 @@ interface ProviderPayload {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
 }
 
-/** 解析响应文本；普通 JSON 响应与 SSE data 行都还原成同一形状。 */
 function responsePayloads(text: string): readonly ProviderPayload[] {
   const trimmed = text.trim()
   if (trimmed.startsWith('{')) {
@@ -536,7 +527,6 @@ function responsePayloads(text: string): readonly ProviderPayload[] {
   return payloads
 }
 
-/** 读取本机 .env 的键值；只用于构造连接设置，不写入证据。 */
 async function environmentEntries(): Promise<Record<string, string>> {
   const entries: Record<string, string> = {}
   for (const line of (await readFile(resolve('.env'), 'utf8')).split(/\r?\n/u)) {
@@ -548,7 +538,6 @@ async function environmentEntries(): Promise<Record<string, string>> {
   return entries
 }
 
-/** 复用既有显式开关和本机 .env 配置，不把凭据写入验收产物。 */
 async function acceptanceSettings(): Promise<ConnectionSettingsInfo> {
   const entries = await environmentEntries()
   const providerId = entries.OPENGALGAME_PROVIDER_ID
@@ -567,7 +556,6 @@ async function acceptanceSettings(): Promise<ConnectionSettingsInfo> {
   }
 }
 
-/** 在既有真实模型设置上补本机声明的 OpenCode Go 会话头；未配置时保持原设置。 */
 async function p1AcceptanceSettings(): Promise<ConnectionSettingsInfo> {
   const settings = await acceptanceSettings()
   const session = (await environmentEntries()).OPENGALGAME_OPENCODE_SESSION?.trim()
@@ -575,7 +563,6 @@ async function p1AcceptanceSettings(): Promise<ConnectionSettingsInfo> {
   return { ...settings, extension: { defaultHeaders: { 'x-opencode-session': session } } }
 }
 
-/** 用相同应用入口验收，仅替换模型，产物与版本证据全部从真实文件查询。 */
 async function acceptance(mode: 'stub' | 'real'): Promise<void> {
   const f = await generationFixture({ keep: root ? join(resolve(root), mode) : undefined })
   const app =
@@ -616,7 +603,6 @@ async function acceptance(mode: 'stub' | 'real'): Promise<void> {
   if (root) console.info(`验收证据：${join(f.root, 'acceptance-report.json')}`)
 }
 
-/** SDK/HTTP 异常只保留可分类字段，不保留 message、请求或响应原文。 */
 function safeExceptionFields(error: unknown): Record<string, unknown> | null {
   if (!error || typeof error !== 'object') return null
   const record = error as Record<string, unknown>
@@ -656,7 +642,6 @@ function safeExceptionFields(error: unknown): Record<string, unknown> | null {
   }
 }
 
-/** finally 安全证据：失败也写产品状态/动作枚举/validation/HTTP 元数据，不写模型或响应正文。 */
 async function writeP1SafeReport(options: {
   f: GenerationFixture
   app: SceneGenerationServices | undefined
@@ -786,7 +771,6 @@ async function writeP1SafeReport(options: {
   }
 }
 
-/** 读取当前真实脚本解析后的第一条可显示 say，不用固定文案。 */
 async function firstVisibleSentence(projectRoot: string): Promise<string> {
   const raw = await readFile(join(projectRoot, 'game/scene/start.txt'), 'utf8')
   const parser = new SceneParser(
@@ -803,10 +787,6 @@ async function firstVisibleSentence(projectRoot: string): Promise<string> {
   return sentence.content.trim()
 }
 
-/**
- * 引擎把台词渲染成带外描边/内描边的分层 DOM，每字有三层文本；
- * 取每个文字元素的直接文本节点拼回台词，Pixi 文本保留作旧引擎回退。
- */
 async function engineVisibleTexts(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const texts: string[] = []
@@ -863,7 +843,6 @@ async function engineVisibleTexts(page: Page): Promise<string[]> {
   })
 }
 
-/** 加载既有引擎并执行生成入口，证明真实脚本与素材请求可达；不新增播放器。 */
 async function engineSmoke(
   projectRoot: string,
   artifactRoot: string,

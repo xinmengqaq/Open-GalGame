@@ -14,9 +14,7 @@ export type RelationAnchorData = {
   recordLabel: string | null
   recordKind: 'document' | 'prompt' | null
   rejected?: boolean
-  /** 标签在默认视图会压住卡片时收起为光点，悬停或聚焦再展开。 */
   condensed?: boolean
-  /** 标签高于线中点的距离；0 表示落在中点上。 */
   labelLift?: number
 }
 

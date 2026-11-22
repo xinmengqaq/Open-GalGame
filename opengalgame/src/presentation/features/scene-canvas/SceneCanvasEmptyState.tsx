@@ -9,10 +9,6 @@ interface SceneCanvasEmptyStateProps {
   onAddPrompt: () => void
 }
 
-/**
- * 没有卡片时的画布引导。图形、标题和说明直接落在画布洗光上，
- * 只保留一个主操作；动画和特效统一从底栏 dock 新增。
- */
 export function SceneCanvasEmptyState({ onAddPrompt }: SceneCanvasEmptyStateProps): ReactElement {
   return (
     <div className={styles.empty} data-testid="canvas-empty" data-motion="canvas-empty">

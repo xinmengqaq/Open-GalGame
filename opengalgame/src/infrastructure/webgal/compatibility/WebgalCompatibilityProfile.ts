@@ -32,18 +32,10 @@ export const WEBGAL_COMPATIBILITY_PROFILE = {
   ]
 } as const
 
-/**
- * 返回锁定解析器声明可识别的脚本命令。
- * 运行时构建没有单独导出注册表，不能把这份名单当成“引擎已执行”。
- */
 export function parserRecognizedCommands(): readonly string[] {
   return SCRIPT_CONFIG.map((item) => item.scriptString)
 }
 
-/**
- * 读取已安装包的版本。解析器版本跟随引擎，不在源码里写死。
- * @throws 版本缺失时抛出技术错误。
- */
 export function installedPackageVersion(packageName: string): string {
   const manifest = require(`${packageName}/package.json`) as { version?: unknown }
   if (typeof manifest.version !== 'string' || manifest.version.length === 0) {
@@ -62,13 +54,6 @@ export interface WebgalRuntimeBuildEvidence {
   readonly distDigest: string
 }
 
-/**
- * 递归列出目录下的全部普通文件，用 `/` 统一分隔符，保证跨平台摘要稳定。
- * @param root - 计算相对路径的根目录。
- * @param current - 当前遍历目录，默认与根目录相同。
- * @returns 相对根目录的文件路径列表。
- * @throws 目录枚举失败时抛出底层文件系统错误。
- */
 async function listFiles(root: string, current = root): Promise<string[]> {
   const entries = await readdir(current, { withFileTypes: true })
   const files: string[] = []
@@ -80,13 +65,6 @@ async function listFiles(root: string, current = root): Promise<string[]> {
   return files
 }
 
-/**
- * 汇总 dist 目录内所有文件的路径与内容，生成稳定摘要和总字节数。
- * 路径也参与摘要，避免文件集合变化但内容相同时被误判为同一构建。
- * @param root - dist 根目录。
- * @param files - 相对根目录、需要纳入摘要的文件列表。
- * @throws 任一文件读取失败时抛出底层文件系统错误。
- */
 async function digestDist(
   root: string,
   files: readonly string[]
@@ -104,10 +82,6 @@ async function digestDist(
   return { digest: digest.digest('hex'), bytes }
 }
 
-/**
- * @param engineRoot - `webgal-engine` 包根目录。
- * @throws 当包清单或 dist 不可读取时抛出技术错误。
- */
 export async function inspectWebgalRuntimeBuild(
   engineRoot: string
 ): Promise<WebgalRuntimeBuildEvidence> {
@@ -156,11 +130,6 @@ export async function inspectWebgalRuntimeBuild(
   }
 }
 
-/**
- * 校验运行时构建与本轮固定兼容配置一致。
- * @param engineRoot - `webgal-engine` 包根目录。
- * @throws 版本、许可、入口或构建摘要不一致时抛出技术错误。
- */
 export async function assertWebgalRuntimeCompatibility(
   engineRoot: string
 ): Promise<WebgalRuntimeBuildEvidence> {

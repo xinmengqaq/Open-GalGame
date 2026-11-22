@@ -3,10 +3,6 @@
 @import './inputCatalogMenu.css';
 @import './inputCatalogDialogs.css';
 
-/*
- * 输入目录是工作台左栏里的“来源目录”，不是文件管理器：
- * 没有独立白底、栏目边框和描边按钮组，所有层级都由 --wb-* 的洗光、留白与字重组织。
- */
 .panel {
   position: relative;
   display: flex;
@@ -60,7 +56,6 @@
   }
 }
 
-/* 抬头：来源目录的身份与可读状态，不做后台工具条。 */
 
 .header {
   flex: none;
@@ -179,7 +174,6 @@
   }
 }
 
-/* 搜索、分组与类型：轻软控件，突出当前选择而不是控件外框。 */
 
 .filters {
   display: grid;
@@ -453,7 +447,6 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--wb-surface-solid) 78%, transparent);
 }
 
-/* 路径只作安静的位置提示，不加背板。 */
 
 .crumbs {
   display: flex;
@@ -647,7 +640,6 @@
   line-height: 1.55;
 }
 
-/* 底部动作是一组安静的软胶囊，导入仍是唯一起眼的操作。 */
 
 .footer {
   position: relative;

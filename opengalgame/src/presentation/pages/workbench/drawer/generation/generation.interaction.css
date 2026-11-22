@@ -1,4 +1,3 @@
-/* ---------- 交互（Question） ---------- */
 .wb-gen-interaction {
   display: grid;
   gap: 10px;
@@ -227,7 +226,6 @@
   font-size: 12px;
 }
 
-/* ---------- 审阅 / 修正 ---------- */
 .wb-gen-review {
   display: grid;
   gap: 10px;
@@ -266,7 +264,6 @@
   color: var(--wb-danger);
 }
 
-/* #19：完成摘要缺失用用户语言说明已有候选、缺什么和可做什么。 */
 .wb-gen-review__notice {
   padding: 9px 11px;
   border-radius: var(--wb-radius-control);
@@ -276,7 +273,6 @@
   line-height: 1.7;
 }
 
-/* 候选状态事实：复用现有胶囊，只负责换行和 8px 间距；图标按字号缩放。 */
 .wb-gen-review__facts {
   display: flex;
   flex-wrap: wrap;
@@ -292,7 +288,6 @@
   flex: none;
 }
 
-/* 校验问题和读取问题来自两套事实源，用固定小标题分开，不混成一条。 */
 .wb-gen-review__subhead {
   margin: 0;
   color: var(--wb-text-faint);
@@ -317,7 +312,6 @@
   color: currentColor;
 }
 
-/* 重试确认区：正文只读、来源和输入边界分开说明；气泡内不套第二层边框。 */
 .wb-gen-retry {
   display: grid;
   gap: 10px;
@@ -422,7 +416,6 @@
   line-height: 1.6;
 }
 
-/* 已确认的修改/补充消息按用户消息只读展示，保留换行但不解析文本。 */
 .wb-gen-user-message {
   margin: 0;
   font-size: 14px;
@@ -455,7 +448,6 @@
   margin-top: 2px;
 }
 
-/* ---------- 共享按钮 ---------- */
 .wb-gen-primary,
 .wb-gen-secondary,
 .wb-gen-quiet,
@@ -540,7 +532,6 @@
   box-shadow: none;
 }
 
-/* 自定义按钮和选项统一使用工作台焦点环，不沿用组件库默认 ring。 */
 .wb-gen-primary:focus-visible,
 .wb-gen-secondary:focus-visible,
 .wb-gen-quiet:focus-visible,
@@ -573,7 +564,6 @@
   border-top-color: var(--purple);
 }
 
-/* ---------- 底部 dock ---------- */
 .wb-gen-dock {
   display: flex;
   flex: none;
@@ -583,7 +573,6 @@
   border-top: 1px solid var(--wb-hairline);
 }
 
-/* 修改输入是独立区域：与对话内容同基线，表面、边界和间距不再嵌进消息流。 */
 .wb-gen-dock--composer {
   display: grid;
   gap: 8px;
@@ -625,7 +614,6 @@
   font-size: 12px;
 }
 
-/* 等待交互时的取消行：不含输入，紧跟在修改输入框下方时不重复分隔线。 */
 .wb-gen-dock--waiting {
   justify-content: space-between;
 }
@@ -754,7 +742,6 @@
   height: 15px;
 }
 
-/* 窄窗口：输入区保持整行、不横向溢出，提示与提交分成两行。 */
 @media (max-width: 720px) {
   .wb-gen-dock--composer {
     margin-inline: 0;

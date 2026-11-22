@@ -21,9 +21,6 @@ import {
 import { contentRelativePath } from '../sourceContentPath'
 import type { SourceCatalogRecord } from '../reading/ProjectInputSourceCatalog'
 
-/**
- * @throws {AppException} 原内容缺失或无法定位。
- */
 export async function prepareSourceCopyChanges(
   projectRoot: string,
   document: ProjectInputSourceDocument,
@@ -83,10 +80,6 @@ export async function prepareSourceCopyChanges(
   }
 }
 
-/**
- * 核对删除集合没有共享内容，并准备描述和仍存在的内容删除。
- * @throws {AppException} 记录损坏、归属不明或内容被其他来源引用。
- */
 export async function prepareOwnedDeleteChanges(
   projectRoot: string,
   records: readonly SourceCatalogRecord[],

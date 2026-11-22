@@ -2,7 +2,6 @@
 @import './sceneInputMedia.css';
 @import './sceneInputPreset.css';
 
-/* 卡片内容。外框、头部、状态槽与操作槽在 CanvasCardFrame.module.css。 */
 
 .cardBody {
   display: flex;
@@ -41,7 +40,6 @@
   overflow-wrap: anywhere;
 }
 
-/* 媒体卡用途说明：标题下的安静信息层，最多两行，长文靠 title 看全文。 */
 .mediaSummary {
   display: -webkit-box;
   overflow: hidden;
@@ -63,7 +61,6 @@
   color: var(--wb-text-faint);
 }
 
-/* 用途说明本身就是编辑入口：按钮只保留文字层，不新增常驻大按钮。 */
 .mediaSummaryAction {
   width: 100%;
   padding: 0;
@@ -194,7 +191,6 @@
   outline-offset: 2px;
 }
 
-/* 音频卡的实际播放外观在共享媒体预览里，卡面只保留标题与用途说明。 */
 
 @media (max-width: 520px) {
   .title {

@@ -1,8 +1,3 @@
-/**
- * 版本模块错误码。
- * 5201–5204 承接既有共享 Git 技术失败，数值不变。
- * 5301 起是本模块协议规则失败，不复用场景生成或工程文件错误码。
- */
 export const ProjectVersioningErrorCodes = {
   gitNotRepository: 5201,
   gitUnavailable: 5202,

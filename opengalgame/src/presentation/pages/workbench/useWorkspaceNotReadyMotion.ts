@@ -4,10 +4,6 @@ import type { RefObject } from 'react'
 
 import { prefersReducedMotion } from '../../effects/motion'
 
-/**
- * 未就绪构图只在状态切换时短入场。同屏最多一层缺失光在呼吸；
- * 减少动态效果时只做短淡入，不位移、不循环。
- */
 export function useWorkspaceNotReadyMotion(
   root: RefObject<HTMLElement | null>,
   signature: string

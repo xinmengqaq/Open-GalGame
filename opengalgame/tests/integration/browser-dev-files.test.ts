@@ -346,7 +346,6 @@ it('开发启动把旧目录基线并入已有规范目录，再次启动不重�
   process.env.OPENGALGAME_DEV_USER_DIRECTORY = canonical
   try {
     vi.resetModules()
-    // 单例缓存在模块状态里，重复启动必须重新装载模块。
     const firstModule = await import('@bootstrap/browser/devFileBackend')
     const first = await firstModule.loadDevFileBackend()
     const listed = await first.call('listProjects', { offset: 0, limit: 24 })
@@ -358,7 +357,6 @@ it('开发启动把旧目录基线并入已有规范目录，再次启动不重�
     await first.close()
 
     vi.resetModules()
-    // 第二次启动同样要丢掉上一次的模块单例。
     const secondModule = await import('@bootstrap/browser/devFileBackend')
     const second = await secondModule.loadDevFileBackend()
     const again = await second.call('listProjects', { offset: 0, limit: 24 })
@@ -378,7 +376,6 @@ it('开发用户目录带尾随空格时以 5101 拒绝且不创建该目录', a
   process.env.OPENGALGAME_DEV_USER_DIRECTORY = spaced
   try {
     vi.resetModules()
-    // 非法目录必须打到新装载的启动校验，不能复用已缓存的后端。
     const loaded = await import('@bootstrap/browser/devFileBackend')
     await expect(Promise.resolve().then(() => loaded.loadDevFileBackend())).rejects.toMatchObject({
       code: ErrorCodes.invalidConfig

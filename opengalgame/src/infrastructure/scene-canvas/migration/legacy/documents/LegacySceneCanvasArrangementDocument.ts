@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 import { MAX_IDENTITY_BYTES } from '@infrastructure/project-files/public/projectFileStorage'
 
-/** 旧 v3 画布格式。只由迁移工具读取，产品不再读取该版本。 */
 export const PROJECT_ARRANGEMENT_FORMAT_VERSION = 3
 
 const identity = z

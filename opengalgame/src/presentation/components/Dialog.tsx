@@ -19,17 +19,10 @@ interface DialogProps {
   actions: ReactNode
 }
 
-/** --wb-* 只在工作台 .theme 子树内定义；探测主题边界，不绑定工作台内部类名。 */
 function usesWorkbenchTheme(node: HTMLElement): boolean {
   return getComputedStyle(node).getPropertyValue('--wb-radius-panel').trim() !== ''
 }
 
-/**
- * 模态弹窗：开合动画、焦点限制与 Esc。
- * 实现思路：标题标识由 useId 生成，多个弹窗同时挂载时不会都指向文档里第一个。
- * 弹窗元素以状态而非 ref 传给内部浮层，避免渲染期读取 ref。
- * 工作台主题内的居中弹窗换成柔光玻璃材质；右侧抽屉与其他页面保持原有形态。
- */
 export function Dialog({
   open,
   title,
@@ -103,7 +96,6 @@ export function Dialog({
       if (!open || !dialog || !shell) return
       const targets: Element[] = [dialog, shell]
       gsap.set(targets, { clearProps: 'transform,opacity,visibility' })
-      // 用 opacity 而不是 autoAlpha：隐藏可见性会让 showModal 刚设置的焦点掉到 body。
       if (prefersReducedMotion()) {
         gsap.fromTo(
           dialog,

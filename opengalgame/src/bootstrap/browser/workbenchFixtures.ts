@@ -174,7 +174,6 @@ export const workbenchSourceDetails: Record<string, ProjectInputSourceVO> = {
   }
 }
 
-/** 只读 v4 编排夹具。每类卡片至少一张，关系一条有名有记录、一条未写关系。布局满足画布 32 间距，装载时不会触发自动弹开保存。 */
 function mixedArrangement(projectId: string): SceneCanvasArrangementVO {
   return {
     projectId,
@@ -283,7 +282,6 @@ export function fixtureReadSources(
   }
 }
 
-/** 浏览器只读编排夹具。没有保存文件返回 null；损坏和读取失败分别返回。 */
 export function fixtureReadArrangement(
   projectId: string
 ): AjaxResult<SceneCanvasArrangementVO | null> {

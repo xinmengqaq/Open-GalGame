@@ -9,6 +9,7 @@ import {
 } from './SceneGenerationExecutionDocument'
 import {
   isSupportedExecutionEnvelopeVersion,
+  isUnfinishedLegacyOperationState,
   legacyExecutionRecordReason,
   legacyExecutionRecordTimeFacts,
   legacyOperationFactSchema,
@@ -26,6 +27,7 @@ import {
   writeExecutionRecordArchive,
   type ExecutionArchiveLegacyRecord
 } from './LegacyExecutionRecordArchive'
+import { restorePhaseTwoReviewInteraction } from './ReviewInteractionUpgrade'
 
 const failure = { code: ErrorCodes.internalError, msg: '场景生成执行记录读写失败' }
 const migrationRefusedMessage = '执行记录迁移未完成，拒绝读取未迁移记录'
@@ -35,10 +37,14 @@ const envelopeSchema = z.object({
   executions: z.array(z.unknown())
 })
 
-/** 只能归档的旧记录；raw 只用于计算既有时间事实与原始摘要。 */
 export interface LegacyExecutionRecord {
   readonly fact: LegacyOperationFact
   readonly raw: unknown
+  readonly reason: LegacyExecutionRecordReason
+}
+
+/** 不能证明已结束的旧记录；用于在改写/归档前阻断整个文件。 */
+export interface LegacyExecutionBlocker extends LegacyOperationFact {
   readonly reason: LegacyExecutionRecordReason
 }
 
@@ -50,6 +56,9 @@ export interface ExecutionRecordMigrationPlan {
   readonly envelopeVersion: number
   readonly currentExecutions: readonly SceneGenerationExecution[]
   readonly legacyRecords: readonly LegacyExecutionRecord[]
+  /** 未结束的旧记录；非空时整批阻断，不归档也不改写任何记录。 */
+  readonly blockedRecords: readonly LegacyExecutionBlocker[]
+  readonly blocked: boolean
   readonly targetDocument: { readonly version: number; readonly executions: readonly unknown[] }
   readonly targetBytes: Buffer
   readonly targetSha256: string
@@ -61,7 +70,7 @@ export interface ExecutionRecordMigrationPlan {
   readonly rewrite: boolean
 }
 
-export type ExecutionRecordMigrationOutcome = 'unchanged' | 'migrated' | 'failed'
+export type ExecutionRecordMigrationOutcome = 'unchanged' | 'migrated' | 'blocked' | 'failed'
 
 export interface ExecutionRecordMigrationRun {
   readonly plan: ExecutionRecordMigrationPlan
@@ -79,7 +88,17 @@ function migrationFailure(message?: string, cause?: unknown): AppException {
   })
 }
 
-/** JSON 值结构性比较，用于判断迁移是否真的改变了记录。 */
+/**
+ * 未结束旧记录不能按“已归档/已升级”处理：先让作者在旧版结算或明确保留草稿。
+ * 文案只描述可执行路径，不承诺归档能继续，也不补造任何时间或授权事实。
+ */
+export function legacyMigrationBlockedMessage(
+  records: readonly LegacyExecutionBlocker[]
+): string {
+  const summary = records.map((record) => `${record.operationId}（${record.state}）`).join('、')
+  return `旧版生成记录仍有未结束操作：${summary}。已停止迁移：执行记录文件未改写，也未创建归档。请先用旧版打开该工程，完成或取消这些操作（或明确保留草稿），再重新迁移；归档只保留迁移前字节，不能用于继续生成。`
+}
+
 function jsonEqual(left: unknown, right: unknown): boolean {
   if (left === right) return true
   if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object')
@@ -97,10 +116,6 @@ function jsonEqual(left: unknown, right: unknown): boolean {
   )
 }
 
-/**
- * 单条记录只归入当前执行或 LegacyExecutionRecord 之一。
- * changed 只在迁移函数实际改写记录时标记，用于判断是否需要写回。
- */
 type ClassifiedExecutionRecord =
   | { readonly execution: SceneGenerationExecution; readonly changed: boolean }
   | { readonly record: LegacyExecutionRecord }
@@ -125,10 +140,6 @@ function classifyExecutionRecord(projectId: string, item: unknown): ClassifiedEx
   }
 }
 
-/**
- * 只读分类一个执行记录文件：可当前化的记录与只能归档的旧记录分开，
- * 任一无法归类或身份不符的记录都中止本次迁移，不写任何文件。
- */
 export function planExecutionRecordMigration(
   sourceBytes: Buffer,
   projectId: string
@@ -145,11 +156,23 @@ export function planExecutionRecordMigration(
   if (!isSupportedExecutionEnvelopeVersion(envelope.data.version))
     throw migrationFailure('执行记录信封版本不受支持')
 
-  const entries = envelope.data.executions.map((item) => classifyExecutionRecord(projectId, item))
+  const entries = envelope.data.executions.map((item) => {
+    const classified = classifyExecutionRecord(projectId, item)
+    if (!('execution' in classified)) return classified
+    // 第二阶段只允许丢弃的等待恢复原有动作集；记录本身和已接受回复不改写。
+    const upgraded = restorePhaseTwoReviewInteraction(classified.execution)
+    return {
+      execution: upgraded.execution,
+      changed: classified.changed || upgraded.changed
+    }
+  })
   const currentExecutions = entries.flatMap((entry) =>
     'execution' in entry ? [entry.execution] : []
   )
   const legacyRecords = entries.flatMap((entry) => ('record' in entry ? [entry.record] : []))
+  const blockedRecords = legacyRecords
+    .filter((record) => isUnfinishedLegacyOperationState(record.fact.state))
+    .map((record) => ({ ...record.fact, reason: record.reason }))
   const targetDocument = {
     version: SCENE_GENERATION_EXECUTION_DOCUMENT_VERSION,
     executions: currentExecutions
@@ -169,6 +192,8 @@ export function planExecutionRecordMigration(
     envelopeVersion: envelope.data.version,
     currentExecutions,
     legacyRecords,
+    blockedRecords,
+    blocked: blockedRecords.length > 0,
     targetDocument,
     targetBytes,
     targetSha256: sha256Hex(targetBytes),
@@ -180,7 +205,6 @@ export function planExecutionRecordMigration(
   }
 }
 
-/** 校验写出的目标只含当前记录，且身份、顺序、记录时间与原解析结果一致。 */
 export function verifyExecutionRecordTarget(
   writtenBytes: Buffer,
   plan: ExecutionRecordMigrationPlan
@@ -242,11 +266,6 @@ function archiveLegacyRecords(
   })
 }
 
-/**
- * 在调用方已持有文件串行边界时执行一次迁移：
- * 备份原始字节 → 写 sidecar → 原子写当前记录 → 重读校验。
- * 归档或写回失败时保留旧文件并返回 failed；产品读取由下方包装器明确拒绝。
- */
 export async function migrateExecutionRecordFile(input: {
   readonly stateRoot: string
   readonly projectId: string
@@ -256,6 +275,8 @@ export async function migrateExecutionRecordFile(input: {
 }): Promise<ExecutionRecordMigrationRun> {
   const plan = planExecutionRecordMigration(input.bytes, input.projectId)
   if (plan.relativePath !== input.relativePath) throw migrationFailure('执行记录路径与工程不一致')
+  if (plan.blocked)
+    return { plan, outcome: 'blocked', error: legacyMigrationBlockedMessage(plan.blockedRecords) }
   if (!plan.rewrite) return { plan, outcome: 'unchanged' }
 
   const currentBytes = await readExecutionRecordDocumentBytes(input.documentPath)
@@ -323,10 +344,6 @@ export async function migrateExecutionRecordFile(input: {
   }
 }
 
-/**
- * 产品读取入口：首访先迁移，再只返回当前执行。
- * 迁移未完成时明确拒绝，不返回迁移前的旧读结果，也不让调用方写入。
- */
 export async function readCurrentExecutionRecordFile(input: {
   readonly stateRoot: string
   readonly projectId: string
@@ -336,6 +353,11 @@ export async function readCurrentExecutionRecordFile(input: {
   const bytes = await readExecutionRecordDocumentBytes(input.documentPath)
   if (bytes === null) return []
   const plan = planExecutionRecordMigration(bytes, input.projectId)
+  if (plan.blocked)
+    throw new AppException({
+      ...failure,
+      msg: legacyMigrationBlockedMessage(plan.blockedRecords)
+    })
   if (!plan.rewrite) return plan.currentExecutions
   const run = await migrateExecutionRecordFile({
     stateRoot: input.stateRoot,

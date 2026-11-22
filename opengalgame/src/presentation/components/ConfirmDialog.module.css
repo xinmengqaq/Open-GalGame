@@ -140,7 +140,6 @@
   font-weight: 650;
 }
 
-/* 工作台确认框：目标和提示改成无边框洗光行，危险信息只保留柔光底和状态点。 */
 :global([data-theme='workbench']) .content {
   gap: 13px;
   color: var(--wb-text);

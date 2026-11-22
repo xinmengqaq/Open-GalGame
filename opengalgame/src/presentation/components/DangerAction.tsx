@@ -5,9 +5,7 @@ import { Button } from './Button'
 import styles from './DangerAction.module.css'
 
 interface DangerActionProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
-  /** 调用方给出的精确动词，同时作为可访问名称。 */
   label: string
-  /** quiet 用于入口，solid 用于确认主按钮。 */
   emphasis?: 'quiet' | 'solid'
   icon?: ReactNode
   showIcon?: boolean
@@ -32,10 +30,6 @@ export function DangerIcon({ className }: { className?: string }): ReactElement 
   )
 }
 
-/**
- * 危险动作只有统一的视觉语义；对象、范围、风险和动词都由调用方给出。
- * quiet 不抢主操作，solid 用于确认弹窗中的最终动作。
- */
 export function DangerAction({
   label,
   emphasis = 'quiet',

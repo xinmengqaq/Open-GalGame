@@ -1,7 +1,3 @@
-/*
- * 目录行是一条轻盈的内容条目：文件名是主角，类型和状态退到正文级，
- * 悬停用一层柔光而不是左侧色条、描边或文件管理器式的高亮。
- */
 .row {
   position: relative;
   display: flex;
@@ -191,7 +187,6 @@
   color: var(--wb-accent);
 }
 
-/* 媒体缩略图：小尺寸按原始比例、不裁切；失败时保留类型图标。 */
 
 .mediaTile {
   position: relative;
@@ -427,7 +422,6 @@
   font-weight: 800;
 }
 
-/* 筛选空态与空文件夹：柔光圆盘 + 短句，不用边框图标和纸片图形。 */
 
 .filterEmpty,
 .folderEmpty {

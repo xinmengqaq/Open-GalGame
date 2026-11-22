@@ -21,10 +21,6 @@ interface SceneGenerationIpcScope {
   readonly subscriptions: Map<number, SceneGenerationSubscription>
 }
 
-/**
- * 注册固定生成通道。进度订阅随窗口和注销一起释放。
- * @param options - 控制器和受信任窗口。
- */
 export function registerSceneGenerationIpc(options: SceneGenerationIpcBinding): () => void {
   const access = createIpcRequestAccess(options)
   const scope: SceneGenerationIpcScope = { subscriptions: new Map() }
@@ -50,6 +46,8 @@ export function registerSceneGenerationIpc(options: SceneGenerationIpcBinding): 
         options.sceneGeneration.listHistory(input, access(event)),
       'scene-generation:read-checkpoint': (event, input) =>
         options.sceneGeneration.readCheckpoint(input, access(event)),
+      'scene-generation:fork': (event, input) =>
+        options.sceneGeneration.fork(input, access(event)),
       'scene-generation:open-preview': (event, input) =>
         options.sceneGeneration.openPreview(input, access(event)),
       'scene-generation:close-preview': (event, input) =>
@@ -64,7 +62,6 @@ export function registerSceneGenerationIpc(options: SceneGenerationIpcBinding): 
   }
 }
 
-/** 释放本次注册持有的全部生成进度订阅。预览运行时由生成装配关闭。 */
 function releaseSceneGenerationSubscriptions(scope: SceneGenerationIpcScope): void {
   for (const subscription of scope.subscriptions.values()) subscription.unsubscribe()
   scope.subscriptions.clear()

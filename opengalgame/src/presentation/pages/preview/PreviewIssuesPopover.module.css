@@ -1,5 +1,3 @@
-/* 读取提示浮层：按需展开，不改变主布局。 */
-
 .popover {
   position: absolute;
   top: calc(100% + 10px);

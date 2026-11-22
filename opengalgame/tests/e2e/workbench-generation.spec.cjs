@@ -113,10 +113,6 @@ async function openView(page, label) {
   )
 }
 
-/**
- * 只插桩真实客户端的调用次数和先后顺序，不替换返回值。
- * 用于观察 statusRef/订阅/4s 收敛/启动前保存/取消这些页面副作用。
- */
 async function instrumentGeneration(page) {
   const patched = await page.evaluate(async () => {
     const find = (name) =>
@@ -277,10 +273,6 @@ async function expectNoPageWideOverflow(page, label) {
   record(`${label}：页面无横向溢出`, width.scrollWidth <= width.innerWidth, JSON.stringify(width))
 }
 
-/**
- * 读取空态主按钮副标题的文本行盒：按 Range.getClientRects 合并同一行，
- * 用“每一行都至少两个汉字宽”判断没有单字孤行，不依赖像素基线。
- */
 async function subtitleLineMetrics(page) {
   return page.locator('.wb-gen-empty__primary small').evaluate((node) => {
     const range = document.createRange()
@@ -465,7 +457,6 @@ test('窄窗口 860：空态不横向溢出且副标题平衡', async ({ page })
   await openWorkbench(page, search)
   await openDrawer(page)
 
-  // 从实际客户区收窄到 860，检查抽屉随窗口收缩时仍不溢出、不出现单字孤行。
   await page.setViewportSize({ width: 860, height: 900 })
   await waitForDrawerSettled(page)
   const metrics = await page.evaluate(() => {

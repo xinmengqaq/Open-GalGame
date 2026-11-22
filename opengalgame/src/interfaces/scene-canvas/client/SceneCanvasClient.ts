@@ -20,7 +20,6 @@ import type { SceneCanvasArrangementVO } from '@application/scene-canvas/vo/Scen
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 
 export interface SceneCanvasClient {
-  /** 读取已保存编排。没有文件时 data 为 null。 */
   readSceneCanvasArrangement(
     request: ReadSceneCanvasArrangementDTO
   ): Promise<AjaxResult<SceneCanvasArrangementVO | null>>
@@ -58,6 +57,5 @@ export interface SceneCanvasClient {
   detachRelationRecord(
     request: DetachSceneCanvasRelationRecordDTO
   ): Promise<AjaxResult<SceneCanvasArrangementVO>>
-  /** 保存编排。成功 data 为 null。 */
   saveSceneCanvasArrangement(request: SaveSceneCanvasArrangementDTO): Promise<AjaxResult<null>>
 }

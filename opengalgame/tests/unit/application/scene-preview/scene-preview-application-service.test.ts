@@ -1472,7 +1472,6 @@ describe('当前场景预览行为护栏', () => {
     expect(preview.current.overlays).toEqual([])
     expect(preview.current.played).toEqual([])
 
-    // 拒绝的草稿没有占用修订：rev1 仍可应用。
     await expect(draft()).resolves.toEqual({
       status: 'applied',
       dialogueId: '1',
@@ -1523,7 +1522,6 @@ describe('当前场景预览行为护栏', () => {
     })
     expect(preview.current.overlays).toEqual([])
 
-    // 被舞台拒绝的修订没有写入会话：rev1 仍可应用。
     await expect(draft(1)).resolves.toMatchObject({
       status: 'applied',
       editRevision: 1,
@@ -1824,7 +1822,6 @@ describe('当前场景预览行为护栏', () => {
       status: 'failed',
       failure: { code: 'staleRuntimeGeneration' }
     })
-    // 失败不推进当前句：从准备时的第 1 句继续向后仍定位到第 4 句。
     preview.current.playStageGenerationOffset = 0
     await expect(preview.service.playNextDialogue(command())).resolves.toMatchObject({
       status: 'confirmed',

@@ -5,7 +5,6 @@ import type { SecretCipher } from './SecretCipher'
 import { AppException } from '@common/errors/AppException'
 
 export class ElectronSecretCipherImpl implements SecretCipher {
-  /** 使用系统保护机制加密，不允许明文降级。 */
   encrypt(value: string): Buffer {
     if (
       !safeStorage.isEncryptionAvailable() ||

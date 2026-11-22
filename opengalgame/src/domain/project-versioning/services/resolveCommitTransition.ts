@@ -16,11 +16,6 @@ export type CommitTransition =
       readonly state: Extract<VersionProtocolState, '已提交' | '无变更'>
     }
 
-/**
- * 按原操作的持久事实决定能否继续提交。
- * 没有事实只表示应用层尚未取得可核对事实，不解释成安全重提。
- * @throws {AppException} 内容被替换、路径越界，或当前事实不允许提交。
- */
 export function resolveCommitTransition(input: {
   readonly operationId: string
   readonly contentFingerprint: string

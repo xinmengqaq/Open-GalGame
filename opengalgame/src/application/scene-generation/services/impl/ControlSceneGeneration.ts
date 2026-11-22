@@ -1,8 +1,12 @@
 import type {
   ResumeSceneGenerationDTO,
+  SceneGenerationRecoveryScopeDTO,
   SceneGenerationScopeDTO
 } from '../../dto/SceneGenerationDTO'
-import type { SceneGenerationRenderStatusVO } from '../../vo/SceneGenerationRenderVO'
+import type {
+  SceneGenerationRenderStatusVO,
+  SceneGenerationVerificationResultVO
+} from '../../vo/SceneGenerationRenderVO'
 import type { SceneGenerationApplicationService } from '../SceneGenerationApplicationService'
 import type { SceneGenerationControlService } from '../SceneGenerationControlService'
 import { CancelSceneGenerationWithRenderStatusUseCase } from './CancelSceneGenerationWithRenderStatusUseCase'
@@ -43,6 +47,24 @@ export class ControlSceneGeneration implements SceneGenerationControlService {
     request: ResumeSceneGenerationDTO
   ): Promise<SceneGenerationRenderStatusVO> {
     return this.resume.resumeSceneGeneration(request)
+  }
+
+  async resumeUnfinishedSceneGeneration(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<SceneGenerationRenderStatusVO> {
+    return this.resume.resumeUnfinishedSceneGeneration(request)
+  }
+
+  async retrySceneGenerationCleanup(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<SceneGenerationRenderStatusVO> {
+    return this.resume.retrySceneGenerationCleanup(request)
+  }
+
+  async verifyUnknownResult(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<SceneGenerationVerificationResultVO> {
+    return this.resume.verifyUnknownResult(request)
   }
 
   async cancelSceneGeneration(

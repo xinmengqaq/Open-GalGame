@@ -4,7 +4,6 @@
   align-items: stretch;
 }
 
-/* 首次读取：用表单骨架说明正在加载，不占满表单宽度的状态条。 */
 
 .loadingPanel {
   display: grid;
@@ -68,7 +67,6 @@
   color: #8a5a2b;
 }
 
-/* 上次测试/保存结果：表单内只保留一条紧凑入口，详情在弹窗里看。 */
 
 .feedbackEntry {
   display: flex;
@@ -172,7 +170,6 @@
   white-space: nowrap;
 }
 
-/* 扩展请求配置：可选区块，层次低于 API Key 与主操作；已配置时只显示状态，不回显内容。 */
 .extension {
   margin-top: 2px;
   padding-top: 16px;

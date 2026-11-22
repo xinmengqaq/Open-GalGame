@@ -6,11 +6,6 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 import { readProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 
-/**
- * 按已登记工程解析作品目录。
- * 不接受调用方传入的工程根，也不在失败说明里带出路径。
- * @throws {AppException} 工程未登记、位置不可用或登记无法读取。
- */
 export async function resolveProjectWorkRoot(
   userDirectory: string,
   projectId: string

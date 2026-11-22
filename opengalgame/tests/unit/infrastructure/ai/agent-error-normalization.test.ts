@@ -1,5 +1,3 @@
-import { GraphRecursionError } from '@langchain/langgraph'
-import { ToolInvocationError } from 'langchain'
 import { describe, expect, it } from 'vitest'
 
 import { AppException } from '@common/errors/AppException'
@@ -14,43 +12,32 @@ import {
   ModelStreamParseError,
   countsAsErrorAttempt,
   normalizeAgentError
-} from '@infrastructure/ai/middleware/retryPolicy'
+} from '@infrastructure/ai/execution/agentError'
 
 describe('Agent 技术失败分类', () => {
-  it('图步数保护与错误预算耗尽使用不同说明', () => {
-    const graph = normalizeAgentError(new GraphRecursionError('recursion'))
+  it('错误预算耗尽保留业务异常，不改成通用执行失败', () => {
     const budget = normalizeAgentError(new ErrorBudgetExhausted(new Error('model down')))
 
-    expect(graph.message).toBe('图执行步数已达到技术保护上限')
-    expect(graph.diagnosticCategory).toBe('sdk')
     expect(budget.message).toBe('错误调用保护次数已用尽')
-    expect(graph.message).not.toBe(budget.message)
     expect(budget.cause).toBeInstanceOf(Error)
+    expect(budget.diagnosticCategory).toBeUndefined()
   })
 
-  it('普通语法错误不是流式失败，模型流解析和工具异常按实际结构分类', () => {
+  it('普通语法错误不是流式失败，模型流解析和已有诊断分类按实际结构保留', () => {
     const syntax = normalizeAgentError(new SyntaxError('文件内容不是 JSON'))
     const stream = normalizeAgentError(new ModelStreamParseError(new SyntaxError('bad sse')))
-    const tool = normalizeAgentError(
-      new ToolInvocationError(new SyntaxError('工具参数不是 JSON'), {
-        name: 'writeText',
-        args: {},
-        id: 'call-1',
-        type: 'tool_call'
-      })
-    )
     const wrapped = normalizeAgentError(
       new AppException({
         code: ErrorCodes.internalError,
         msg: '模型执行失败',
-        cause: new ToolInvocationError(new Error('tool failed'), {
-          name: 'readTextRange',
-          args: { path: 'game/scene/start.txt' },
-          id: 'call-2',
-          type: 'tool_call'
-        })
+        cause: new ModelStreamParseError(new SyntaxError('wrapped sse'))
       })
     )
+    const classified = new AppException({
+      code: ErrorCodes.forbidden,
+      msg: '模型鉴权失败',
+      diagnosticCategory: 'auth'
+    })
 
     expect(syntax).toMatchObject({
       code: ErrorCodes.internalError,
@@ -58,10 +45,10 @@ describe('Agent 技术失败分类', () => {
       diagnosticCategory: 'unknown'
     })
     expect(stream.diagnosticCategory).toBe('streaming')
-    expect(tool.diagnosticCategory).toBe('tool')
     expect(wrapped.message).toBe('模型执行失败')
     expect(wrapped.code).toBe(ErrorCodes.internalError)
-    expect(wrapped.diagnosticCategory).toBe('tool')
+    expect(wrapped.diagnosticCategory).toBe('streaming')
+    expect(normalizeAgentError(classified)).toBe(classified)
   })
 
   it('鉴权和请求拒绝保留原错误码，并按状态分类', () => {

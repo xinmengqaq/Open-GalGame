@@ -27,7 +27,6 @@ export async function fetchProjectInputSources(
   return catalog.sources
 }
 
-/** 读取缓存中的目录版本。没有快照时为空字符串。 */
 export function catalogVersion(queryClient: QueryClient, projectId: string): string {
   return (
     queryClient.getQueryData<ProjectInputCatalogVO>(projectInputSourcesQueryKey(projectId))
@@ -35,7 +34,6 @@ export function catalogVersion(queryClient: QueryClient, projectId: string): str
   )
 }
 
-/** 操作返回时工程是否仍是发起时的工程。 */
 export function stillCurrentProject(projectId: string): boolean {
   return useWorkbenchSessionStore.getState().projectId === projectId
 }

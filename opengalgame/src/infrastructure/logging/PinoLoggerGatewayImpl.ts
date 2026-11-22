@@ -10,7 +10,6 @@ export class PinoLoggerGatewayImpl implements LoggerGateway {
   private readonly logger: Logger
   private readonly stream: ReturnType<typeof getStream>
   private closing?: Promise<void>
-  /** 建立中文诊断日志，轮转与保留交由库处理。 */
   constructor(directory: string, config: Readonly<RuntimeConfig>) {
     this.stream = getStream({
       filename: join(directory, 'diagnostic-%DATE%'),
@@ -48,10 +47,6 @@ export class PinoLoggerGatewayImpl implements LoggerGateway {
     })
     return this.closing
   }
-  /**
-   * 按统一结构写出日志，写失败只落 stderr，不改变提交结果。
-   * @param context - 关联标识等上下文，缺省为空对象。
-   */
   private record(
     level: 'debug' | 'info' | 'warn' | 'error',
     message: string,

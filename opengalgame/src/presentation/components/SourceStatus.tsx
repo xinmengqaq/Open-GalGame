@@ -15,19 +15,12 @@ const statusLabels: Record<SourceStatusCode, string> = {
 
 export interface SourceStatusProps {
   code: SourceStatusCode
-  /** 覆盖默认文案；调用方保证状态与文案一致。 */
   label?: string
-  /** card 用于卡片头部，compact 用于目录行。 */
   density?: 'card' | 'compact'
-  /** 状态变化与初次出现时的显现动效。 */
   motion?: boolean
   className?: string
 }
 
-/**
- * 来源状态：色点、文字和色调共同表达，可被卡片头部和目录行复用。
- * 状态是内联的一行，不套胶囊、底纹或整圈边框。
- */
 export function SourceStatus({
   code,
   label,
@@ -59,9 +52,6 @@ export function SourceStatus({
   )
 }
 
-/**
- * 文档格式状态。格式未知使用暖色状态点与疑问图标，和来源断开、不可读取区分。
- */
 export function FormatStatus({
   format,
   className

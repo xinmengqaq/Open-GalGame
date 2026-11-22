@@ -5,10 +5,6 @@ import layerStyles from './RelationLayer.module.css'
 import type { SessionEdge } from './sceneCanvas.types'
 import { useRelationEdgeMotion } from './useRelationMotion'
 
-/**
- * 关联线只画路径；关系名称由路径中点的锚点节点显示。
- * 线色、虚线与端点形状共同表达已命名、未命名、选中和拒绝，不依赖单一颜色。
- */
 export function SessionAssociationEdge({
   sourceX,
   sourceY,

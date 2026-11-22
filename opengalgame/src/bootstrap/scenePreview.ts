@@ -16,7 +16,6 @@ import type { PreviewRuntimeGateway } from '@application/scene-preview/ports/Pre
 import { createScenePreviewApplication } from '@application/scene-preview/services/impl/createScenePreviewApplication'
 import type { ScenePreviewApplicationService } from '@application/scene-preview/services/ScenePreviewApplicationService'
 import { PreviewRuntimeGatewayImpl } from '@infrastructure/scene-preview/PreviewRuntimeGatewayImpl'
-import type { CandidateTrustedInputSource } from '@infrastructure/webgal/compatibility/candidateGameStart'
 import { WebgalPreviewControlBridge } from '@infrastructure/webgal/preview/WebgalPreviewControlBridge'
 import type { WebgalRuntimeHost } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
 import { randomUUID } from 'node:crypto'
@@ -41,7 +40,6 @@ export type ScenePreviewDataServices = {
 export type ScenePreviewRuntimeOptions = ScenePreviewBootstrapOptions & {
   readonly host: WebgalRuntimeHost
   readonly bridge?: WebgalPreviewControlBridge
-  readonly trustedInput?: CandidateTrustedInputSource
   readonly nextId?: () => string
 }
 
@@ -51,10 +49,6 @@ export type ScenePreviewServices = ScenePreviewDataServices & {
   readonly bridge: WebgalPreviewControlBridge
 }
 
-/**
- * 只装配预览数据端口和候选只读服务。
- * 不创建运行时宿主、IPC 或页面；当前场景应用服务由 `createScenePreview` 组合。
- */
 export function createScenePreviewData(
   options: ScenePreviewBootstrapOptions
 ): ScenePreviewDataServices {
@@ -84,17 +78,12 @@ export function createScenePreviewData(
   }
 }
 
-/**
- * 组合数据端口和预览运行时。
- * 生产默认使用真实控制桥；测试可以注入同一端口的替身，不能把替身写成默认实现。
- */
 export function createScenePreview(options: ScenePreviewRuntimeOptions): ScenePreviewServices {
   const data = createScenePreviewData(options)
   const bridge = options.bridge ?? new WebgalPreviewControlBridge(options.host)
   const runtime = new PreviewRuntimeGatewayImpl({
     host: options.host,
-    bridge,
-    ...(options.trustedInput ? { trustedInput: options.trustedInput } : {})
+    bridge
   })
   return {
     ...data,

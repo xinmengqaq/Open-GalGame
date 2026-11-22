@@ -16,7 +16,6 @@ import {
   undoBlockedReason
 } from '../drawer/version-history/versionHistoryPresentation'
 
-/** 撤销后视图重读的退避基数与上限；首轮立即重试。 */
 const RETRY_BASE_DELAY_MS = 1200
 const RETRY_MAX_DELAY_MS = 8000
 
@@ -46,7 +45,6 @@ export interface WorkbenchHistoryRecoveryController {
   readonly onUndoCommitted: (draft: SessionSnapshot | null) => Promise<void>
 }
 
-/** 撤销后的页面恢复唯一所有者：会话草稿、stale 视图、重试节流与历史写阻断原因。 */
 export function useWorkbenchHistoryRecovery(
   options: WorkbenchHistoryRecoveryOptions
 ): WorkbenchHistoryRecoveryController {

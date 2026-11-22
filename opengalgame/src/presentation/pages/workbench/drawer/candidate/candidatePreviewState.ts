@@ -7,10 +7,6 @@ import type { GameStageEvent } from '@presentation/features/game-stage/gameStage
 
 import { isTerminalState } from '../generation/generationPresentation'
 
-/**
- * 候选会话的打开身份。全部来自后端安全投影，渲染层不补路径、入口或 Git 修订；
- * `checkpointId` 与 `candidateSnapshotId` 一起证明这是当前交互对应的已发布候选。
- */
 export type CandidatePreviewTarget = Readonly<{
   projectId: string
   sceneId: string
@@ -21,11 +17,6 @@ export type CandidatePreviewTarget = Readonly<{
   candidateSnapshotId: string
 }>
 
-/**
- * 审阅或修正交互绑定当前候选时产生目标；失败、取消和待核对中断后只凭后端明确的
- * 只读授权和完整候选身份产生同一类目标，不再要求仍然存在的交互。
- * 暂停仍走恢复语义，不从只读授权取候选；不按场景图片、历史摘要或本地状态推测候选。
- */
 export function candidatePreviewTargetOf(
   status: SceneGenerationRenderStatusVO | null
 ): CandidatePreviewTarget | null {
@@ -33,12 +24,10 @@ export function candidatePreviewTargetOf(
   const readOnlyTerminal = isCandidateReadOnlyTerminal(status)
   const interaction = status.interaction
   if (readOnlyTerminal) {
-    // 终态只认后端明确写下的只读授权；旧记录缺该事实时不从残留交互推断。
     if (status.previewAuthorization !== 'readOnly') return null
   } else {
     if (interaction === undefined) return null
     if (interaction.kind !== 'review' && interaction.kind !== 'correction') return null
-    // 与 P4-1 的打开资格一致：交互身份和当前状态不一致时不能按过期身份打开候选。
     if (status.checkpointId !== undefined && interaction.checkpointId !== status.checkpointId) {
       return null
     }
@@ -68,15 +57,10 @@ export function candidatePreviewTargetOf(
   }
 }
 
-/**
- * 失败、取消和待核对中断的只读候选范围。暂停仍可恢复，不按只读终态处理；
- * 与 `GenerationRunView.candidate` 的打开资格保持同一判定。
- */
 function isCandidateReadOnlyTerminal(status: SceneGenerationRenderStatusVO): boolean {
   return isTerminalState(status.state) || (status.state === 'interrupted' && status.stage !== 'paused')
 }
 
-/** 切换或重新打开时用它判断是否仍是同一候选；任一身份变化都必须重开会话。 */
 export function candidatePreviewTargetKey(target: CandidatePreviewTarget): string {
   return [
     target.projectId,
@@ -89,10 +73,6 @@ export function candidatePreviewTargetKey(target: CandidatePreviewTarget): strin
   ].join('|')
 }
 
-/**
- * 候选晚到响应和旧事件按会话与候选双重核对。成功结果还要满足只读契约，
- * 不把非只读或别的会话结果拼进当前舞台。
- */
 export type CandidatePreviewLifecycle =
   'idle' | 'opening' | 'open' | 'invalidated' | 'expired' | 'failed' | 'unsupported'
 
@@ -100,7 +80,6 @@ export type CandidatePreviewStage = 'idle' | 'ready' | 'failed'
 
 export type CandidatePreviewRead = 'idle' | 'loading' | 'ready' | 'failed'
 
-/** 界面一次只显示一个主状态；就绪、读取失败和游戏失败互斥，读取问题数量另列。 */
 export type CandidatePreviewPhase =
   | 'opening'
   | 'ready'
@@ -120,22 +99,14 @@ export type CandidatePreviewState = {
   readonly sessionId: string | null
   readonly candidateSnapshotId: string | null
   readonly sceneName: string | null
-  /** 只在嵌入容器内部使用，不进入可见文案、错误消息或可访问名称。 */
   readonly stageUrl: string | null
   readonly expiresAt: number | null
   readonly issues: readonly CandidatePreviewIssueVO[]
   readonly readMessage: string | null
-  /** 打开或启动请求失败，不表示舞台已经打开后加载失败。 */
   readonly failureMessage: string | null
-  /** 只保存白名单内的舞台失败说明；未映射文本按没有原因处理。 */
   readonly stageFailureMessage: string | null
   readonly lastSequence: number
-  /** 同一会话重新载入舞台实例的计数；只重建 iframe，不改变候选、会话和读取结果。 */
   readonly frameToken: number
-  /**
-   * 打开或等待画面就绪超过冻结阈值。只影响提示和“重新打开”动作，
-   * 不改变会话、候选和读取结果，也不代表失败。
-   */
   readonly openingStalled: boolean
 }
 
@@ -189,18 +160,12 @@ export type CandidatePreviewAction =
   | { readonly type: 'reload-stage' }
   | { readonly type: 'opening-stalled' }
 
-/**
- * 打开候选到画面就绪的安全看护阈值（冻结 15 秒）。
- * 超过后只把界面切到“仍在启动游戏画面”并给出重新打开动作；不判定失败，
- * 不自动取消会话，也不伪造 ready 或错误事件。
- */
 export const candidateOpeningStallMs = 15_000
 
-/** 会话拒绝读不到候选时，重开才是有效动作，不能原地重试。 */
 const candidateSessionRejectionCodes: readonly number[] = [
-  4511, // ScenePreviewErrorCodes.candidateSessionMissing
-  4512, // ScenePreviewErrorCodes.candidateSessionExpired
-  4513 // ScenePreviewErrorCodes.candidateSessionMismatch
+  4511,
+  4512,
+  4513
 ]
 
 export function isCandidateSessionRejection(code: number): boolean {
@@ -289,7 +254,6 @@ export function candidatePreviewReducer(
       if (state.lifecycle !== 'open' || state.stageUrl === null) return state
       return { ...state, frameToken: state.frameToken + 1 }
     case 'opening-stalled':
-      // 只有仍停在“打开中/等待画面就绪”时才提示等待较久；就绪、失败和终态都不改。
       if (candidatePreviewPhaseOf(state) !== 'opening' || state.openingStalled) return state
       return { ...state, openingStalled: true }
     default:
@@ -297,10 +261,6 @@ export function candidatePreviewReducer(
   }
 }
 
-/**
- * 运行时到期只关闭游戏运行。候选身份、已读完成的内容和问题是审阅依据，必须保留；
- * 读取中或读取失败不是可审阅事实，回到 idle 并清空说明，避免过期后仍显示“正在读取/读取失败”。
- */
 function runtimeExpiredState(state: CandidatePreviewState): CandidatePreviewState {
   const readReady = state.read === 'ready'
   return {
@@ -359,10 +319,6 @@ function applyCandidateEvent(
   }
 }
 
-/**
- * 事件消息来自长度受限但未封闭的契约，展示前只接受后端已发布的固定安全说明。
- * 错误码、路径、堆栈和未映射引擎文本都视为没有原因。
- */
 const stageFailureMessages = [
   '当前引擎不支持开始游戏',
   '宿主无法开始游戏',
@@ -402,16 +358,11 @@ export function candidatePreviewPhaseOf(
   }
 }
 
-/** 候选短标识只取前 8 位；完整候选与会话身份不进入界面。 */
 export function candidateShortId(candidateSnapshotId: string | null): string | null {
   if (!candidateSnapshotId) return null
   return candidateSnapshotId.slice(0, 8)
 }
 
-/**
- * 标签角标只显示真实读取到的问题数；没有问题时用活动点表示正在打开或已就绪。
- * 读取失败和已失效不保留旧问题数，避免把上一次结果挂在标签上。
- */
 export function candidateTabBadgeOf(state: CandidatePreviewState): {
   readonly count: number
   readonly live: boolean
@@ -423,7 +374,6 @@ export function candidateTabBadgeOf(state: CandidatePreviewState): {
   return { count, live }
 }
 
-/** 审阅气泡里的入口只描述当前会话阶段，不重复标签内的完整状态行。 */
 export function candidateEntryHintOf(
   phase: CandidatePreviewPhase | null,
   openingStalled = false

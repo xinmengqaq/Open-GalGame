@@ -8,11 +8,6 @@ import { resolveContained } from '@infrastructure/git/containedPath'
 import { toCatalogDocument } from '../reading/ProjectInputCatalogReader'
 import { MAX_JSON_BYTES, PROJECT_CATALOG_PATH } from '../projectFilePaths'
 
-/**
- * 把已校验目录编码为目录文件变更。空目录删除已有记录，不补建空文件。
- * @returns 目录变更；没有变化时为空。
- * @throws {AppException} 目录超过 JSON 上限。
- */
 export async function prepareProjectCatalogChange(
   projectRoot: string,
   projectId: string,

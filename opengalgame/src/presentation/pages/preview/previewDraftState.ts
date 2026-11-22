@@ -3,10 +3,6 @@ import type { SceneDialogueVO } from '@application/scene-preview/vo/ScenePreview
 
 import { mergeCommittedEdits, normalizeDrafts } from './previewPresentation'
 
-/**
- * 预览页专属的草稿编辑历史。
- * 它只描述未保存草稿：已保存正文成为基线，已提交内容不会进入撤销/重做。
- */
 export type PreviewDraftHistoryEntry = {
   readonly dialogueId: string
   readonly before: string
@@ -16,7 +12,6 @@ export type PreviewDraftHistoryEntry = {
 export type PreviewDraftHistoryState = {
   readonly undo: readonly PreviewDraftHistoryEntry[]
   readonly redo: readonly PreviewDraftHistoryEntry[]
-  /** 同一次连续输入是否还允许并入上一条记录。失焦、撤销、重做和保存都会结束合并。 */
   readonly mergeOpen: boolean
 }
 
@@ -99,7 +94,6 @@ function recordEdit(
   return { undo: [...history.undo, entry], redo: [], mergeOpen: true }
 }
 
-/** 记录一次真实正文输入；同一句连续输入合并，新输入丢弃重做。 */
 export function editPreviewDraft(
   state: PreviewDraftState,
   dialogueId: string,
@@ -117,7 +111,6 @@ export function editPreviewDraft(
   }
 }
 
-/** 失焦、Esc 或开始另一句时结束本次连续输入，不改变草稿。 */
 export function closePreviewDraftEditing(state: PreviewDraftState): PreviewDraftState {
   if (!state.history.mergeOpen) return state
   return { ...state, history: { ...state.history, mergeOpen: false } }
@@ -157,12 +150,6 @@ export function redoPreviewDraft(state: PreviewDraftState): PreviewDraftHistoryS
   }
 }
 
-/**
- * 已确认提交的正文成为新基线。
- * 只保留真正的提交：与旧基线相同的编辑不会压缩未保存历史。
- * 保存期间又产生的新草稿只保留“已保存正文 → 当前草稿”这一条，
- * 撤销不会回到提交前的内容。
- */
 export function commitPreviewDraftSave(
   state: PreviewDraftState,
   committedEdits: readonly DialogueTextEditDTO[]

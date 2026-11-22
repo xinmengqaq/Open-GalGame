@@ -15,8 +15,14 @@ import type { SceneGenerationProgressVO } from '../../vo/SceneGenerationVO'
 import type { SceneGenerationRenderProgressEventVO } from '../../vo/SceneGenerationRenderVO'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { FailureReasons } from '@common/errors/FailureReasons'
 import type { SceneGenerationDomainService } from '@domain/scene-generation/services/SceneGenerationDomainService'
+import {
+  forkSourceRecordReason,
+  type SceneGenerationForkBoundary
+} from '../../policies/SceneGenerationForkBoundary'
 import { requireAcceptable } from './SceneGenerationApplicationRules'
+import { isTerminal } from '../../mapping/SceneGenerationViewMapper'
 import { operationKey, threadKey } from '../../policies/SceneGenerationIdempotency'
 
 import type { SceneGenerationExecutionRepository } from '../../ports/SceneGenerationExecutionRepository'
@@ -25,6 +31,8 @@ import type { SceneGenerationMemoryGateway } from '../../ports/SceneGenerationMe
 import type { SceneGenerationWorkflowControl } from '../../ports/SceneGenerationWorkflowControl'
 import type { SceneCandidatePreviewGateway } from '../../ports/SceneCandidatePreviewGateway'
 import type { SceneGenerationWorkspaceGateway } from '../../ports/SceneGenerationWorkspaceGateway'
+import type { SceneGenerationWriteRecovery } from '../../ports/SceneGenerationWriteRecovery'
+import type { SceneGenerationForkSourceEvidence } from '../../ports/SceneGenerationForkSourceEvidence'
 import { ExecutionSerialQueue } from './coordinator/ExecutionSerialQueue'
 import { GenerationRun, subscribeProgress } from './coordinator/GenerationRun'
 import { GenerationCommit } from './coordinator/GenerationCommit'
@@ -32,9 +40,6 @@ import { GenerationRecovery } from './coordinator/GenerationRecovery'
 
 export { checkpointCanContinue } from './coordinator/GenerationRun'
 
-/**
- * 后台任务边界的操作身份。只用于日志关联操作，不参与调度、持久化或诊断编号计算。
- */
 export type SceneGenerationDispatchIdentity = {
   readonly operationId: string
   readonly projectId: string
@@ -50,23 +55,26 @@ export interface SceneGenerationDependencies {
   readonly workspace: SceneGenerationWorkspaceGateway
   readonly artifacts: SceneArtifactGateway
   readonly versions: SceneVersionGateway
+  /** 恢复运行前按账本、修订归属和实际工作区证明候选写入。 */
+  readonly writeRecovery: SceneGenerationWriteRecovery
+  /**
+   * 分叉来源不可变证据。未装配时应用拒绝创建或重开分叉；
+   * 不影响普通生成、修复与恢复。
+   */
+  readonly forkSourceEvidence?: SceneGenerationForkSourceEvidence
+  /**
+   * 可信装配给出的活跃执行期限（毫秒）。不进入请求 DTO、IPC 或操作指纹；
+   * 省略表示本次装配不安排定时中止，预算边界检查仍然生效。
+   */
+  readonly activeLimitMs?: number
   readonly workflowControl?: SceneGenerationWorkflowControl
   readonly candidatePreview?: SceneCandidatePreviewGateway
   readonly nextId: () => string
   readonly now: () => number
-  /**
-   * 将执行排入后台任务边界；调度本身不抛错，边界捕获、记录任务最终异常。
-   * @param execution - 应用事务编排，返回的拒绝由任务边界接收。
-   * @param identity - 本次操作身份，供边界记录关联日志。
-   */
   readonly dispatch: (
     execution: () => Promise<void>,
     identity: SceneGenerationDispatchIdentity
   ) => void
-  /**
-   * 发布已经持久记录的安全进度；通知故障由通知边界隔离，不影响作品提交。
-   * @param progress - 阶段与业务状态，不含诊断日志。
-   */
   readonly publishProgress: (progress: SceneGenerationProgressVO) => void
 }
 
@@ -75,10 +83,6 @@ export interface ActiveSceneGeneration {
   readonly controller: AbortController
 }
 
-/**
- * 场景生成薄编排：保留活动操作表与公开编排面，
- * 串行/幂等、运行时间线、提交决策、失败恢复分别委托对应协作者。
- */
 export class SceneGenerationCoordinator {
   readonly activeExecutions = new Map<string, ActiveSceneGeneration>()
   private readonly queue: ExecutionSerialQueue
@@ -86,7 +90,6 @@ export class SceneGenerationCoordinator {
   private readonly commit: GenerationCommit
   private readonly recovery: GenerationRecovery
 
-  /** 注入用例端口、身份、时钟和后台任务出口，不创建任何基础设施实现。 */
   constructor(private readonly deps: SceneGenerationDependencies) {
     this.queue = new ExecutionSerialQueue(deps.executions)
     this.commit = new GenerationCommit()
@@ -94,10 +97,12 @@ export class SceneGenerationCoordinator {
     this.run = new GenerationRun(
       {
         deps,
-        /** 活动操作仍由本协调器持有；运行编排只查询和释放。 */
         isActive: (execution) => this.activeExecutions.has(operationKey(execution)),
-        release: (execution) => {
-          this.activeExecutions.delete(operationKey(execution))
+        owns: (active) => this.activeExecutions.get(operationKey(active.execution)) === active,
+        release: (active) => {
+          const key = operationKey(active.execution)
+          // 只有当前这一份运行能移除自己；旧运行不能删掉新代次的活动记录。
+          if (this.activeExecutions.get(key) === active) this.activeExecutions.delete(key)
         },
         requireCurrentBaseline: (execution) => this.requireCurrentBaseline(execution)
       },
@@ -107,17 +112,10 @@ export class SceneGenerationCoordinator {
     )
   }
 
-  /** 仅串行启动、回复和状态变更，不把模型执行放入队列；失败不阻断后续短操作。 */
   serialize<T>(key: string, operation: () => Promise<T>): Promise<T> {
     return this.queue.serialize(key, operation)
   }
 
-  /**
-   * 返回相同请求的操作，拒绝相同标识对应其他请求。
-   * @param fingerprint - 不含密钥的请求内容。
-   * @returns 已有操作或 null。
-   * @throws {AppException} 相同操作标识被用于不同请求。
-   */
   replay(
     scope: SceneGenerationScopeDTO,
     fingerprint: string
@@ -127,19 +125,21 @@ export class SceneGenerationCoordinator {
 
   /**
    * 要求操作存在且属于调用方场景。
+   * 只有仓储查询确认记录不存在才带 `sceneGenerationOperationMissing`；
+   * 检查点缺失、损坏、身份不符和读取失败不使用该原因。
    * @throws {AppException} 操作不存在。
    */
   async requireExecution(scope: SceneGenerationScopeDTO): Promise<SceneGenerationExecution> {
     const execution = await this.deps.executions.readExecution(scope)
     if (!execution)
-      throw new AppException({ code: ErrorCodes.invalidRequest, msg: '该场景生成操作不存在' })
+      throw new AppException({
+        code: ErrorCodes.invalidRequest,
+        msg: '该场景生成操作不存在',
+        reason: FailureReasons.sceneGenerationOperationMissing
+      })
     return execution
   }
 
-  /**
-   * 要求线程没有尚未结束的操作，保留等待和待恢复操作的逻辑位置。
-   * @throws {AppException} 线程尚有活动操作。
-   */
   async requireIdleThread(scope: SceneGenerationThreadDTO): Promise<void> {
     const active = [...this.activeExecutions.values()].some(
       (operation) => threadKey(operation.execution) === threadKey(scope)
@@ -152,9 +152,48 @@ export class SceneGenerationCoordinator {
   }
 
   /**
-   * 取得新版本事实并由领域决定是否允许继续覆盖，不持有作品锁。
-   * @throws {AppException} 工程身份、当前锁定或基线不允许覆盖。
+   * 分叉允许来源停在等待/安全暂停；来源能否复制由历史检查点资格判断。
+   * 当前记录必须仍绑定同一检查点与候选，来源自身不能正在执行，线程也不能另有未结束操作。
+   * @throws {AppException} 来源记录不可分叉、线程有运行中或其它未结束操作。
    */
+  async requireForkableThread(
+    boundary: SceneGenerationForkBoundary,
+    source: SceneGenerationExecution | null
+  ): Promise<void> {
+    const recordReason = forkSourceRecordReason(source, boundary)
+    if (recordReason !== undefined)
+      throw new AppException({ code: ErrorCodes.operationConflict, msg: recordReason })
+    const scope: SceneGenerationThreadDTO = {
+      projectId: boundary.projectId,
+      sceneId: boundary.sceneId,
+      threadId: boundary.threadId
+    }
+    const active = [...this.activeExecutions.values()].some(
+      (operation) => threadKey(operation.execution) === threadKey(scope)
+    )
+    if (active)
+      throw new AppException({
+        code: ErrorCodes.operationConflict,
+        msg: '该创作对话仍有运行中的操作，不能从历史分叉'
+      })
+    const operations = (
+      await this.deps.executions.listSceneExecutions({
+        projectId: scope.projectId,
+        sceneId: scope.sceneId,
+        limit: 100
+      })
+    ).filter((operation) => operation.threadId === scope.threadId)
+    if (
+      operations.some(
+        (operation) => operation.operationId !== boundary.operationId && !isTerminal(operation)
+      )
+    )
+      throw new AppException({
+        code: ErrorCodes.operationConflict,
+        msg: '该创作对话仍有其它未结束操作，请先回复、恢复或取消'
+      })
+  }
+
   async requireCurrentBaseline(
     execution: SceneGenerationExecution
   ): Promise<SceneGenerationExecution> {
@@ -172,10 +211,6 @@ export class SceneGenerationCoordinator {
     return inspected
   }
 
-  /**
-   * 持久暂停意图已经写入后，通知工作流在安全检查点停止。
-   * 没有活动工作流时不伪造中断。
-   */
   async requestPause(execution: SceneGenerationExecution): Promise<void> {
     await this.deps.workflowControl?.requestPauseAtSafeCheckpoint(execution)
   }
@@ -187,9 +222,6 @@ export class SceneGenerationCoordinator {
     return subscribeProgress(scope, publish)
   }
 
-  /**
-   * @param cancelled - 是否直接结束已经接受的丢弃回复。
-   */
   startExecution(
     execution: SceneGenerationExecution,
     workflowExecution: (runtime: SceneGenerationRuntime) => Promise<SceneGenerationWorkflowOutcome>,
@@ -205,21 +237,12 @@ export class SceneGenerationCoordinator {
     })
   }
 
-  /**
-   * 持久写入状态并发布安全阶段文案。
-   * @throws {AppException} 操作状态写入失败。
-   */
   writeExecution(
     execution: SceneGenerationExecution
   ): Promise<{ execution: SceneGenerationExecution; canContinue: boolean | undefined }> {
     return this.run.writeExecution(execution)
   }
 
-  /**
-   * 将可靠提交结果持久记录后发布成功，不因预览页后续展示失败回退已保存作品。
-   * @param persist - 已持有短串行段时提供直接持久记录，默认排入短串行段。
-   * @throws {AppException} 成功结果持久记录失败，恢复须先查询已有提交。
-   */
   completeExecution(
     active: ActiveSceneGeneration,
     commitId: string,
@@ -233,13 +256,6 @@ export class SceneGenerationCoordinator {
     return this.commit.completeExecution(this.run, active, commitId, persist)
   }
 
-  /**
-   * 先查询本操作提交事实，再选择确认成功、受控回退或清理；结果不明保留候选。
-   * @param originalError - 本次失败或取消原因。
-   * @param cancelled - 是否由用户取消。
-   * @param serialized - 是否需要排入短串行段，外层已经持有队列时直接写入。
-   * @throws {AppException} 原始失败及恢复失败保留为 AggregateError；正常取消不抛错。
-   */
   recoverFailure(
     active: ActiveSceneGeneration,
     originalError: unknown,

@@ -43,7 +43,6 @@ import type {
   InputCardNode
 } from './sceneCanvas.types'
 
-/** 画布提示显示时长；拒绝高亮只保留到下一次尝试。 */
 const NOTICE_CLEAR_MS = 3400
 const REJECT_CLEAR_MS = 900
 
@@ -88,10 +87,6 @@ export type SceneCanvasState = {
   onPaneClick: () => void
   onEdgeClick: EdgeMouseHandler<CanvasEdge>
   onConnect: (connection: Connection) => void
-  /**
-   * 低缩放记录装载：按命中仲裁算出的锚点直接走应用层连接动作。
-   * 返回 false 表示当前没有待连接来源卡，调用方应保持原有行为。
-   */
   attachRecordToAnchor: (relationId: string) => boolean
   onConnectStart: OnConnectStart
   onConnectEnd: OnConnectEnd
@@ -134,8 +129,6 @@ export function useSceneCanvas(
   const isConnecting = connectingFromCardId !== null
   const rejectedRelationId = reject?.relationId ?? null
 
-  // 关系从 store 消失时在渲染期收起弹窗：同一组件的条件 setState 会立即重渲染，
-  // 关闭落定后撤销/重做再装回同一 relationId 也不会重开（不能让存在性派生把它复活）。
   if (relationId !== null && !relations.some((relation) => relation.relationId === relationId)) {
     setRelationId(null)
   }
@@ -367,9 +360,6 @@ export function useSceneCanvas(
     [commands, finishConnection, rejectConnection]
   )
 
-  // 低缩放记录装载：React Flow 的 click-connect 第二步会用 click 坐标 elementFromPoint
-  // 重新解析目标 handle，多个记录 handle 叠压时会装到上层锚点；这里按命中仲裁结果直接
-  // 走应用层连接动作，复用 onConnect 的校验、反馈与 finishConnection 清理。
   const attachRecordToAnchor = useCallback(
     (relationId: string): boolean => {
       if (!connectingFromCardId) return false
@@ -455,7 +445,6 @@ export function useSceneCanvas(
           y: Math.round(item.position.y)
         })
       }
-      // 与拖拽位移合并成一次 moveCards：一次 revision、一条撤销记录。
       for (const move of resolveCardSpacing(projected)) moves.set(move.cardId, move)
       commands.moveCards([...moves.values()])
     },

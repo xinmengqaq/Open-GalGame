@@ -112,10 +112,6 @@ function readLabelOf(
   return '读取失败'
 }
 
-/**
- * 生成抽屉审阅气泡内的只读游戏候选。画面只来自真实候选会话的嵌入地址；
- * `iframe` 的 `load` 事件不代表就绪，就绪必须等后端舞台事件。
- */
 export function CandidatePreviewPane({
   controller
 }: {
@@ -157,7 +153,6 @@ export function CandidatePreviewPane({
     phase === 'opening' && state.openingStalled
       ? { ...phaseCopy.opening, title: '仍在打开游戏候选' }
       : phaseCopy[phase]
-  // 15 秒后只改提示和动作，不改 phase：画面仍可能在真实准备，不能伪造失败。
   const openingStalled = phase === 'opening' && state.openingStalled
   const shortId = candidateShortId(state.candidateSnapshotId)
   const stageStatus = phase === 'ready' ? 'ready' : phase === 'opening' ? 'loading' : 'failed'
@@ -300,7 +295,6 @@ export function CandidatePreviewPane({
       ) : null}
 
       <footer className="wb-candidate__bar">
-        {/* 回退状态面板已经显示同一个标题；状态行只保留读取状态和真实动作，不重复标题。 */}
         {fallbackVisible ? null : (
           <span aria-live="polite" className="wb-candidate__phase" data-tone={copy.tone}>
             <i aria-hidden="true" />

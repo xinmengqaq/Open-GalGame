@@ -26,18 +26,11 @@ const unavailableProject: ProjectListEntryVO = {
   msg: '登记的项目内容缺失，无法读取'
 }
 
-/**
- * @returns 未指定或无法识别时按混排场景。
- */
 export function readFixtureMode(): FixtureMode {
   const value = new URLSearchParams(window.location.search).get('projects')
   return value === 'empty' || value === 'fail' ? value : 'mixed'
 }
 
-/**
- * 建立夹具条目索引，按登记标识直接查找与增删。
- * @returns 空场景为空表，其余为十条可读条目与一条不可用条目。
- */
 export function createProjectFixtureStore(): Map<string, ProjectListEntryVO> {
   if (readFixtureMode() === 'empty') return new Map()
   const entries: ProjectListEntryVO[] = [

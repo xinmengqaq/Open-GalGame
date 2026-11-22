@@ -9,11 +9,6 @@ import type {
   ProjectCanvasWebgalPreset
 } from '../models/LegacyProjectCanvasArrangement'
 
-/**
- * 校验已读取的画布编排身份、卡片、关联和布局。
- * 不按卡片类型推断默认关系，也不解释坐标的剧情含义。
- * @throws {AppException} 身份不完整、卡片或关联重复、来源为空、字段绑定无效、布局或使用设置不能保存。
- */
 export function validateCanvasArrangement(arrangement: ProjectCanvasArrangement): void {
   requireIdentity(arrangement.projectId, '工程身份不能为空')
   requireIdentity(arrangement.sceneId, '场景身份不能为空')

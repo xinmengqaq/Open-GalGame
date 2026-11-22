@@ -1,12 +1,15 @@
+import type { ChooseSceneExportDirectoryDTO } from '@application/scene-export/dto/ChooseSceneExportDirectoryDTO'
 import type { ExportSavedSceneDTO } from '@application/scene-export/dto/ExportSavedSceneDTO'
-import type { ReadLatestPreviewSaveDTO } from '@application/scene-export/dto/ReadLatestPreviewSaveDTO'
-import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewSaveVersionVO'
+import type { ReadLatestSavedSceneVersionDTO } from '@application/scene-export/dto/ReadLatestSavedSceneVersionDTO'
+import type { SceneExportDirectoryChoiceVO } from '@application/scene-export/vo/SceneExportDestinationVO'
+import type { SavedSceneVersionVO } from '@application/scene-export/vo/SavedSceneVersionVO'
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { communicationFailureResult } from '../../client/communicationFailure'
 import type { DesktopBridge } from '../../client/DesktopBridge'
 import {
-  parseLatestPreviewSaveResult,
+  parseLatestSavedSceneVersionResult,
+  parseSceneExportDirectoryChoiceResult,
   parseSceneExportResult
 } from '../contracts/SceneExportResponseSchema'
 import type { SceneExportClient } from './SceneExportClient'
@@ -25,13 +28,28 @@ export class SceneExportClientImpl implements SceneExportClient {
     }
   }
 
-  async readLatestPreviewSave(
-    request: ReadLatestPreviewSaveDTO
-  ): Promise<AjaxResult<PreviewSaveVersionVO | null>> {
+  async readLatestSavedSceneVersion(
+    request: ReadLatestSavedSceneVersionDTO
+  ): Promise<AjaxResult<SavedSceneVersionVO | null>> {
     try {
       return (
-        parseLatestPreviewSaveResult(await this.bridge.readLatestPreviewSave(request)) ??
-        communicationFailureResult()
+        parseLatestSavedSceneVersionResult(
+          await this.bridge.readLatestSavedSceneVersion(request)
+        ) ?? communicationFailureResult()
+      )
+    } catch {
+      return communicationFailureResult()
+    }
+  }
+
+  async chooseSceneExportDirectory(
+    request: ChooseSceneExportDirectoryDTO
+  ): Promise<AjaxResult<SceneExportDirectoryChoiceVO>> {
+    try {
+      return (
+        parseSceneExportDirectoryChoiceResult(
+          await this.bridge.chooseSceneExportDirectory(request)
+        ) ?? communicationFailureResult()
       )
     } catch {
       return communicationFailureResult()

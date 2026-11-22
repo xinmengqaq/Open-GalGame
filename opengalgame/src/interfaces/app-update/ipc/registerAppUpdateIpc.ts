@@ -12,10 +12,6 @@ interface AppUpdateIpcBinding {
   rendererUrl: string
 }
 
-/**
- * 注册固定更新通道。请求只进入应用更新用例，不接受发布源或安装参数。
- * 状态推送只发往仍存活的主窗口，注销时移除通道并退订。
- */
 export function registerAppUpdateIpc(options: AppUpdateIpcBinding): () => void {
   const access = createIpcRequestAccess(options)
   const handlers: Record<string, (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>> =

@@ -26,11 +26,6 @@ interface ProjectCommitDependencies {
 export class CommitProject implements ProjectCommitService {
   constructor(private readonly deps: ProjectCommitDependencies) {}
 
-  /**
-   * 协调持久提交与必要补偿。
-   * 失败时先核对持久发布事实，已发布工程保留恢复记录。
-   * @throws {AppException} 发布、登记或清理失败，补偿失败保留全部原因。
-   */
   async commit(
     operation: ProjectOperation,
     progress?: ProjectProgressListener

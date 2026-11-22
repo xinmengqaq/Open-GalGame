@@ -5,24 +5,18 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import type { AppUpdateClient } from '@interfaces/app-update/client/AppUpdateClient'
 
-/** 首页挂载后延迟一次后台检查；只在本 App 会话内触发一次。 */
 const BACKGROUND_CHECK_DELAY_MS = 8000
 
-/** 可展示的更新失败。message 已由主进程映射为安全文案。 */
 export interface AppUpdateErrorNotice {
   title: string
   message: string
-  /** 只有发布源或下载/安装类失败才给出手动下载入口。 */
   showManualDownload: boolean
   retryable: boolean
 }
 
-/** 应用设置与更新状态的表现层流程。 */
 export interface AppUpdateFlow {
   status: UpdateStatusVO | null
-  /** 本次会话是否已经完成过一次检查；初始 idle 不能当作“已是最新”。 */
   checked: boolean
-  /** 初始状态读取尚未返回。 */
   initializing: boolean
   settingsOpen: boolean
   error: AppUpdateErrorNotice | null
@@ -66,14 +60,6 @@ async function settleRequest<T>(request: Promise<AjaxResult<T>>): Promise<AjaxRe
   }
 }
 
-/**
- * 应用更新的唯一常驻状态源。
- *
- * 订阅先于读取建立；状态推进只接受比当前快照更新的事实——
- * 推送计数变化后，迟到的 read/check/download 响应不再回写状态。
- * 检查失败的弹窗由 invoke 结果触发，后台检查每会话最多提示一次；
- * 下载与安装的后台失败由 failed 推送触发，两路同一失败只弹一次。
- */
 export function useAppUpdate(client: AppUpdateClient): AppUpdateFlow {
   const [status, setStatus] = useState<UpdateStatusVO | null>(null)
   const [checked, setChecked] = useState(false)
@@ -89,7 +75,6 @@ export function useAppUpdate(client: AppUpdateClient): AppUpdateFlow {
   const backgroundFailureShownRef = useRef(false)
   const checkAttemptedRef = useRef(false)
   const initialFailurePendingRef = useRef(false)
-  // IPC 响应与状态推送都是异步的：同 tick 双击不能只靠 phase 判断，先落同步锁。
   const downloadInFlightRef = useRef(false)
   const installInFlightRef = useRef(false)
 
@@ -146,7 +131,6 @@ export function useAppUpdate(client: AppUpdateClient): AppUpdateFlow {
   )
 
   const downloadInternal = useCallback(async (): Promise<void> => {
-    // 只拦自己的重复调用；服务端返回的 operationConflict 仍照常呈现。
     if (downloadInFlightRef.current) return
     if (statusRef.current?.phase !== 'available') return
     downloadInFlightRef.current = true
@@ -227,7 +211,6 @@ export function useAppUpdate(client: AppUpdateClient): AppUpdateFlow {
     setSettingsOpen(false)
   }, [])
 
-  // 订阅先于读取建立：读取期间的新状态不会被迟到的快照覆盖。
   useEffect(() => {
     let active = true
     const unsubscribe = client.onStatus((next) => {
@@ -282,7 +265,6 @@ export function useAppUpdate(client: AppUpdateClient): AppUpdateFlow {
     }
   }, [applyStatus, client, presentFailure])
 
-  // 初始安装失败提示确认后才安排后台检查，避免检查结果抹掉未确认的失败说明。
   useEffect(() => {
     if (initializing || awaitingInitialAcknowledgement || backgroundStartedRef.current) return
     if (statusRef.current?.supported !== true) return

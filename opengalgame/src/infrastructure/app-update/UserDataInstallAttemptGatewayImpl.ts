@@ -24,7 +24,6 @@ const installAttemptDocumentSchema = z.strictObject({
   attemptedAt: z.string().min(1)
 })
 
-/** 把安装尝试写入应用 userData，文件损坏或缺失都不影响其他用户数据。 */
 export class UserDataInstallAttemptGatewayImpl implements UpdateInstallAttemptGateway {
   constructor(private readonly filePath: string) {}
 

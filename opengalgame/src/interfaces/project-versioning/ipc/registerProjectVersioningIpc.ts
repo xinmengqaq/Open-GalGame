@@ -3,10 +3,6 @@ import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { createIpcRequestAccess } from '../../ipc/createIpcRequestAccess'
 import type { ProjectVersioningController } from './ProjectVersioningController'
 
-/**
- * 注册三条用户历史通道。注册与注销共用同一份通道表。
- * @param options - 控制器和受信任窗口。
- */
 export function registerProjectVersioningIpc(options: {
   projectVersioning: ProjectVersioningController
   getWindow: () => BrowserWindow | null

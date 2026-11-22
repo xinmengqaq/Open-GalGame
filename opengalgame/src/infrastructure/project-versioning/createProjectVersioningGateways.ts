@@ -9,7 +9,6 @@ import { FileVersionHistoryGateway } from './FileVersionHistoryGateway'
 import { FileVersionOperationRecordGateway } from './FileVersionOperationRecordGateway'
 import { GitVersionTransactionGateway } from './GitVersionTransactionGateway'
 
-/** 四个端口共用登记目录和可选的 Git 故障边界。 */
 export function createProjectVersioningGateways(
   userDirectory: string,
   effects: GitEffects = realGitEffects

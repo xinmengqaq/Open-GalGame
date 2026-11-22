@@ -13,7 +13,6 @@ export type DeletionVersionSource = CatalogVersionSource & {
   mediaPath: string | null
 }
 
-/** 用规范化目录和来源名称计算目录版本。不读取 JSON 自报字段。 */
 export function computeCatalogVersion(
   projectId: string,
   folders: readonly ProjectFolder[],

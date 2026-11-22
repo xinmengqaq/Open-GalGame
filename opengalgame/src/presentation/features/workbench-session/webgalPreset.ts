@@ -165,13 +165,11 @@ export function findEffectPreset(name: string): PresetOption<EffectPresetBinding
   return EFFECT_PRESET_OPTIONS.find((option) => option.binding.name === name)
 }
 
-/** 按已保存绑定取出说明。找不到映射时不编造说明。 */
 export function presetDescriptionOf(kind: SessionFieldKind, name: string): string | undefined {
   const option = kind === 'animation' ? findAnimationPreset(name) : findEffectPreset(name)
   return option?.description
 }
 
-/** 预设的中文名。未知绑定回落到命令名，不虚构名称。 */
 export function presetLabelOf(kind: SessionFieldKind, name: string): string {
   const option = kind === 'animation' ? findAnimationPreset(name) : findEffectPreset(name)
   return option?.label ?? name

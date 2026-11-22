@@ -79,10 +79,6 @@ type OperationDocument = z.infer<typeof operationDocumentSchema>
 
 const OPERATION_DIRECTORY = ['opengalgame', 'version-operations']
 const CALLER_DIRECTORY = ['opengalgame', 'version-caller-links']
-/**
- * 把准备绑定和首次提交意图写在作品仓库元数据中。
- * 记录可在新进程读回，本身不是作品已经提交的证明。
- */
 export class FileVersionOperationRecordGateway implements VersionOperationRecordGateway {
   constructor(private readonly userDirectory: string) {}
 
@@ -371,7 +367,6 @@ export class FileVersionOperationRecordGateway implements VersionOperationRecord
 
 }
 
-/** 读取本仓库中的版本操作绑定。损坏时失败，不把缺失说成损坏。 */
 export async function readVersionOperation(
   projectRoot: string,
   operationId: string
@@ -475,7 +470,6 @@ function unreadableRecord(): AppException {
     msg: '版本记录无法读取'
   })
 }
-/** 登记目录不是可读 Git 仓库时，这次扫描没有调用方链接。 */
 async function repositoryMetadataReadable(projectRoot: string): Promise<boolean> {
   let stats
   try {
@@ -490,7 +484,6 @@ async function repositoryMetadataReadable(projectRoot: string): Promise<boolean>
   return true
 }
 
-/** 队列内使用：按 caller 读取 link（不自行入队）。 */
 export async function readCallerIntentAt(
   projectRoot: string,
   projectId: string,
@@ -500,7 +493,6 @@ export async function readCallerIntentAt(
   return readCallerLink(projectRoot, projectId, sourceModule, callerOperationId)
 }
 
-/** 队列内使用：列出工程/来源的全部 caller link（不自行入队）。 */
 export async function listCallerIntentsAt(
   projectRoot: string,
   projectId: string,
@@ -523,7 +515,6 @@ export async function listCallerIntentsAt(
   return links
 }
 
-/** 队列内使用：列出全部 version intent（不自行入队）。 */
 export async function listVersionOperationsAt(
   projectRoot: string
 ): Promise<readonly VersionOperationRecord[]> {
@@ -540,7 +531,6 @@ export async function listVersionOperationsAt(
   return records
 }
 
-/** 队列内使用：无 link 且无 version intent 时写 notStarted tombstone。 */
 export async function markCallerNotStartedAt(
   projectRoot: string,
   projectId: string,
@@ -577,7 +567,6 @@ export async function markCallerNotStartedAt(
   return { ...document, state: 'notStarted' as const }
 }
 
-/** 队列内使用：按已关联/version intent 写终态（含 notStarted）。 */
 export async function setCallerStateAt(
   projectRoot: string,
   projectId: string,

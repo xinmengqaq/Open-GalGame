@@ -36,11 +36,9 @@ export interface ProjectClient {
   openProject(request: OpenProjectDTO): Promise<AjaxResult<ProjectSummaryVO>>
   renameProject(request: RenameProjectDTO): Promise<AjaxResult<ProjectSummaryVO>>
   unregisterProject(request: UnregisterProjectDTO): Promise<AjaxResult<UnregisterProjectVO>>
-  /** 核对已登记工程的默认场景和作品基线。 */
   ensureProjectWorkspace(
     request: EnsureProjectWorkspaceDTO
   ): Promise<AjaxResult<ProjectWorkspaceVO>>
-  /** 只读检查已登记工程的工作区，不补建。 */
   inspectProjectWorkspace(
     request: EnsureProjectWorkspaceDTO
   ): Promise<AjaxResult<ProjectWorkspaceInspectionVO>>

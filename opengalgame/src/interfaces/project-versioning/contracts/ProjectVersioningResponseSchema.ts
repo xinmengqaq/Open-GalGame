@@ -74,28 +74,18 @@ function parseResult<T>(schema: z.ZodType<T>, value: unknown): T | null {
   return parsed.success ? parsed.data : null
 }
 
-/**
- * 校验历史列表响应。成功响应必须带页面数据，失败响应不携带 data。
- * @returns 校验后的响应；结构不符时为 null。
- */
 export function parseVersionHistoryPageResult(
   value: unknown
 ): AjaxResult<VersionHistoryPageVO> | null {
   return parseResult(historyPageResultSchema, value)
 }
 
-/**
- * @returns 校验后的撤销响应；结构不符时为 null。
- */
 export function parseVersionHistoryUndoResult(
   value: unknown
 ): AjaxResult<VersionHistoryUndoVO> | null {
   return parseResult(undoResultAjaxSchema, value)
 }
 
-/**
- * @returns 校验后的清理响应；结构不符时为 null。
- */
 export function parseVersionHistoryClearResult(
   value: unknown
 ): AjaxResult<VersionHistoryClearVO> | null {

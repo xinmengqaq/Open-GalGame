@@ -41,6 +41,8 @@ import {
   reviewNoticeOf,
   stageRailIndex,
   startBlockedReason,
+  startBlockingOperationOf,
+  startConflictBlockedReason,
   statusPillOf,
   userMessageLabelOf,
   waitingModelNote,
@@ -542,7 +544,8 @@ describe('开始、暂停与失败', () => {
       saveState: 'saved' as const,
       pageBlocked: false,
       canvasReady: true,
-      active: false,
+      statusCheck: 'ready' as const,
+      blockingOperation: null,
       unavailableReason: null
     }
     expect(startBlockedReason(base)).toBeNull()
@@ -551,10 +554,53 @@ describe('开始、暂停与失败', () => {
     expect(startBlockedReason({ ...base, unavailableReason: '当前环境不支持场景生成' })).toBe(
       '当前环境不支持场景生成'
     )
-    expect(startBlockedReason({ ...base, active: true })).toContain('已有生成任务')
+    expect(startBlockedReason({ ...base, statusCheck: 'checking' })).toContain('正在核对')
+    expect(startBlockedReason({ ...base, statusCheck: 'failed' })).toContain('没有核对成功')
+    const blocking = { operationId: 'operation-pending', stageMessage: '正在生成候选脚本' }
+    const conflict = startBlockedReason({ ...base, blockingOperation: blocking })
+    expect(conflict).toBe(startConflictBlockedReason(blocking))
+    expect(conflict).toContain('当前场景已有进行中的生成，先完成或结束它')
+    expect(conflict).toContain('正在生成候选脚本')
+    expect(conflict).toContain('AI 历史')
+    expect(startBlockedReason({ ...base, blockingOperation: blocking }, 'repair')).toBeNull()
     expect(startBlockedReason({ ...base, saveState: 'saving' })).toContain('正在保存画布')
     expect(startBlockedReason({ ...base, saveState: 'unverified' })).toContain('保存结果待核对')
     expect(startBlockedReason({ ...base, saveState: 'failed' })).toContain('未保存')
+  })
+
+  it('只把应用层投影为阻断的非终态 generate 当作冲突，列表非空和旧列表项都不冒充', () => {
+    const pendingGenerate = status({
+      operationId: 'operation-pending',
+      state: 'pending',
+      stage: 'readingInput',
+      stageMessage: '正在读取已保存编排与输入',
+      blocksNewGeneration: true
+    })
+    const pendingRepair = status({
+      operationId: 'operation-repair',
+      state: 'running',
+      mode: 'repair',
+      stage: 'generating'
+    })
+    const terminal = status({
+      operationId: 'operation-pending',
+      state: 'succeeded',
+      stage: 'completed',
+      canPause: false,
+      canCancel: false
+    })
+
+    expect(startBlockingOperationOf(null, [pendingRepair])).toBeNull()
+    expect(startBlockingOperationOf(null, [pendingRepair, pendingGenerate])).toEqual({
+      operationId: 'operation-pending',
+      stageMessage: '正在读取已保存编排与输入'
+    })
+    expect(startBlockingOperationOf(pendingGenerate, [pendingRepair])).toEqual({
+      operationId: 'operation-pending',
+      stageMessage: '正在读取已保存编排与输入'
+    })
+    // 当前记录已是终态时，同一 operationId 的旧列表项不能继续冒充进行中。
+    expect(startBlockingOperationOf(terminal, [pendingGenerate])).toBeNull()
   })
 
   it('只有后端允许时才显示继续，否则显示原因', () => {
@@ -840,7 +886,6 @@ describe('中断、失败与只读候选', () => {
       candidateAvailable: true,
       blocker: null
     })
-    // 链式重试的来源是失败操作自身，而不是上一候选的 repairSource。
     expect(retryRepairRequestOf(failed, scope)).toEqual({
       projectId: 'project-1',
       sceneId: 'scene-1',
@@ -1202,9 +1247,9 @@ describe('终态动作主次', () => {
         canResume: false,
         resumeReason: null,
         interruptionNote: null,
-        actions: ['reload']
+        actions: ['verify-result', 'reload']
       })
-    ).toContain('核对任务状态')
+    ).toContain('核对结果')
     expect(
       outcomeNextStepOf({
         phase: 'failed',

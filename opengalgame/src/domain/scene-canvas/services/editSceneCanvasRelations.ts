@@ -7,11 +7,6 @@ import type {
 } from '../models/SceneCanvasArrangement'
 import { relationPair, validateSceneCanvasArrangement } from './validateSceneCanvasArrangement'
 
-/**
- * 连接两张卡片。反向连接视为同一条，不限制卡片类别。
- * @param relationId - 调用方生成的关联身份。
- * @throws {AppException} 自连、重复连线或端点不存在。
- */
 export function connectSceneCanvasCards(
   arrangement: SceneCanvasArrangement,
   relationId: string,
@@ -54,10 +49,6 @@ export function connectSceneCanvasCards(
   })
 }
 
-/**
- * 删除一条关联，不删除两端卡片。
- * @throws {AppException} 关联不存在。
- */
 export function disconnectSceneCanvasCards(
   arrangement: SceneCanvasArrangement,
   relationId: string
@@ -69,10 +60,6 @@ export function disconnectSceneCanvasCards(
   })
 }
 
-/**
- * 写入特殊关系名称。清理首尾空白后可以为空。
- * @throws {AppException} 关联不存在。
- */
 export function editSceneCanvasRelationName(
   arrangement: SceneCanvasArrangement,
   relationId: string,
@@ -88,10 +75,6 @@ export function editSceneCanvasRelationName(
   return replaceRelation(arrangement, { ...relation, specificName: specificName.trim() })
 }
 
-/**
- * 装载或替换关系记录。记录卡可以同时是该关联的端点。
- * @throws {AppException} 记录类别不符或提示词记录已被占用。
- */
 export function attachSceneCanvasRelationRecord(
   arrangement: SceneCanvasArrangement,
   relationId: string,
@@ -119,10 +102,6 @@ export function attachSceneCanvasRelationRecord(
   return replaceRelation(arrangement, { ...relation, recordCardId })
 }
 
-/**
- * 卸下关系记录，保留关联和记录卡。
- * @throws {AppException} 关联不存在。
- */
 export function detachSceneCanvasRelationRecord(
   arrangement: SceneCanvasArrangement,
   relationId: string

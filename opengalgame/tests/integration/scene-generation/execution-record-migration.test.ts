@@ -49,7 +49,6 @@ it('首访工程自动迁移：当前历史可见集合不变，legacy 只进归
   )
   const otherPath = await writeProjectDocument(stateRoot, 'project-2', otherBytes)
 
-  // 迁移前历史可见集合由生产投影从源记录直接算出，作为迁移后对照。
   const plan = planExecutionRecordMigration(sourceBytes, 'project-1')
   const expectedHistory = historyOperationIds(plan.currentExecutions)
   expect(expectedHistory).toEqual(['operation-later', 'operation-dated'])
@@ -142,13 +141,11 @@ it('首访工程自动迁移：当前历史可见集合不变，legacy 只进归
   expect(manifest.counts).toEqual({ total: 4, current: 3, legacy: 1 })
   expect(manifest.legacyRecords.map((record) => record.operationId)).toEqual(['operation-legacy'])
 
-  // 未访问工程不扫描：字节不变，且没有生成归档目录。
   expect(await readFile(otherPath)).toEqual(otherBytes)
   await expect(
     readdir(join(stateRoot, 'scene-generation/projects/project-2/legacy-executions'))
   ).rejects.toMatchObject({ code: 'ENOENT' })
 
-  // 迁移后当前记录仍可正常写入，legacy 不会再回到产品文件。
   const created = await repository.createExecution({
     ...currentExecution(),
     operationId: 'operation-new',
@@ -218,7 +215,6 @@ it('归档失败时产品读取明确拒绝且源不变，修复归档后重试�
     Buffer.from('broken-source')
   )
 
-  // 修复归档占用后，同一次进程内下一次读取重试并成功迁移。
   await rm(archiveDirectory, { recursive: true, force: true })
   await expect(
     repository.readExecution({
@@ -234,6 +230,101 @@ it('归档失败时产品读取明确拒绝且源不变，修复归档后重试�
   expect(saved.version).toBe(7)
   expect(saved.executions).toEqual([])
   expect(await readFile(join(archiveDirectory, 'source.json'))).toEqual(sourceBytes)
+})
+
+it('首访遇到未结束旧记录时明确阻断且零写，旧版结算为终态后再迁移', async () => {
+  const stateRoot = await mkdtemp(join(tmpdir(), 'execution-repo-blocked-'))
+  roots.push(stateRoot)
+  const repository = new FileSceneGenerationExecutionRepositoryImpl(stateRoot)
+  const current = currentRecord({ operationId: 'operation-current' })
+  const waiting = legacyRecord({
+    operationId: 'operation-waiting-repair',
+    state: 'waiting',
+    checkpointId: 'checkpoint-waiting',
+    candidateSnapshotId: 'candidate-waiting'
+  })
+  const sourceBytes = Buffer.from(
+    JSON.stringify({ version: 1, executions: [current, waiting] })
+  )
+  const path = await writeProjectDocument(stateRoot, 'project-1', sourceBytes)
+  const archiveRoot = join(stateRoot, 'scene-generation/projects/project-1/legacy-executions')
+  const checkpointPath = join(
+    stateRoot,
+    'ai/projects/project-1/threads/thread-legacy/checkpoints/checkpoint-waiting.json'
+  )
+  await mkdir(join(checkpointPath, '..'), { recursive: true })
+  await writeFile(checkpointPath, '{"state":"running"}')
+
+  const blocked = {
+    code: 5103,
+    message: expect.stringContaining('operation-waiting-repair')
+  }
+  await expect(
+    repository.listThread({
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      threadId: 'thread-legacy'
+    })
+  ).rejects.toMatchObject(blocked)
+  await expect(
+    repository.findActiveExecution({
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      threadId: 'thread-legacy'
+    })
+  ).rejects.toMatchObject(blocked)
+  await expect(
+    repository.listSceneExecutions({ projectId: 'project-1', sceneId: 'scene-1', limit: 20 })
+  ).rejects.toMatchObject(blocked)
+  await expect(
+    repository.createExecution({
+      ...currentExecution(),
+      operationId: 'operation-new',
+      threadId: 'thread-new',
+      branchId: 'branch-new'
+    })
+  ).rejects.toMatchObject(blocked)
+  expect(await readFile(path)).toEqual(sourceBytes)
+  expect(await readFile(checkpointPath)).toEqual(Buffer.from('{"state":"running"}'))
+  await expect(readdir(archiveRoot)).rejects.toMatchObject({ code: 'ENOENT' })
+
+  // 旧版明确结算后，同一文件仍可按原有归档路径迁移；终态旧记录不进当前历史。
+  const settled = JSON.parse(sourceBytes.toString('utf8')) as {
+    executions: Array<Record<string, unknown>>
+  }
+  settled.executions[1] = { ...settled.executions[1], state: 'failed' }
+  const settledBytes = Buffer.from(JSON.stringify(settled))
+  await writeFile(path, settledBytes)
+  await expect(
+    repository.listThread({
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      threadId: 'thread-legacy'
+    })
+  ).resolves.toEqual([])
+  const saved = JSON.parse(await readFile(path, 'utf8')) as {
+    version: number
+    executions: Array<{ operationId: string }>
+  }
+  expect(saved.version).toBe(7)
+  expect(saved.executions.map((item) => item.operationId)).toEqual(['operation-current'])
+  const archiveDirectory = join(
+    archiveRoot,
+    createHash('sha256').update(settledBytes).digest('hex')
+  )
+  expect(await readFile(join(archiveDirectory, 'source.json'))).toEqual(settledBytes)
+  expect(await readFile(checkpointPath)).toEqual(Buffer.from('{"state":"running"}'))
+  const manifestBytes = await readFile(join(archiveDirectory, 'manifest.json'))
+  const migratedBytes = await readFile(path)
+  await expect(
+    repository.listThread({
+      projectId: 'project-1',
+      sceneId: 'scene-1',
+      threadId: 'thread-legacy'
+    })
+  ).resolves.toEqual([])
+  expect(await readFile(path)).toEqual(migratedBytes)
+  expect(await readFile(join(archiveDirectory, 'manifest.json'))).toEqual(manifestBytes)
 })
 
 function historyOperationIds(executions: readonly SceneGenerationExecution[]): string[] {

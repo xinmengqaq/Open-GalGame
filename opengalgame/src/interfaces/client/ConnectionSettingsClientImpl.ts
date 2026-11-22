@@ -13,9 +13,6 @@ import type {
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 
 export class ConnectionSettingsClientImpl implements ConnectionSettingsClient {
-  /**
-   * @param bridge - 与主进程通信的固定桥接。
-   */
   constructor(private readonly bridge: DesktopBridge) {}
   getSettingsSummary(): Promise<AjaxResult<ConnectionSettingsVO | null>> {
     return invokeAjaxResult(() => this.bridge.getSettingsSummary())

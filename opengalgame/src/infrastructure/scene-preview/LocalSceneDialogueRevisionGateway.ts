@@ -15,10 +15,6 @@ import { SceneScriptParserGatewayImpl } from '@infrastructure/scenes/SceneScript
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
 
-/**
- * 只替换解析器证明过的台词正文。
- * 不重打印文件，不改说话人、参数、配音、注释、换行或 BOM。
- */
 export class LocalSceneDialogueRevisionGateway implements SceneDialogueRevisionGateway {
   async prepareDialogueRevision(
     source: ScenePreviewSourceFact,

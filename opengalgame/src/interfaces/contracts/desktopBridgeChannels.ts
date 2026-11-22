@@ -1,6 +1,5 @@
 import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
 
-/** 不经 IPC 的本地方法；不持有通道。 */
 type LocalDesktopMethod = 'pathForDroppedFile'
 
 type RemoteDesktopMethod = Exclude<keyof DesktopBridge, LocalDesktopMethod>
@@ -11,23 +10,14 @@ type DesktopMethodResult<K extends keyof DesktopBridge> = DesktopBridge[K] exten
   ? Result
   : never
 
-/** 返回 Promise 的方法经 `transport.invoke` 发请求。 */
 type DesktopInvokeMethod = {
   [K in RemoteDesktopMethod]: DesktopMethodResult<K> extends Promise<unknown> ? K : never
 }[RemoteDesktopMethod]
 
-/** 返回注销函数的方法经 `transport.subscribe` 订阅推送。 */
 type DesktopEventMethod = {
   [K in RemoteDesktopMethod]: DesktopMethodResult<K> extends () => void ? K : never
 }[RemoteDesktopMethod]
 
-/**
- * preload 桥的通道字符串唯一来源。
- *
- * 键名与 `DesktopBridge` 的同名方法对应；`satisfies` 让接口增删远程方法时
- * 在这里直接报错，通道改名只需改这一处。主进程 `register*Ipc` 的注册名
- * 必须与清单逐名对齐。
- */
 export const desktopBridgeChannels = {
   invoke: {
     chooseSaveLocation: 'project:choose-save-location',
@@ -93,6 +83,7 @@ export const desktopBridgeChannels = {
     cancelSceneGeneration: 'scene-generation:cancel',
     listSceneGenerationHistory: 'scene-generation:list-history',
     readSceneGenerationCheckpoint: 'scene-generation:read-checkpoint',
+    forkSceneGeneration: 'scene-generation:fork',
     openSceneGenerationPreview: 'scene-generation:open-preview',
     closeSceneGenerationPreview: 'scene-generation:close-preview',
     subscribeSceneGenerationProgress: 'scene-generation:progress',
@@ -110,7 +101,8 @@ export const desktopBridgeChannels = {
     readCandidatePreview: 'scene-preview:read-candidate',
     readCandidatePreviewEvent: 'scene-preview:candidate-event',
     exportSavedScene: 'scene-export:export-saved-scene',
-    readLatestPreviewSave: 'scene-export:read-latest-preview-save',
+    readLatestSavedSceneVersion: 'scene-export:read-latest-saved-scene-version',
+    chooseSceneExportDirectory: 'scene-export:choose-directory',
     checkForUpdate: 'app-update:check',
     downloadUpdate: 'app-update:download',
     installUpdate: 'app-update:install',
@@ -128,10 +120,8 @@ export const desktopBridgeChannels = {
   } as const satisfies Record<DesktopEventMethod, string>
 } as const
 
-/** `transport.invoke` 允许的通道。 */
 export type DesktopBridgeInvokeChannel =
   (typeof desktopBridgeChannels.invoke)[keyof typeof desktopBridgeChannels.invoke]
 
-/** `transport.subscribe` 允许的通道。 */
 export type DesktopBridgeEventChannel =
   (typeof desktopBridgeChannels.event)[keyof typeof desktopBridgeChannels.event]

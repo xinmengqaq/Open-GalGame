@@ -6,7 +6,6 @@ import type { ProjectRegistrationResult } from '@domain/projects/models/ProjectR
 export class LocalProjectRegistrationGatewayImpl implements ProjectRegistrationGateway {
   constructor(private readonly userDirectory: string) {}
 
-  /** 只登记已发布身份，同一操作幂等。 */
   async registerProject(operation: ProjectOperation): Promise<ProjectRegistrationResult> {
     const registrations = await readProjectRegistrations(this.userDirectory)
     const { id } = operation.project
@@ -31,7 +30,6 @@ export class LocalProjectRegistrationGatewayImpl implements ProjectRegistrationG
     return { status: 'registered' }
   }
 
-  /** 只删除登记项，不删除工程目录。 */
   async removeRegistration(id: string): Promise<'removed' | 'missing'> {
     const registrations = await readProjectRegistrations(this.userDirectory)
     const remaining = registrations.filter((item) => item.id !== id)

@@ -10,10 +10,6 @@ interface InputCardNodeMotionOptions {
   rejected: boolean
 }
 
-/**
- * 拒绝反馈：只在一次连接结束、且这张卡是拒绝起点时播放一次轮廓回弹。
- * 动画只作用于外围覆盖层，不覆盖 React Flow 的节点坐标 transform。
- */
 export function useInputCardNodeMotion({
   root,
   connecting,

@@ -8,9 +8,6 @@ export interface PromptReference {
   agentId: string
 }
 
-/**
- * @throws {AppException} 标识为空、含路径符号或超出长度。
- */
 export function assertAgentId(agentId: string): string {
   if (!AGENT_ID_PATTERN.test(agentId) || agentId.length > MAX_AGENT_ID_LENGTH) {
     throw new AppException({ code: ErrorCodes.invalidConfig, msg: '智能体标识无效' })
@@ -18,9 +15,6 @@ export function assertAgentId(agentId: string): string {
   return agentId
 }
 
-/**
- * @throws {AppException} 标识为空、含路径符号或超出长度。
- */
 export function assertPromptReference(reference: PromptReference): string {
   try {
     return assertAgentId(reference.agentId)

@@ -8,10 +8,6 @@ interface GameStageLoadingProps {
   readonly action?: ReactNode
 }
 
-/**
- * 舞台未就绪时的轻量提示层。它只说明当前等待，不生成演示画面，
- * 也不把遮罩消失当成真实就绪。
- */
 export function GameStageLoading({
   title,
   description,

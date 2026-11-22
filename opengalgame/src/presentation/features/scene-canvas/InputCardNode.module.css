@@ -1,8 +1,4 @@
-/* 卡片端口与拒绝反馈：命中区至少 44px，低缩放时按屏幕像素补足到约 28px；
-   视觉只有一枚小光点，中心落在卡片外框边缘。 */
-
 .port {
-  /* 画布祖先上由 canvasZoomHitArea 写入缩放倒数；变量缺失时按 44px 兜底。 */
   --port-hit: max(44px, calc(28px * var(--canvas-zoom-inverse, 1)));
   position: absolute;
   z-index: 6;
@@ -51,7 +47,6 @@
     transform 170ms var(--wb-ease);
 }
 
-/* 统一形状由 RelationLayer 的 ConnectionPort 提供，仅整体放大以匹配 44px 命中区。 */
 
 .scale {
   display: grid;
@@ -107,7 +102,6 @@
   outline-offset: 2px;
 }
 
-/* 空态端口悬停时点亮为可连接的填充菱形。 */
 
 .port:hover .scale > span[data-state='idle'],
 .port:focus-visible .scale > span[data-state='idle'] {
@@ -116,7 +110,6 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--wb-accent) 14%, transparent);
 }
 
-/* 可落点端口从较小尺寸弹到常态，只播一次，避免常驻闪烁。 */
 
 .glyph[data-state='ready'] .scale {
   animation: port-ready-in 300ms var(--wb-ease);
@@ -137,7 +130,6 @@
   }
 }
 
-/* 拒绝只在卡片外围闪一层玫瑰柔光，不留下第二层虚线边框。 */
 
 .rejectAura {
   position: absolute;
@@ -156,7 +148,6 @@
 
 @media (max-width: 760px) {
   .port {
-    /* 窄窗口命中区不小于 48px，同时继续按缩放补足。 */
     --port-hit: max(48px, calc(28px * var(--canvas-zoom-inverse, 1)));
   }
 }

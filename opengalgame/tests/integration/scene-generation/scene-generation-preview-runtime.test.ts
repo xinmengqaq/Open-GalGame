@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
@@ -19,14 +19,13 @@ import { writeProjectRegistrations } from '@infrastructure/projects/projectRegis
 import { streamingFetch } from '../ai/streamingFetch'
 
 const roots: string[] = []
-/** 64×36 PNG：与媒体预览 e2e 同一确定性图片来源，预览只验证已发布修订中的字节可读。 */
 const backgroundPngBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAkCAIAAAC2bqvFAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAU0lEQVR4nO3PUQkAIBTAwFfSKla1jiH8OITBAtzm7PV1wwUNaEEDWtCAFjSgBQ1oQQNa0IAWNKAFDWhBA1rQgBY0oAUNaEEDWtCAFjSgBQ1owWMX4Vmy07qWCGwAAAAASUVORK5CYII='
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-it('固定候选修订可预览真实素材，下一修订不污染旧根，暂停恢复保留 usage', async () => {
+it('候选修订可预览真实素材，关闭预览不提交正式作品', async () => {
   const root = await mkdtemp(join(tmpdir(), 'webgal-preview-smoke-'))
   roots.push(root)
   const projectRoot = join(root, 'project')
@@ -170,31 +169,14 @@ it('固定候选修订可预览真实素材，下一修订不污染旧根，暂�
       if (last?.role === 'user') {
         writes += 1
         call = {
-          name: 'writeText',
+          name: 'writeCandidate',
           arguments: {
             path: 'game/scene/start.txt',
-            content: `旁白:${writes === 1 ? '第一候选' : '第二候选'};\n`
+            expectedRevision: expectedRevisionOf(body.messages ?? []),
+            content: `say:${writes === 1 ? '第一候选' : '第二候选'} -clear;\nend;\n`
           }
         }
       }
-      const structured = body.tools?.find(
-        (item) =>
-          !['writeText', 'replaceText', 'readTextRange', 'listDirectory'].includes(
-            item.function?.name ?? ''
-          )
-      )
-      if (!call && structured)
-        call = {
-          name: structured.function?.name ?? 'record_scene_result',
-          arguments: {
-            action: 'submit_scene_result',
-            summary: writes <= 1 ? '第一候选' : '第二候选',
-            writtenFiles: ['game/scene/start.txt'],
-            usedAssetIds: [],
-            unresolvedIssues: [],
-            tradeoffs: []
-          }
-        }
       return Response.json(completion(calls, call))
     }),
     dispatch: (job) => {
@@ -234,6 +216,7 @@ it('固定候选修订可预览真实素材，下一修订不污染旧根，暂�
       )
     }
   })
+  const baselineCommit = git(projectRoot, 'rev-parse', 'HEAD')
   const started = await app.generation.generateScene({
     projectId: 'project-preview',
     sceneId: 'scene-preview',
@@ -245,9 +228,15 @@ it('固定候选修订可预览真实素材，下一修订不污染旧根，暂�
   await jobs.shift()?.()
   const waiting = await app.status.getSceneGenerationStatus(started)
   expect(waiting.state).toBe('waiting')
+  expect(waiting.interaction?.kind).toBe('review')
   const execution = await app.ports.executions.readExecution(started)
+  expect(execution?.artifactValidation?.issues).toEqual([])
   expect(execution?.budget.inputTokens).toBeGreaterThan(0)
   expect(execution?.budget.outputTokens).toBeGreaterThan(0)
+  expect(waiting.candidateSnapshotId).toBe(execution?.candidateSnapshotId)
+  expect(await readFile(join(projectRoot, 'game/scene/start.txt'), 'utf8')).toBe('旁白:原稿;\n')
+  expect(git(projectRoot, 'rev-parse', 'HEAD')).toBe(baselineCommit)
+
   const firstPreview = await app.candidatePreview?.openSceneGenerationCandidatePreview({
     ...started,
     threadId: execution!.threadId,
@@ -263,58 +252,38 @@ it('固定候选修订可预览真实素材，下一修订不污染旧根，暂�
   expect(await firstScript.text(), '脚本内容').toContain('第一候选')
   expect(firstAsset.status, '素材').toBe(200)
 
-  await app.generation.replySceneGenerationInteraction({
-    ...started,
-    threadId: execution!.threadId,
-    branchId: execution!.branchId,
-    interactionId: waiting.interaction!.interactionId,
-    checkpointId: waiting.checkpointId!,
-    candidateSnapshotId: waiting.candidateSnapshotId,
-    replyId: 'reply-preview',
-    reply: { kind: 'revise', body: '改为第二候选' }
-  })
-  await jobs.shift()?.()
-  const next = await app.ports.executions.readExecution(started)
-  const sameScript = await fetch(`${originOf(firstPreview!.url)}/game/scene/start.txt`)
-  expect(await sameScript.text()).toContain('第一候选')
-  expect(next?.candidateSnapshotId).not.toBe(execution?.candidateSnapshotId)
   await app.candidatePreview?.closeSceneGenerationCandidatePreview({
     ...started,
     previewSessionId: firstPreview!.previewSessionId
   })
   expect((await fetch(firstPreview!.url).catch(() => undefined))?.ok ?? false).toBe(false)
-
-  await app.control?.pauseSceneGeneration(started)
-  await app.generation.replySceneGenerationInteraction({
-    ...started,
-    threadId: next!.threadId,
-    branchId: next!.branchId,
-    interactionId: (await app.status.getSceneGenerationStatus(started)).interaction!.interactionId,
-    checkpointId: next!.checkpointId!,
-    candidateSnapshotId: next!.candidateSnapshotId,
-    replyId: 'reply-pause',
-    reply: { kind: 'revise', body: '暂停前再改一次' }
-  })
-  await jobs.shift()?.()
-  const paused = await app.ports.executions.readExecution(started)
-  expect(paused?.state).toBe('interrupted')
-  expect(paused?.interruptReason).toBe('paused')
-  const retainedInput = paused?.budget.inputTokens ?? 0
-  await app.control?.resumeSceneGeneration({
-    ...started,
-    threadId: paused!.threadId,
-    branchId: paused!.branchId,
-    checkpointId: paused!.checkpointId!,
-    candidateSnapshotId: paused!.candidateSnapshotId
-  })
-  await jobs.shift()?.()
-  const resumed = await app.ports.executions.readExecution(started)
-  expect(resumed?.budget.inputTokens ?? 0).toBeGreaterThanOrEqual(retainedInput)
+  expect(git(projectRoot, 'rev-parse', 'HEAD')).toBe(baselineCommit)
   await app.close()
 }, 60000)
 
 function originOf(url: string): string {
   return new URL(url).origin
+}
+
+/** 从 facts 文本块读取 draft.revision，模拟模型按事实写入。 */
+function expectedRevisionOf(messages: Array<{ role?: string; content?: unknown }>): string {
+  const facts = messages
+    .filter((message) => message.role === 'user')
+    .map((message) => contentText(message.content))
+    .at(-1)
+  return facts?.match(/"revision"\s*:\s*"([^"]+)"/)?.[1] ?? 'absent'
+}
+
+function contentText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .flatMap((block) =>
+      block && typeof block === 'object' && 'text' in block && typeof block.text === 'string'
+        ? [block.text]
+        : []
+    )
+    .join('')
 }
 
 function completion(

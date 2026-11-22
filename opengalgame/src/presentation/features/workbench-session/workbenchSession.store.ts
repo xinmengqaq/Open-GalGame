@@ -98,7 +98,6 @@ type WorkbenchSessionActions = {
   resizeCard: (cardId: string, layout: SessionCardLayout) => boolean
   applyFittedLayout: (cardId: string, layout: SessionCardLayout) => boolean
   setPromptBodyDraft: (cardId: string, body: string, recordHistory: boolean) => boolean
-  /** 以稳定 cardId 集合替换提示词引用；顺序保留，重复身份只记一次。 */
   setPromptReferences: (cardId: string, referenceCardIds: readonly string[]) => boolean
   setPromptReferenceAlert: (alert: PromptReferenceAlert | null) => void
   applyServerArrangement: (
@@ -108,7 +107,6 @@ type WorkbenchSessionActions = {
   markSaving: () => void
   markSaved: (sent: SessionSnapshot) => void
   markSaveFailure: (state: WorkbenchSaveState, error: FailureState) => void
-  /** 把撤销前草稿放回当前会话，作为新的未保存编辑，不恢复旧撤销栈。 */
   restoreSessionDraft: (snapshot: SessionSnapshot) => void
   undo: () => void
   redo: () => void
@@ -116,10 +114,8 @@ type WorkbenchSessionActions = {
 
 type Store = WorkbenchSessionState & WorkbenchSessionActions
 
-/** 工作台当前会话。只保存前端草稿，保存与撤销排程由命令层承担。 */
 export const useWorkbenchSessionStore = create<Store>((set, get) => ({
   ...initialState,
-  /** 打开工程后重置会话并记下身份。 */
   startSession: (project) =>
     set({
       ...emptyIdentity,
@@ -131,7 +127,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
       catalogStatus: 'loading',
       arrangementStatus: 'loading'
     }),
-  /** 离开工作台时清空会话。 */
   reset: () => set(initialState),
   setCatalog: (sources) => {
     const state = get()
@@ -143,10 +138,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
       catalogError: null
     })
   },
-  /**
-   * 记录来源扫描失败。已有列表时保留摘要，不解释成空目录。
-   * @param error - 失败状态。
-   */
   setCatalogFailure: (error) => {
     const { catalogStatus } = get()
     if (catalogStatus === 'ready' || catalogStatus === 'empty') {
@@ -155,13 +146,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
     }
     set({ catalogStatus: 'failed', catalogError: error })
   },
-  /**
-   * 写入读取到的已保存编排。来源事实另行合并，不覆盖卡片标题。
-   *
-   * `options.baseline` 用于装载时应用卡片间距兜底：草稿是规范化后的编排，基线仍是
-   * 磁盘上的原编排，因此只产生“待保存”的 dirty，不会多出一条撤销记录；保存成功后
-   * 再用 `markSaved` 把基线推进到规范化结果。
-   */
   setArrangement: (arrangement, options) => {
     const draft = arrangementDraftOf(arrangement)
     const baselineDraft = options?.baseline ? arrangementDraftOf(options.baseline) : draft
@@ -187,7 +171,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
       viewportRevision: 0
     })
   },
-  /** 没有已保存编排。空画布不是读取失败。 */
   setArrangementEmpty: () => {
     const draft: SessionSnapshot = {
       cards: [],
@@ -213,10 +196,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
       viewportRevision: 0
     })
   },
-  /**
-   * 记录画布读取失败，不伪装为空画布。
-   * @param error - 失败状态。
-   */
   setArrangementFailure: (error) =>
     set({
       arrangementStatus: 'failed',
@@ -232,7 +211,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
       saveError: null,
       promptReferenceAlert: null
     }),
-  /** 合并来源详情。卡片不复制正文，只在展示时查详情。 */
   putSourceDetails: (sources) => {
     const state = get()
     const sourceDetails = { ...state.sourceDetails }
@@ -244,7 +222,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
   selectCard: (cardId) => set({ selectedCardId: cardId }),
   openDocumentLayer: (cardId) => set({ documentLayerCardId: cardId, selectedCardId: cardId }),
   closeDocumentLayer: () => set({ documentLayerCardId: null }),
-  /** 视口只用于恢复画布，不进入撤销栈。 */
   setViewport: (viewport) => {
     const state = get()
     if (
@@ -262,7 +239,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
       saveState: dirtyStateOf(state)
     })
   },
-  /** 一次提交多张卡片的新位置。位置未变则不记历史。 */
   moveCards: (moves) => {
     const state = get()
     if (moves.length === 0) return false
@@ -307,7 +283,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
     })
     return true
   },
-  /** 预览加载后的自动贴合。不单独记撤销，也不伪造用户缩放。 */
   applyFittedLayout: (cardId, layout) => {
     const state = get()
     const card = state.cards.find((item) => item.cardId === cardId)
@@ -323,7 +298,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
     })
     return true
   },
-  /** 提示词正文先写本地草稿；请求合并与串行由命令层负责。 */
   setPromptBodyDraft: (cardId, body, recordHistory) => {
     const state = get()
     const card = state.cards.find((item) => item.cardId === cardId)
@@ -341,10 +315,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
     })
     return true
   },
-  /**
-   * 提示词引用只存稳定 cardId。重复身份归一，同一引用集合不重复记历史。
-   * 修改后由命令层立即保存整份编排；后端仍会按当前画布重新校验。
-   */
   setPromptReferences: (cardId, referenceCardIds) => {
     const state = get()
     const card = state.cards.find((item) => item.cardId === cardId)
@@ -371,10 +341,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
     return true
   },
   setPromptReferenceAlert: (alert) => set({ promptReferenceAlert: alert }),
-  /**
-   * 应用一次编辑响应。结构已在本请求之后变化时整份丢弃；
-   * 局部内容或布局有更新时保留本地值，避免旧响应覆盖新编辑。
-   */
   applyServerArrangement: (arrangement, capture) => {
     const state = get()
     if (capture.structuralRevision !== state.structuralRevision) return false
@@ -431,7 +397,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
     return true
   },
   markSaving: () => set({ saveState: 'saving', saveError: null }),
-  /** 保存成功后以发送快照为基线；期间的新编辑仍记为未保存。 */
   markSaved: (sent) => {
     const state = get()
     const current = draftFingerprint(state.cards, state.relations, state.viewport)
@@ -509,7 +474,6 @@ export const useWorkbenchSessionStore = create<Store>((set, get) => ({
   }
 }))
 
-/** 当前会话是否有尚未确认保持的改动。 */
 export function sessionIsDirty(
   state: Pick<Store, 'cards' | 'relations' | 'viewport' | 'baseline'>
 ): boolean {

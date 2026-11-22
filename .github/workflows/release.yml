@@ -26,8 +26,6 @@ jobs:
             opengalgame/package-lock.json
             vendor/md-blockkit/package-lock.json
 
-      # package-lock.json 由 npm 11 生成，npm 10 的 ci 会漏掉部分可选依赖而失败。
-      # 固定 npm 版本，避免 CI 内置 npm 随 Node 22 镜像漂移。
       - name: Pin npm version
         run: npm install -g npm@11.19.0
 
@@ -56,8 +54,6 @@ jobs:
       - name: Build Windows installer
         run: npx electron-builder --win --x64 --publish never
 
-      # electron-builder 并行上传多个产物时会竞态创建出多个同名 Release。
-      # 改为构建后由 gh 一次创建 Release 并上传三件产物。
       - name: Publish Windows installer
         shell: bash
         env:

@@ -18,7 +18,6 @@ import type { ConnectionSettingsInfo } from '@domain/connections/models/Connecti
 
 const enabled = process.env.OPENGALGAME_RUN_REAL_MODEL === '1'
 
-// 用户裁决：长生成不测时限；只关闭当前文件的 runner deadline，不影响其他文件。
 vi.setConfig({ testTimeout: 0 })
 const roots: string[] = []
 
@@ -111,7 +110,6 @@ function errorFacts(error: unknown): { errorType: string | null; status: number 
   return { errorType, status }
 }
 
-/** 只记录固定阶段/检查 ID 和安全数值，不记录正文、marker、expected 或 message。 */
 function createSafeLedger(meta: object | undefined): SafeLedger {
   const records: SafeStageRecord[] = []
   let lastStage: SafeStageName = 'setup'
@@ -121,7 +119,6 @@ function createSafeLedger(meta: object | undefined): SafeLedger {
     try {
       ;(meta as Record<string, unknown>).safeStages = records
     } catch {
-      // 诊断是 best-effort，不能改变测试结果。
     }
   }
 
@@ -137,7 +134,6 @@ function createSafeLedger(meta: object | undefined): SafeLedger {
         'utf8'
       )
     } catch {
-      // 写入失败不影响原测试结果。
     }
   }
 
@@ -161,7 +157,6 @@ function createSafeLedger(meta: object | undefined): SafeLedger {
             status: null
           })
         } catch {
-          // 记录失败不改变断言结果。
         }
       } catch (error) {
         checkFailed = true
@@ -174,7 +169,6 @@ function createSafeLedger(meta: object | undefined): SafeLedger {
             ...errorFacts(error)
           })
         } catch {
-          // 记录失败不能覆盖原始断言异常。
         }
         throw error
       }
@@ -199,7 +193,6 @@ function createSafeLedger(meta: object | undefined): SafeLedger {
             ...errorFacts(failure)
           })
         } catch {
-          // finally 写入失败不能覆盖原始异常。
         }
       }
     }
@@ -225,7 +218,6 @@ function createSafeLedger(meta: object | undefined): SafeLedger {
             ...errorFacts(failure)
           })
         } catch {
-          // 终端记录失败不能覆盖原始异常。
         }
       }
       await flush()

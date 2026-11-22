@@ -35,7 +35,6 @@ export const versionWriteFailure: StorageFailure = {
   notWritable
 }
 
-/** 版本协议文档只放在本仓库 Git 元数据内。 */
 export async function versionDocumentPath(
   projectRoot: string,
   segments: readonly string[],

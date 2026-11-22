@@ -19,10 +19,6 @@ import { previewIssuesFromRead } from './previewIssueMapping'
 
 const SAFE_READ_FAILURE = '当前场景内容无法读取'
 
-/**
- * 组合正式工程定位、共享读取、解析、引用和锁定。
- * 一次返回同源事实，不写文件，不启动引擎。
- */
 export class LocalScenePreviewSourceGateway implements ScenePreviewSourceGateway {
   constructor(
     private readonly locations: RegisteredSceneLocationGatewayImpl,

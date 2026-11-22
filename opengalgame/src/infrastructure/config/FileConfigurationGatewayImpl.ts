@@ -20,11 +20,6 @@ const environmentFields = {
   requestTimeoutMs: 'OPENGALGAME_REQUEST_TIMEOUT_MS'
 } as const
 
-/**
- * 读取并解析运行配置文件。文件不存在按空配置处理，其余读取或解析失败转为带码异常。
- * @returns 解析结果；文件不存在时为空对象。
- * @throws {AppException} 文件无法读取或内容不是合法 JSON。
- */
 function readConfigFile(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, 'utf8'))
@@ -34,7 +29,6 @@ function readConfigFile(path: string): unknown {
   }
 }
 
-/** 未设置或空白不覆盖文件取值。带首尾空白的数字不能进入数值转换。 */
 function readEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> {
   const fields: Record<string, string> = {}
   for (const [field, name] of Object.entries(environmentFields)) {
@@ -50,7 +44,6 @@ function readEnvironment(environment: NodeJS.ProcessEnv): Record<string, string>
 
 export class FileConfigurationGatewayImpl implements ConfigurationGateway {
   private readonly snapshot: Readonly<RuntimeConfig>
-  /** 按默认、文件、环境的顺序加载并校验一次运行配置。缺省项取默认值，非法取值不回落默认值。 */
   constructor(path: string, environment: NodeJS.ProcessEnv = process.env) {
     const file = parseUnknownValue(
       runtimeSchema.partial(),
@@ -67,7 +60,6 @@ export class FileConfigurationGatewayImpl implements ConfigurationGateway {
       )
     )
   }
-  /** 返回经过校验的不可变快照。 */
   getSnapshot(): Readonly<RuntimeConfig> {
     return this.snapshot
   }

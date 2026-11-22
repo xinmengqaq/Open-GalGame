@@ -13,18 +13,11 @@ function hasControlCharacter(value: string): boolean {
   return false
 }
 
-/**
- * @returns 文件名；无法识别时为“所选文件”。
- */
 export function fileNameFromPath(localFilePath: string): string {
   const name = basename(localFilePath)
   return name === '' || name === '.' || name === '..' ? '所选文件' : name
 }
 
-/**
- * 拒绝操作系统保留名和非法字符。领域规则已拒绝目录。
- * @throws {AppException} 名称不能落盘。
- */
 export function assertPersistableFileName(fileName: string): void {
   if (
     reserved.test(fileName) ||

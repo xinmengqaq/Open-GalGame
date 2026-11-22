@@ -33,10 +33,6 @@ const lockDocumentSchema = z
       new Set(document.scenes.map((item) => item.sceneId)).size === document.scenes.length
   )
 
-/**
- * 只补缺失的默认场景脚本和对应锁项。
- * 已有脚本不改写；已有锁状态、其他场景和未知字段都保留。
- */
 export class LocalProjectSceneSeedGatewayImpl implements ProjectSceneSeedGateway {
   constructor(private readonly userDirectory: string) {}
 

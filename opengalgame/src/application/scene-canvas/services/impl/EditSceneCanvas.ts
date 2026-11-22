@@ -65,13 +65,11 @@ export interface SceneCanvasApplicationDependencies {
   nextId: () => string
 }
 
-/** 编排场景画布编辑、读取和保存。不持有计时器，不实现版本协议。 */
 export class EditSceneCanvas implements SceneCanvasApplicationService {
   private pendingOperationId: string | undefined
 
   constructor(private readonly deps: SceneCanvasApplicationDependencies) {}
 
-  /** 读取已保存编排。确认没有文件时返回 null。 */
   async readSceneCanvasArrangement(
     request: ReadSceneCanvasArrangementDTO
   ): Promise<SceneCanvasArrangementVO | null> {
@@ -87,7 +85,6 @@ export class EditSceneCanvas implements SceneCanvasApplicationService {
     return toVO(arrangement)
   }
 
-  /** 按可读来源事实创建卡片，不复制正文或媒体。 */
   async createSourceCard(
     request: CreateSceneCanvasSourceCardDTO
   ): Promise<SceneCanvasArrangementVO> {
@@ -101,7 +98,6 @@ export class EditSceneCanvas implements SceneCanvasApplicationService {
     )
   }
 
-  /** 创建没有来源身份的提示词卡片。 */
   createPromptCard(request: CreateSceneCanvasPromptCardDTO): Promise<SceneCanvasArrangementVO> {
     requireSameCanvas(request, request.arrangement)
     const cardId = this.deps.nextId()
@@ -121,7 +117,6 @@ export class EditSceneCanvas implements SceneCanvasApplicationService {
     )
   }
 
-  /** 创建尚未选择预设的动画或特效卡片。 */
   createFieldCard(request: CreateSceneCanvasFieldCardDTO): Promise<SceneCanvasArrangementVO> {
     requireSameCanvas(request, request.arrangement)
     const cardId = this.deps.nextId()
@@ -211,10 +206,6 @@ export class EditSceneCanvas implements SceneCanvasApplicationService {
     )
   }
 
-  /**
-   * 固定本次编排，必要时落盘，并请求版本端口确认保持。
-   * 内容相同只能跳过落盘。操作标识只留在本进程，直到结算离开不明状态。
-   */
   async saveSceneCanvasArrangement(request: SaveSceneCanvasArrangementDTO): Promise<void> {
     const arrangement = structuredClone(request.arrangement)
     requireSameCanvas(request, arrangement)
@@ -304,7 +295,6 @@ export class EditSceneCanvas implements SceneCanvasApplicationService {
     this.pendingOperationId = undefined
   }
 
-  /** 未就绪时停在写盘之前，避免变成已落盘未提交。 */
   private async requireReadyWorkspace(projectId: string): Promise<void> {
     const inspection = await this.deps.workspace.inspectProjectWorkspace({ projectId })
     if (inspection.ready) return

@@ -1,9 +1,3 @@
-/*
- * 关系层：一条柔光带、两个光点和线上的一枚状态光点。
- * 命名 / 未命名 / 选中 / 拒绝用线型、点形与洗光共同表达，不用整圈硬边框。
- * 关系标签的全部样式只在本文件维护，SceneCanvas.module.css 不再保留第二套。
- */
-
 .edgeLayer {
   pointer-events: none;
   --relation-line: var(--wb-positive-strong);
@@ -25,7 +19,6 @@
   --relation-ink: var(--wb-danger-strong);
 }
 
-/* 线：宽柔光带 + 细实线；未命名用琥珀虚线，拒绝用短虚线。 */
 
 .edgeUnderlay {
   fill: none;
@@ -104,7 +97,6 @@
   cursor: pointer;
 }
 
-/* 关系记录连线：卡片到一个关系光点的引用线，不参与关系状态配色。 */
 
 .recordEdgeLayer {
   pointer-events: none;
@@ -129,7 +121,6 @@
   stroke-width: 1.5;
 }
 
-/* 关系标签：线上浮着的一枚玻璃胶囊。 */
 
 :global(.react-flow__node-relationAnchor) .anchor {
   --relation-line: var(--wb-positive-strong);
@@ -148,7 +139,6 @@
   transition: transform 180ms var(--wb-ease);
 }
 
-/* 标签的状态色必须写在基础变量之后，否则会被默认的青绿覆盖。 */
 
 .anchor[data-tone='unnamed'] {
   --relation-line: var(--wb-warning);
@@ -165,7 +155,6 @@
   --relation-ink: var(--wb-danger-strong);
 }
 
-/* 标签与线之间的短光茎；标签落在中点上时不画。 */
 
 .anchor::after {
   position: absolute;
@@ -268,8 +257,6 @@
   cursor: pointer;
 }
 
-/* 光点收起时标签按钮只有约 9px 宽；低缩放时按屏幕像素补足点击区，避免点不中。
-   补足量不超过与该锚点最近的邻居间距（--anchor-hit-clearance），否则会盖住相邻锚点。 */
 
 .label::before {
   position: absolute;
@@ -375,7 +362,6 @@
   color: var(--wb-danger-strong);
 }
 
-/* 默认收起为光点；悬停、聚焦、编辑或可装载时展开名称，避免遮挡卡片。 */
 
 .anchor[data-condensed='true'] {
   --label-lift: 0px;
@@ -451,13 +437,11 @@
   transition-delay: 40ms;
 }
 
-/* 展开后卸下按钮可见，必须同时恢复命中，否则收起态下只能看到不能点。 */
 .anchor[data-condensed='true']:hover .recordDetach,
 .anchor[data-condensed='true']:focus-within .recordDetach {
   pointer-events: auto;
 }
 
-/* 关系被选中（编辑中）时标签行已经展开，卸下按钮也必须同时出现且可点。 */
 .anchor[data-condensed='true'][data-active='true'] .recordDetach {
   pointer-events: auto;
 }
@@ -475,7 +459,6 @@
     0 0 16px -2px color-mix(in srgb, var(--wb-positive) 62%, transparent);
 }
 
-/* 收起状态下，装载提示只在指针或键盘接近这枚光点时出现，不压卡片。 */
 .anchor[data-condensed='true'][data-loadable='true'] .dropHint {
   opacity: 0;
   transition: opacity 140ms ease;
@@ -504,7 +487,6 @@
   transform: translateX(-50%);
 }
 
-/* 端口：填充为主，命中区域仍由外层 Handle 保证。 */
 
 .portAnchor {
   position: absolute;
@@ -519,7 +501,6 @@
   transition: opacity 140ms ease;
 }
 
-/* 收起为光点时不再额外画端口：光点本身带光晕，就是落点。 */
 
 .anchor[data-condensed='true'] .portAnchor {
   opacity: 0;
@@ -598,7 +579,6 @@
   content: '';
 }
 
-/* 记录落点跟标签行同域：命中区随可见标签走，不再用固定大热区抢占邻近锚点。 */
 
 :global(.react-flow__node-relationAnchor) .anchor .anchorHandle {
   position: absolute !important;
@@ -616,9 +596,6 @@
   pointer-events: none !important;
 }
 
-/* 低缩放时按屏幕像素补足命中盒：屏幕命中不小于 24px，正常缩放仍以标签尺寸为准；
-   补足量同样受最近邻居间距限制，低缩放时两枚锚点不会互相叠压。
-   伪元素只扩张命中外沿，不改 handle 实测框，记录虚线端点不被命中盒带偏。 */
 
 :global(.react-flow__node-relationAnchor) .anchor .anchorHandle::before {
   position: absolute;

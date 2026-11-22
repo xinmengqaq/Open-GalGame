@@ -6,11 +6,6 @@ import { requireOperationId, requireOwnedFact, requireOwnedPaths } from './versi
 export type RollbackTransition =
   { readonly kind: 'continue' } | { readonly kind: 'existing'; readonly state: '已回退' }
 
-/**
- * 回退和历史撤销共用本规则。
- * 只接受原操作拥有的路径；已回退返回既有事实，不授权再次回退。
- * @throws {AppException} 操作不符、路径越界、证据不足或不允许转换。
- */
 export function resolveRollbackTransition(input: {
   readonly operationId: string
   readonly requestedPaths: readonly string[]

@@ -14,12 +14,10 @@ interface WorkbenchToolbarProps {
   actions: readonly WorkbenchToolbarAction[]
   compact: boolean
   saveStatus: SaveStatusView
-  taskStatus?: ReactNode
   registerInset: RegisterWorkbenchInset
   onBack: () => void
 }
 
-/** 顶栏四个槽位：返回、身份、状态、动作。身份与动作不混排。 */
 export function WorkbenchToolbar({
   projectName,
   sceneLabel,
@@ -27,7 +25,6 @@ export function WorkbenchToolbar({
   actions,
   compact,
   saveStatus,
-  taskStatus,
   registerInset,
   onBack
 }: WorkbenchToolbarProps): ReactElement {
@@ -61,12 +58,7 @@ export function WorkbenchToolbar({
       <div className={styles.stateSlot}>{statusSlot}</div>
 
       <div className={styles.actionSlotWrap}>
-        <ToolbarActions
-          actions={actions}
-          compact={compact}
-          saveStatus={saveStatus}
-          taskStatus={taskStatus}
-        />
+        <ToolbarActions actions={actions} compact={compact} saveStatus={saveStatus} />
       </div>
     </header>
   )

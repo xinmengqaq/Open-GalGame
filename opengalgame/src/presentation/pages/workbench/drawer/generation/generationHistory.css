@@ -1,9 +1,3 @@
-/*
- * 场景 AI 历史。选择器全部限定在 .wb-drawer 根作用域，不污染工作台其他区域。
- * 颜色、圆角和阴影沿用抽屉基线；正文 14px，元信息 12px。
- */
-
-/* 统一标签内的历史视图容器；不再依赖旧的内层标签类。 */
 .wb-drawer .wb-hist-page {
   display: flex;
   min-height: 0;
@@ -22,7 +16,6 @@
   padding-bottom: 6px;
 }
 
-/* ---------- 标题 ---------- */
 .wb-drawer .wb-hist__head {
   display: flex;
   align-items: flex-end;
@@ -76,7 +69,6 @@
   height: 13px;
 }
 
-/* ---------- 列表滚动区 ---------- */
 .wb-drawer .wb-hist__scroll {
   min-height: 0;
   flex: 1;
@@ -91,7 +83,6 @@
   box-shadow: var(--wb-focus);
 }
 
-/* ---------- 时间线列表 ---------- */
 .wb-drawer .wb-hist__list {
   position: relative;
   display: flex;
@@ -248,7 +239,6 @@
   transform: translateX(2px);
 }
 
-/* ---------- 分页 ---------- */
 .wb-drawer .wb-hist__footer {
   display: flex;
   align-items: center;
@@ -294,7 +284,6 @@
   opacity: 0.65;
 }
 
-/* ---------- 状态 ---------- */
 .wb-drawer .wb-hist__state {
   display: flex;
   flex-direction: column;
@@ -366,7 +355,6 @@
   box-shadow: var(--wb-focus);
 }
 
-/* ---------- 空态构图 ---------- */
 .wb-drawer .wb-hist__empty-art {
   width: 220px;
   height: 96px;
@@ -392,7 +380,6 @@
   fill: color-mix(in srgb, var(--wb-text) 7%, transparent);
 }
 
-/* ---------- 加载骨架 ---------- */
 .wb-drawer .wb-hist__skeleton {
   position: relative;
   display: flex;
@@ -482,7 +469,6 @@
   }
 }
 
-/* ---------- 只读详情 ---------- */
 .wb-drawer .wb-hist__detail {
   display: flex;
   min-height: 0;
@@ -653,6 +639,253 @@
   color: var(--wb-text-faint);
 }
 
+/* ---------- 历史分叉 ---------- */
+.wb-drawer .wb-hist__fork {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 16px;
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 130% at 0% 0%, rgb(255 255 255 / 74%), transparent 58%),
+    linear-gradient(150deg, var(--wb-wash-lilac-soft), var(--wb-wash-cream));
+  box-shadow:
+    inset 0 0 0 1px var(--wb-hairline),
+    0 18px 30px -26px rgb(74 62 110 / 55%);
+}
+
+.wb-drawer .wb-hist__fork--blocked {
+  background: var(--wb-surface-soft);
+  box-shadow: inset 0 0 0 1px var(--wb-hairline);
+}
+
+.wb-drawer .wb-hist__fork--error {
+  background: var(--wb-wash-rose);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wb-danger-strong) 18%, transparent);
+}
+
+.wb-drawer .wb-hist__fork--created {
+  background: var(--wb-wash-mint);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wb-positive-strong) 18%, transparent);
+}
+
+.wb-drawer .wb-hist__fork--created .wb-hist__fork-title,
+.wb-drawer .wb-hist__fork--created .wb-hist__fork-title svg {
+  color: var(--wb-positive-strong);
+}
+
+.wb-drawer .wb-hist__fork-copy--quiet {
+  color: var(--wb-text-faint);
+  font-size: 13px;
+}
+
+.wb-drawer .wb-hist__fork--unconfirmed {
+  background: var(--wb-wash-warning);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wb-warning) 24%, transparent);
+}
+
+.wb-drawer .wb-hist__fork--unconfirmed .wb-hist__fork-title,
+.wb-drawer .wb-hist__fork--unconfirmed .wb-hist__fork-title svg {
+  color: color-mix(in srgb, var(--wb-warning) 72%, var(--wb-text-strong));
+}
+
+.wb-drawer .wb-hist__fork-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.wb-drawer .wb-hist__fork-actions .wb-hist__fork-retry {
+  margin-top: 0;
+}
+
+.wb-drawer .wb-hist__fork-unknown {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--wb-wash-warning);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wb-warning) 26%, transparent);
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.wb-drawer .wb-hist__fork-unknown-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-drawer .wb-hist__fork-unknown-head > svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: color-mix(in srgb, var(--wb-warning) 72%, var(--wb-text-strong));
+}
+
+.wb-drawer .wb-hist__fork-unknown-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-drawer .wb-hist__fork-unknown-item {
+  padding-top: 10px;
+}
+
+.wb-drawer .wb-hist__fork-unknown-item + .wb-hist__fork-unknown-item {
+  margin-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--wb-warning) 24%, transparent);
+}
+
+.wb-drawer .wb-hist__fork-unknown-title {
+  margin: 0;
+  color: var(--wb-text-strong);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.wb-drawer .wb-hist__fork-unknown-copy {
+  margin: 0;
+}
+
+.wb-drawer .wb-hist__fork-unknown-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.wb-drawer .wb-hist__fork-unknown-recheck,
+.wb-drawer .wb-hist__fork-unknown-ack {
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wb-drawer .wb-hist__fork-unknown-recheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wb-accent-strong);
+}
+
+.wb-drawer .wb-hist__fork-unknown-recheck:disabled {
+  color: var(--wb-text-faint);
+  cursor: default;
+}
+
+.wb-drawer .wb-hist__fork-unknown-recheck svg {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-drawer .wb-hist__fork-unknown-ack {
+  color: var(--wb-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.wb-drawer .wb-hist__fork-unknown-recheck:focus-visible,
+.wb-drawer .wb-hist__fork-unknown-ack:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.wb-drawer .wb-hist__fork-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--wb-text-strong);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.wb-drawer .wb-hist__fork-title svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--wb-accent);
+}
+
+.wb-drawer .wb-hist__fork--blocked .wb-hist__fork-title svg {
+  color: var(--wb-text-faint);
+}
+
+.wb-drawer .wb-hist__fork--error .wb-hist__fork-title {
+  color: var(--wb-danger-strong);
+}
+
+.wb-drawer .wb-hist__fork-copy {
+  margin: 0;
+  color: var(--wb-text-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.wb-drawer .wb-hist__fork-loading {
+  margin: 0;
+  color: var(--wb-text-faint);
+  font-size: 14px;
+}
+
+.wb-drawer .wb-hist__fork-action {
+  min-width: 148px;
+}
+
+.wb-drawer .wb-hist__fork-error {
+  display: flex;
+  width: 100%;
+  gap: 9px;
+  padding-top: 2px;
+  color: var(--wb-danger-strong);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.wb-drawer .wb-hist__fork-error > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 2px;
+}
+
+.wb-drawer .wb-hist__fork-error p {
+  margin: 0;
+}
+
+.wb-drawer .wb-hist__fork-error p + p {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--wb-danger-strong) 72%, var(--wb-text-muted));
+}
+
+.wb-drawer .wb-hist__fork-retry {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wb-accent-strong);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.wb-drawer .wb-hist__fork-retry:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
 @media (max-width: 720px) {
   .wb-drawer .wb-hist__row {
     grid-template-columns: 66px minmax(0, 1fr) 16px;
@@ -675,7 +908,6 @@
   }
 }
 
-/* ---------- 进行中行 ---------- */
 .wb-drawer .wb-hist__active {
   display: flex;
   flex-wrap: wrap;
@@ -766,4 +998,102 @@
 .wb-drawer .wb-hist__active-cancel:focus-visible {
   outline: none;
   box-shadow: var(--wb-focus);
+}
+
+/* ---------- 无检查点的未完成操作 ---------- */
+.wb-drawer .wb-hist__unfinished {
+  margin: 14px 16px 6px;
+  padding: 12px 14px 10px;
+  border-radius: 12px;
+  background: var(--wb-surface-soft);
+  box-shadow: inset 0 0 0 1px var(--wb-hairline);
+}
+
+.wb-drawer .wb-hist__unfinished-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wb-drawer .wb-hist__unfinished-title {
+  color: var(--wb-text);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.wb-drawer .wb-hist__unfinished-note {
+  margin: 6px 0 8px;
+  color: var(--wb-text-faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.wb-drawer .wb-hist__unfinished-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-drawer .wb-hist__unfinished-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 78px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.wb-drawer .wb-hist__unfinished-row:hover {
+  background: var(--wb-surface-solid);
+}
+
+.wb-drawer .wb-hist__unfinished-row:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.wb-drawer .wb-hist__unfinished-row:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.wb-drawer .wb-hist__unfinished-flag {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wb-drawer .wb-hist__unfinished-flag[data-tone='wait'] {
+  background: var(--wb-wash-warning);
+  color: var(--wb-text);
+}
+
+@media (max-width: 720px) {
+  .wb-drawer .wb-hist__unfinished-row {
+    grid-template-columns: 66px minmax(0, 1fr) 16px;
+    gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-drawer .wb-hist__unfinished-row {
+    transition: none;
+  }
 }

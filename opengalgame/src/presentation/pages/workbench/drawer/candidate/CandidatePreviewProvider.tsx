@@ -16,13 +16,11 @@ type CandidatePreviewProviderProps = {
     'readCandidatePreview' | 'subscribeCandidatePreview'
   > | null
   readonly target: CandidatePreviewTarget | null
-  /** 候选标签正在显示时才打开会话；未传时保持立即打开。 */
   readonly active?: boolean
   readonly onActivate: () => void
   readonly children: ReactNode
 }
 
-/** 抽屉内只创建一个候选会话，供审阅入口和只读标签共同消费。 */
 export function CandidatePreviewProvider({
   generationClient,
   previewClient,

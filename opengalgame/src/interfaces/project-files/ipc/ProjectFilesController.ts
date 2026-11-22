@@ -47,9 +47,6 @@ import {
 export class ProjectFilesController {
   private readonly handle: IpcRequestHandler
 
-  /**
-   * @param exceptions - 统一失败出口。
-   */
   constructor(
     private readonly projectFiles: ProjectFilesApplicationService,
     exceptions: IpcExceptionHandler,
@@ -58,9 +55,6 @@ export class ProjectFilesController {
     this.handle = createRequestHandler(exceptions)
   }
 
-  /**
-   * @returns 工程身份、两个格式支持事实和对象诊断。成功只表示检查完成。
-   */
   inspectProjectFiles(
     input: unknown,
     access: IpcRequestAccess
@@ -70,9 +64,6 @@ export class ProjectFilesController {
     )
   }
 
-  /**
-   * @returns 来源摘要。整体扫描失败不会变成空列表。
-   */
   listProjectInputSources(
     input: unknown,
     access: IpcRequestAccess
@@ -86,9 +77,6 @@ export class ProjectFilesController {
     )
   }
 
-  /**
-   * @returns 完整来源快照。失败时不返回部分来源。
-   */
   readProjectInputSources(
     input: unknown,
     access: IpcRequestAccess
@@ -102,21 +90,12 @@ export class ProjectFilesController {
     )
   }
 
-  /**
-   * 按来源身份读取媒体字节。请求不能携带路径。
-   * @returns 媒体字节和类型。失败时不返回部分字节。
-   */
   readProjectMedia(input: unknown, access: IpcRequestAccess): Promise<AjaxResult<ProjectMediaVO>> {
     return this.handle(readProjectMediaSchema, input, access, '媒体读取完成', (request) =>
       this.projectFiles.readProjectMedia(request)
     )
   }
 
-  /**
-   * 选择待导入文件。取消时 data 为 null。不调用导入。
-   * @param input - 未知请求。不能携带路径。
-   * @returns 路径列表或 null。
-   */
   chooseProjectFiles(
     input: unknown,
     access: IpcRequestAccess
@@ -126,10 +105,6 @@ export class ProjectFilesController {
     )
   }
 
-  /**
-   * 导入已选择的文件。不组合选择器。
-   * @returns 成功项和失败项。整体失败不夹带部分结果。
-   */
   importProjectFiles(
     input: unknown,
     access: IpcRequestAccess
@@ -139,10 +114,6 @@ export class ProjectFilesController {
     )
   }
 
-  /**
-   * 用系统默认程序打开工程文件。
-   * @returns 成功时 data 为 null。
-   */
   openProjectFile(input: unknown, access: IpcRequestAccess): Promise<AjaxResult<null>> {
     return this.handle(projectFileScopeSchema, input, access, '已请求打开文件', async (request) => {
       await this.projectFiles.openProjectFile(request)
@@ -159,9 +130,6 @@ export class ProjectFilesController {
     )
   }
 
-  /**
-   * @returns 成功时 data 为 null。
-   */
   deleteProjectFile(input: unknown, access: IpcRequestAccess): Promise<AjaxResult<null>> {
     return this.handle(deleteProjectFileSchema, input, access, '文件已删除', async (request) => {
       await this.projectFiles.deleteProjectFile(request)

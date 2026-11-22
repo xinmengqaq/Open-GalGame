@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewSaveVersionVO'
+import type { SavedSceneVersionVO } from '@application/scene-export/vo/SavedSceneVersionVO'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import {
-  latestPreviewSaveOfResult,
+  latestSavedSceneVersionOfResult,
   savedSceneVersionOfPreviewSave,
+  savedSceneVersionOfResult,
   sceneExportEntryOf,
   type SceneExportEntryState
 } from '@presentation/pages/workbench/shell/sceneExportEntry'
@@ -16,14 +17,29 @@ const contentBasis = {
   engineVersion: '4.6.5'
 }
 
-const savedVersion: SavedSceneVersionFact = {
-  requestId: 'save-request-1',
+const previewVersion: SavedSceneVersionVO = {
+  versionReference: { kind: 'preview-save', requestId: 'save-request-1' },
+  revisionDigest: 'revision-1',
   contentBasis
 }
 
-const latestPreviewSave: PreviewSaveVersionVO = {
-  requestId: 'save-request-1',
-  revisionDigest: 'revision-1',
+const generationVersion: SavedSceneVersionVO = {
+  versionReference: {
+    kind: 'generation-commit',
+    operationId: 'generation-operation-1',
+    commitId: 'a'.repeat(40)
+  },
+  revisionDigest: 'revision-2',
+  contentBasis
+}
+
+const savedVersion: SavedSceneVersionFact = {
+  versionReference: previewVersion.versionReference,
+  contentBasis
+}
+
+const generationSavedVersion: SavedSceneVersionFact = {
+  versionReference: generationVersion.versionReference,
   contentBasis
 }
 
@@ -41,83 +57,156 @@ function entryState(overrides: Partial<SceneExportEntryState> = {}): SceneExport
   }
 }
 
-describe('latestPreviewSaveOfResult', () => {
-  it('读取到已结算版本时返回版本引用', () => {
+describe('latestSavedSceneVersionOfResult', () => {
+  it('读取到预览保存版本时返回版本引用', () => {
     expect(
-      latestPreviewSaveOfResult({ code: ErrorCodes.success, msg: 'ok', data: latestPreviewSave })
-    ).toBe(latestPreviewSave)
+      latestSavedSceneVersionOfResult({
+        code: ErrorCodes.success,
+        msg: 'ok',
+        data: previewVersion
+      })
+    ).toBe(previewVersion)
   })
 
-  it('没有已结算版本时返回 null', () => {
-    expect(latestPreviewSaveOfResult({ code: ErrorCodes.success, msg: 'ok', data: null })).toBeNull()
+  it('读取到生成提交版本时返回版本引用', () => {
+    expect(
+      latestSavedSceneVersionOfResult({
+        code: ErrorCodes.success,
+        msg: 'ok',
+        data: generationVersion
+      })
+    ).toBe(generationVersion)
+  })
+
+  it('没有版本时返回 null', () => {
+    expect(
+      latestSavedSceneVersionOfResult({ code: ErrorCodes.success, msg: 'ok', data: null })
+    ).toBeNull()
   })
 
   it('查询失败时按未恢复处理，不抛错', () => {
     expect(
-      latestPreviewSaveOfResult({ code: ErrorCodes.internalError, msg: '读取失败' })
+      latestSavedSceneVersionOfResult({ code: ErrorCodes.internalError, msg: '读取失败' })
     ).toBeNull()
   })
 
   it('成功响应但缺少数据时按未恢复处理', () => {
-    expect(latestPreviewSaveOfResult({ code: ErrorCodes.success, msg: 'ok' })).toBeNull()
+    expect(latestSavedSceneVersionOfResult({ code: ErrorCodes.success, msg: 'ok' })).toBeNull()
   })
 })
 
-describe('savedSceneVersionOfPreviewSave', () => {
-  it('只还原保存身份与内容依据，不携带 revision', () => {
-    const version = savedSceneVersionOfPreviewSave(latestPreviewSave)
+describe('savedSceneVersionOfResult', () => {
+  it('还原预览保存身份与内容依据，不携带 revision', () => {
+    const version = savedSceneVersionOfResult(previewVersion)
     expect(version).toEqual(savedVersion)
-    expect(Object.keys(version ?? {})).toEqual(['requestId', 'contentBasis'])
+    expect(Object.keys(version ?? {})).toEqual(['versionReference', 'contentBasis'])
   })
 
-  it('没有已结算版本时保持未保存', () => {
-    expect(savedSceneVersionOfPreviewSave(null)).toBeNull()
+  it('还原生成提交身份与内容依据', () => {
+    expect(savedSceneVersionOfResult(generationVersion)).toEqual(generationSavedVersion)
+  })
+
+  it('没有版本时保持未保存', () => {
+    expect(savedSceneVersionOfResult(null)).toBeNull()
   })
 
   it('身份或内容依据为空时按未保存处理', () => {
     expect(
-      savedSceneVersionOfPreviewSave({ ...latestPreviewSave, requestId: '   ' })
+      savedSceneVersionOfResult({
+        ...previewVersion,
+        versionReference: { kind: 'preview-save', requestId: '   ' }
+      })
     ).toBeNull()
     expect(
-      savedSceneVersionOfPreviewSave({
-        ...latestPreviewSave,
+      savedSceneVersionOfResult({
+        ...generationVersion,
+        versionReference: {
+          kind: 'generation-commit',
+          operationId: 'generation-operation-1',
+          commitId: '   '
+        }
+      })
+    ).toBeNull()
+    expect(
+      savedSceneVersionOfResult({
+        ...generationVersion,
+        versionReference: {
+          kind: 'generation-commit',
+          operationId: '   ',
+          commitId: 'a'.repeat(40)
+        }
+      })
+    ).toBeNull()
+    expect(
+      savedSceneVersionOfResult({
+        ...previewVersion,
         contentBasis: { ...contentBasis, digest: '  ' }
       })
     ).toBeNull()
   })
 })
 
+describe('savedSceneVersionOfPreviewSave', () => {
+  it('预览保存成功后生成预览来源的导出事实', () => {
+    expect(savedSceneVersionOfPreviewSave({ requestId: 'save-request-1', contentBasis })).toEqual(
+      savedVersion
+    )
+  })
+
+  it('预览保存身份为空时忽略', () => {
+    expect(savedSceneVersionOfPreviewSave({ requestId: '  ', contentBasis })).toBeNull()
+  })
+})
+
 describe('sceneExportEntryOf', () => {
-  it('有已结算版本且工作台就绪时允许导出', () => {
+  it('有预览保存版本且工作台就绪时允许导出', () => {
     expect(sceneExportEntryOf(entryState({ savedSceneVersion: savedVersion }))).toEqual({
       canRun: true,
       hint: '导出已保存的当前场景为 Windows WebGAL 游戏'
     })
   })
 
-  it('没有已结算版本时保持禁用并提示先保存', () => {
-    expect(sceneExportEntryOf(entryState())).toEqual({
-      canRun: false,
-      hint: '还没有保存成功的场景内容；先在试玩预览里保存一次'
+  it('有生成提交版本时同样允许导出', () => {
+    expect(
+      sceneExportEntryOf(entryState({ savedSceneVersion: generationSavedVersion }))
+    ).toEqual({
+      canRun: true,
+      hint: '导出已保存的当前场景为 Windows WebGAL 游戏'
     })
   })
 
-  it('hydration 读到已结算版本后放行导出', () => {
-    const version = savedSceneVersionOfPreviewSave(
-      latestPreviewSaveOfResult({
+  it('没有已保存版本时保持禁用并提示先保存或接受生成结果', () => {
+    expect(sceneExportEntryOf(entryState())).toEqual({
+      canRun: false,
+      hint: '还没有可导出的已保存场景；先在试玩预览里保存，或接受一次生成结果'
+    })
+  })
+
+  it('hydration 读到预览保存版本后放行导出', () => {
+    const version = savedSceneVersionOfResult(
+      latestSavedSceneVersionOfResult({
         code: ErrorCodes.success,
         msg: 'ok',
-        data: latestPreviewSave
+        data: previewVersion
       })
     )
-    expect(
-      sceneExportEntryOf(entryState({ savedSceneVersion: version })).canRun
-    ).toBe(true)
+    expect(sceneExportEntryOf(entryState({ savedSceneVersion: version })).canRun).toBe(true)
+  })
+
+  it('hydration 读到生成提交版本后放行导出', () => {
+    const version = savedSceneVersionOfResult(
+      latestSavedSceneVersionOfResult({
+        code: ErrorCodes.success,
+        msg: 'ok',
+        data: generationVersion
+      })
+    )
+    expect(sceneExportEntryOf(entryState({ savedSceneVersion: version })).canRun).toBe(true)
   })
 
   it('hydration 查询失败时保持禁用', () => {
-    const version = savedSceneVersionOfPreviewSave(
-      latestPreviewSaveOfResult({ code: ErrorCodes.internalError, msg: '读取失败' })
+    const version = savedSceneVersionOfResult(
+      latestSavedSceneVersionOfResult({ code: ErrorCodes.internalError, msg: '读取失败' })
     )
     expect(version).toBeNull()
     expect(sceneExportEntryOf(entryState({ savedSceneVersion: version })).canRun).toBe(false)
@@ -188,10 +277,7 @@ describe('sceneExportEntryOf', () => {
           saveState: 'saving'
         })
       )
-    ).toEqual({
-      canRun: false,
-      hint: '还没有保存成功的场景内容；先在试玩预览里保存一次'
-    })
+    ).toEqual({ canRun: false, hint: '工作台正在恢复历史视图，暂不导出' })
 
     expect(
       sceneExportEntryOf(

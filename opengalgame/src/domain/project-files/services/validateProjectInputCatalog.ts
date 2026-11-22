@@ -12,10 +12,6 @@ export type CatalogNameFact = {
   name: string
 }
 
-/**
- * @param names - 参与同一父目录名称空间的文件夹和来源名称。
- * @throws {AppException} 目录结构无法可靠确定。
- */
 export function validateProjectInputCatalog(
   catalog: ProjectInputCatalog,
   names: readonly CatalogNameFact[]
@@ -82,7 +78,6 @@ function assertNames(
   }
 }
 
-/** 收集文件夹及其全部后代。缺少目标时返回空数组。 */
 export function folderSubtree(
   folders: readonly ProjectFolder[],
   folderId: string

@@ -3,7 +3,6 @@
   gap: 16px;
 }
 
-/* 危险入口靠左，取消与完成留在右侧主操作区。 */
 
 .deleteAction {
   margin-right: auto;

@@ -10,7 +10,6 @@ import {
 } from './contentKindLabel'
 import type { SessionCard, SessionPromptCard } from './workbenchSession.types'
 
-/** 与生成输入允许的引用类别一致；提示词本身和未知类别不进入候选。 */
 const referenceableKinds: Record<Exclude<SessionCard['kind'], 'prompt'>, true> = {
   document: true,
   image: true,
@@ -49,12 +48,10 @@ export type PromptReferenceIssue = {
 
 export type PromptReferenceChipView = {
   cardId: string
-  /** 只在目标仍是可引用卡片时出现；失效或非法目标不伪造卡片类别。 */
   kind: Exclude<SessionCard['kind'], 'prompt'> | null
   kindLabel: string | null
   displayName: string
   detail: string | null
-  /** 目标不是可引用卡片时为 null，界面不显示类别图标。 */
   contentKind: SessionContentKind | null
   textKind?: SessionTextKind
   tone: 'valid' | 'warning' | 'invalid'
@@ -71,17 +68,12 @@ export type PromptReferenceFailureView = {
   text: string
 }
 
-/** 提示词 `@` 输入触发的当前片段。start/end 直接用于替换正文。 */
 export type PromptMention = {
   start: number
   end: number
   query: string
 }
 
-/**
- * 当前画布可引用的卡片：稳定身份来自 cardId，显示名只取当前卡片事实。
- * 提示词卡本身不进入候选，避免生成侧把提示词引用判为无效。
- */
 export function promptReferenceTargetOf(card: SessionCard): PromptReferenceTarget | null {
   if (card.kind === 'prompt' || referenceableKinds[card.kind] !== true) return null
   const kindLabel = cardKindLabel(card.kind)
@@ -97,17 +89,12 @@ export function promptReferenceTargetOf(card: SessionCard): PromptReferenceTarge
   }
 }
 
-/**
- * 只检索当前会话的卡片。已引用、自身和提示词卡不在候选里。
- * 过滤使用当前显示名、类别和用途等真实字段，不读文件名或正文猜测用途。
- */
 export function promptReferenceCandidates(
   cards: readonly SessionCard[],
   promptCardId: string,
   options: {
     query?: string
     referencedIds?: readonly string[]
-    /** 候选构造阶段就要排除不可读来源；调用方必须给出真实判断。 */
     isSourceReadable: (sourceId: string) => boolean
   }
 ): PromptReferenceCandidate[] {
@@ -120,7 +107,6 @@ export function promptReferenceCandidates(
     seen.add(card.cardId)
     const target = promptReferenceTargetOf(card)
     if (!target) continue
-    // 不可读的卡片不能进入候选；它只可能在已存在的失效引用里以警告状态出现。
     if ('sourceId' in card && !options.isSourceReadable(card.sourceId)) continue
     const searchText =
       `${target.displayName} ${target.kindLabel} ${target.detail ?? ''}`.toLowerCase()
@@ -130,10 +116,6 @@ export function promptReferenceCandidates(
   return candidates
 }
 
-/**
- * 把持久化的 cardId 解析成当前展示。缺失、自己、另一张提示词、重复和来源不可读
- * 都保留在列表里并明确标出，不按标题寻找替代卡片。
- */
 export function promptReferenceChipViews(
   cards: readonly SessionCard[],
   promptCard: Pick<SessionPromptCard, 'cardId'> & {
@@ -234,7 +216,6 @@ export function promptReferenceChipViews(
   })
 }
 
-/** 卡片内提示只取第一条可处理的问题；阻塞保存的问题优先于来源警告。 */
 export function promptReferenceIssueSummary(
   views: readonly PromptReferenceChipView[]
 ): PromptReferenceIssueSummary | null {
@@ -256,10 +237,6 @@ export function promptReferenceIssueSummary(
   }
 }
 
-/**
- * 只按结构化 reason 归类提示词引用失败；缺失或未知 reason 一律不归类。
- * `code` 只用于保留 4402 与生成侧 4101 既有的目标缺失文案，不读取消息文本。
- */
 export function promptReferenceFailureOf(
   failure: { code: number; reason?: string } | null
 ): PromptReferenceFailureView | null {
@@ -278,10 +255,6 @@ export function promptReferenceFailureOf(
   return null
 }
 
-/**
- * 从光标向前找 `@查询`。触发符必须在行首、空白或常见标点之后，
- * 避免把邮箱等普通文本当成引用入口。
- */
 export function promptMentionAt(value: string, caret: number): PromptMention | null {
   const end = Math.max(0, Math.min(caret, value.length))
   const before = value.slice(0, end)
@@ -295,14 +268,12 @@ export function promptMentionAt(value: string, caret: number): PromptMention | n
   }
 }
 
-/** 选中候选后移除触发文本，保留原有正文并在需要时补一个空格。 */
 export function removePromptMentionText(
   value: string,
   mention: Pick<PromptMention, 'start' | 'end'>
 ): { value: string; caret: number } {
   const before = value.slice(0, mention.start)
   const after = value.slice(mention.end)
-  // 触发符两侧都有空白时去掉一处，避免删除 `@` 后留下双空格。
   const trimmedAfter = /\s$/.test(before) && /^\s/.test(after) ? after.slice(1) : after
   const needsSpace =
     before.length > 0 && !/\s$/.test(before) && trimmedAfter.length > 0 && !/^\s/.test(trimmedAfter)

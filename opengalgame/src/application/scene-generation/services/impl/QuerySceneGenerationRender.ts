@@ -1,8 +1,12 @@
-import type { SceneGenerationScopeDTO } from '../../dto/SceneGenerationDTO'
+import type {
+  ListUnfinishedSceneGenerationsDTO,
+  SceneGenerationScopeDTO
+} from '../../dto/SceneGenerationDTO'
 import type {
   SceneGenerationRenderProgressEventVO,
   SceneGenerationRenderStatusVO,
-  SceneGenerationTimelineEntryVO
+  SceneGenerationTimelineEntryVO,
+  SceneGenerationUnfinishedPageVO
 } from '../../vo/SceneGenerationRenderVO'
 import type {
   SceneGenerationRenderQueryService,
@@ -10,6 +14,7 @@ import type {
 } from '../SceneGenerationRenderQueryService'
 import { GetLatestSceneGenerationUseCase } from './GetLatestSceneGenerationUseCase'
 import { GetSceneGenerationRenderStatusUseCase } from './GetSceneGenerationRenderStatusUseCase'
+import { ListUnfinishedSceneGenerationsUseCase } from './ListUnfinishedSceneGenerationsUseCase'
 import { ListSceneGenerationTimelineUseCase } from './ListSceneGenerationTimelineUseCase'
 import { SubscribeSceneGenerationProgressUseCase } from './SubscribeSceneGenerationProgressUseCase'
 import type {
@@ -23,6 +28,7 @@ export class QuerySceneGenerationRender implements SceneGenerationRenderQuerySer
   private readonly progress: SubscribeSceneGenerationProgressUseCase
   private readonly timeline: ListSceneGenerationTimelineUseCase
   private readonly latest: GetLatestSceneGenerationUseCase
+  private readonly unfinished: ListUnfinishedSceneGenerationsUseCase
 
   constructor(deps: SceneGenerationDependencies, coordinator: SceneGenerationCoordinator) {
     const context: SceneGenerationServiceContext = { deps, coordinator }
@@ -30,6 +36,7 @@ export class QuerySceneGenerationRender implements SceneGenerationRenderQuerySer
     this.progress = new SubscribeSceneGenerationProgressUseCase(context)
     this.timeline = new ListSceneGenerationTimelineUseCase(context)
     this.latest = new GetLatestSceneGenerationUseCase(context)
+    this.unfinished = new ListUnfinishedSceneGenerationsUseCase(context)
   }
 
   async getSceneGenerationRenderStatus(
@@ -56,5 +63,11 @@ export class QuerySceneGenerationRender implements SceneGenerationRenderQuerySer
     sceneId: string
   }): Promise<SceneGenerationRenderStatusVO | null> {
     return this.latest.findLatestSceneGeneration(request)
+  }
+
+  async listUnfinishedSceneGenerations(
+    request: ListUnfinishedSceneGenerationsDTO
+  ): Promise<SceneGenerationUnfinishedPageVO> {
+    return this.unfinished.listUnfinishedSceneGenerations(request)
   }
 }

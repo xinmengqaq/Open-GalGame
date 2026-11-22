@@ -4,10 +4,6 @@ import type { RefObject } from 'react'
 
 import { prefersReducedMotion } from '@presentation/effects/motion'
 
-/**
- * 预览页进入和主状态切换：只做短淡入和轻位移，结束清掉内联 transform。
- * iframe 不参与补间，避免在舞台容器上留下 transform。
- */
 export function usePreviewShellMotion(
   scope: RefObject<HTMLElement | null>,
   stateKey: string

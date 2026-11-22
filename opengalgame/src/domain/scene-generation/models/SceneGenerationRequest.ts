@@ -78,12 +78,6 @@ export interface SceneGenerationRequest {
   readonly confirmedControls: readonly ConfirmedSceneControl[]
 }
 
-/**
- * 拒绝身份、卡片输入或已确认控制不完整的生成请求。
- * 提示词以卡片身份和编排正文为准，不要求文件来源。
- * 已确认控制必须指向本次文档或提示词，不能只声明一个控制类别，也不能用关联代替。
- * @throws {AppException} 身份、来源、正文或已确认控制无法对应到本次输入。
- */
 export function requireSceneGenerationRequest(request: SceneGenerationRequest): void {
   if (request.scene.projectId.trim() === '') {
     throw new AppException({
@@ -168,13 +162,6 @@ export function requireSceneGenerationRequest(request: SceneGenerationRequest): 
   }
 }
 
-/**
- * @param blankCode - 空白身份的错误码。
- * @param blankMessage - 空白身份的说明。
- * @param duplicateCode - 重复身份的错误码。
- * @param duplicateMessage - 重复身份的说明。
- * @throws {AppException} 身份为空白或重复。
- */
 function validateRelations(
   relations: readonly SceneGenerationRelation[],
   documents: readonly SceneGenerationDocument[],
@@ -254,18 +241,10 @@ function requireDistinctIds(
   }
 }
 
-/**
- * @throws {AppException} 来源标识为空白。
- */
 function requireSourceId(sourceId: string): void {
   requireText(sourceId, SceneGenerationErrorCodes.blankSourceId, '来源标识不能为空')
 }
 
-/**
- * @param code - 空白时使用的错误码。
- * @param message - 空白时的说明。
- * @throws {AppException} 文本为空白。
- */
 function requireText(value: string, code: SceneGenerationErrorCode, message: string): void {
   if (value.trim() === '') {
     throw new AppException({ code, msg: message })

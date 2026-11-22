@@ -11,10 +11,6 @@ interface InputCatalogHeaderProps {
   error: FailureState | null
 }
 
-/**
- * 文件区抬头：目录作用与读取状态来自统一目录状态，不提供第二条普通刷新路径。
- * 读取中和未打开工程时计数未知，不显示成 0；保留上次结果时计数照常显示。
- */
 export function InputCatalogHeader({ status, error }: InputCatalogHeaderProps): ReactElement {
   const ref = useRef<HTMLElement>(null)
   const readState = catalogStateOf(status, error)

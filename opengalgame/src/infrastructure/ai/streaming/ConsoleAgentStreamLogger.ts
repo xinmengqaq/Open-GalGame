@@ -6,7 +6,6 @@ export type ConsoleAgentStreamLoggerOptions = {
   destination?: DestinationStream
 }
 
-/** 创建显式启用的 Pino 控制台订阅；正文、原始异常及 Token 增量均不写入。 */
 export function createConsoleAgentStreamLogger(
   options: ConsoleAgentStreamLoggerOptions
 ): AgentStreamSubscriber {
@@ -45,7 +44,6 @@ export function createConsoleAgentStreamLogger(
   }
 }
 
-/** 模型字段允许供应商限定名称，排除绝对路径、控制字符及密钥形式。 */
 function safeModelName(value: string): string {
   return value.length <= 128 &&
     /^[\p{L}\p{N}_.:/-]+$/u.test(value) &&
@@ -54,7 +52,6 @@ function safeModelName(value: string): string {
     : '[已隐藏]'
 }
 
-/** 只允许短标识，拒绝控制字符、路径和常见密钥形式。 */
 function safeLabel(value: string): string {
   return value.length <= 128 &&
     /^[\p{L}\p{N}_.:-]+$/u.test(value) &&

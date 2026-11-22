@@ -14,10 +14,6 @@ function fail(code: ScenePreviewErrorCode): never {
   throw new AppException({ code, msg: scenePreviewErrorMessages[code] })
 }
 
-/**
- * 规划已有台词的正文修改。
- * 空白只用于拒绝，不替换将要写入的正文；任一失败都不返回部分计划。
- */
 export function planDialogueTextEdits(
   snapshot: SceneDialogueSnapshot,
   edits: readonly DialogueTextEdit[]

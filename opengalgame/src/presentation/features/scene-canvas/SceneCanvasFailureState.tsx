@@ -12,10 +12,6 @@ interface SceneCanvasFailureStateProps {
   onReload: () => void
 }
 
-/**
- * 已保存画布读取失败或编排损坏。入口保持兼容，状态标题、图标、色调和动作
- * 全部由统一 WorkbenchState 映射；读取失败可重试，损坏只把检查工程作为下一步。
- */
 export function SceneCanvasFailureState({
   error,
   onInspect,

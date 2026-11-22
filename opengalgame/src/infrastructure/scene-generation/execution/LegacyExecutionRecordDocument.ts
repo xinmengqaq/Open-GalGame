@@ -2,10 +2,6 @@ import { z } from 'zod'
 
 import { assetCategoryOfPurpose } from '@domain/scenes/models/SceneAssetReference'
 
-/**
- * 旧执行记录的读取契约只服务迁移与恢复工具：产品仓库只读当前 v7，旧信封版本、
- * 旧分类/用途和 raw 事实都在这里识别，不能作为正常读取的回退入口。
- */
 
 const text = z.string().min(1)
 const operationState = z.enum([
@@ -20,7 +16,6 @@ const operationState = z.enum([
   'cancelled'
 ])
 
-/** 旧输入快照仍要保留的操作身份。不补当前输入字段。 */
 export const legacyOperationFactSchema = z.object({
   projectId: text,
   sceneId: text,
@@ -32,12 +27,10 @@ export const legacyOperationFactSchema = z.object({
 })
 export type LegacyOperationFact = z.infer<typeof legacyOperationFactSchema>
 
-/** 执行记录信封版本；迁移只接受这些版本，当前产品只写最新版本。 */
 export const SCENE_GENERATION_EXECUTION_ENVELOPE_VERSIONS = [1, 2, 3, 4, 5, 6, 7] as const
 export type SceneGenerationExecutionEnvelopeVersion =
   (typeof SCENE_GENERATION_EXECUTION_ENVELOPE_VERSIONS)[number]
 
-/** 只接受已知信封版本，不把更高版本当成可迁移旧格式。 */
 export function isSupportedExecutionEnvelopeVersion(
   value: unknown
 ): value is SceneGenerationExecutionEnvelopeVersion {
@@ -47,7 +40,20 @@ export function isSupportedExecutionEnvelopeVersion(
   )
 }
 
-/** 不能按当前格式读取的旧记录只能归档；归档原因不用于推断当前业务字段。 */
+const TERMINAL_OPERATION_STATES: Record<string, true> = {
+  succeeded: true,
+  failed: true,
+  cancelled: true
+}
+
+/**
+ * 旧记录的未结束状态需要旧版结算或作者明确保留，不能按“可归档”处理。
+ * 这里与执行状态投影保持同一终态口径，但不依赖应用层展示模块。
+ */
+export function isUnfinishedLegacyOperationState(state: string): boolean {
+  return TERMINAL_OPERATION_STATES[state] !== true
+}
+
 export const LEGACY_EXECUTION_RECORD_REASONS = [
   'missing-record-time',
   'current-schema-incomplete',
@@ -62,7 +68,6 @@ export interface LegacyExecutionRecordTimeFacts {
   readonly hasTimeline: boolean
 }
 
-/** 只读旧记录已有的时间事实，不用当前时间补齐。 */
 export function legacyExecutionRecordTimeFacts(value: unknown): LegacyExecutionRecordTimeFacts {
   if (!legacyRecord(value)) return { hasCreatedAt: false, hasUpdatedAt: false, hasTimeline: false }
   return {
@@ -72,10 +77,6 @@ export function legacyExecutionRecordTimeFacts(value: unknown): LegacyExecutionR
   }
 }
 
-/**
- * 旧记录不能当前化时只记录阻塞原因：缺时间事实与 schema 不完整分开，
- * 避免把当前字段默认值冒充成旧记录已有事实。
- */
 export function legacyExecutionRecordReason(value: unknown): LegacyExecutionRecordReason {
   const facts = legacyExecutionRecordTimeFacts(value)
   return facts.hasCreatedAt || facts.hasUpdatedAt || facts.hasTimeline
@@ -94,10 +95,6 @@ const legacyAssetPurpose = z.enum([
   'video'
 ])
 
-/**
- * 把旧输入快照换算成当前字段：用途换算类别、清除旧引用角色。
- * 旧用途不合法时保持当前 schema 无法解析，继续按旧记录归档，不补造类别。
- */
 export function migrateExecutionDocument(value: unknown): unknown {
   if (!legacyRecord(value)) return value
   const { phase: legacyPhase, ...record } = value
@@ -169,7 +166,6 @@ function migratedReference(value: unknown): unknown {
   return reference
 }
 
-/** 旧记录的 phase 只用于迁移：业务步骤一一对应，终态或等待阶段不携带业务 step。 */
 function migratedStep(phase: unknown): string | undefined {
   if (typeof phase !== 'string') return undefined
   if (phase === 'waiting' || phase === 'completed' || phase === 'failed' || phase === 'cancelled')

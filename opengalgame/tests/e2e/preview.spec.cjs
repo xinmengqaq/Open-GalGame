@@ -11,10 +11,6 @@ const originalScene = '小明:第一句;\n旁白:第二句;\n小明:第三句;\n
 const sceneId = 'scene-1'
 const projectId = 'p-01'
 
-/**
- * R03 的 PreviewPage 回归需要真实预览装配：fixture 桥会拒绝场景预览，
- * 因此本 spec 在隔离临时用户目录上另起一个 real 模式 Vite，不使用产品夹具冒充。
- */
 const screenViewport = (() => {
   if (process.platform !== 'win32') return null
   try {
@@ -170,7 +166,6 @@ async function stopChildren() {
       try {
         execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' })
       } catch {
-        // 进程已经退出。
       }
     }
   }

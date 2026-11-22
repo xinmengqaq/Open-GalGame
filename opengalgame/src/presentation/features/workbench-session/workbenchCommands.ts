@@ -41,7 +41,6 @@ import type { SessionFieldKind } from './webgalPreset'
 
 export type CreateSourceCardResult = 'created' | 'missing' | 'unreadable' | 'failed'
 
-/** 已应用、被会话切换或撤销作废、以及请求本身失败。作废不是新的失败。 */
 export type ArrangementEditResult = 'applied' | 'dropped' | 'failed'
 
 export interface WorkbenchCommands {
@@ -59,9 +58,7 @@ export interface WorkbenchCommands {
     input: { title?: string; summary?: string }
   ): Promise<ArrangementEditResult>
   editPromptBody(cardId: string, body: string): void
-  /** 追加一个稳定 cardId 引用，并立即保存整份编排。 */
   addPromptReference(cardId: string, referenceCardId: string): void
-  /** 移除一个或多个引用身份；失效引用也用同一入口清理。 */
   removePromptReferences(cardId: string, referenceCardIds: readonly string[]): void
   flushPromptEdits(): Promise<void>
   bindFieldCardPreset(
@@ -76,9 +73,7 @@ export interface WorkbenchCommands {
   attachRelationRecord(relationId: string, recordCardId: string): Promise<ArrangementEditResult>
   detachRelationRecord(relationId: string): Promise<ArrangementEditResult>
   save(reason?: SceneCanvasSaveReason): Promise<void>
-  /** 历史写操作前停止自动保存和延迟编辑，并等待已在途请求结算。 */
   prepareHistoryWrite(): Promise<void>
-  /** 撤销后视图无法重新读取时暂停保存，直到重新读取成功。 */
   setSaveHold(hold: boolean): void
   undo(): void
   redo(): void
@@ -92,10 +87,6 @@ export interface WorkbenchCommands {
   dispose(): void
 }
 
-/**
- * 会话命令。编辑请求经串行队列执行；提示词延迟合并与保存排程由协作者承担，
- * 组件只调用命令，不直接创建客户端或排程保存。
- */
 export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCommands {
   const store = useWorkbenchSessionStore
   const queue = createWorkbenchCommandQueue()
@@ -279,7 +270,6 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
     promptEdits.editPromptBody(cardId, body)
   }
 
-  /** 引用身份用整份编排保存，不拼进正文，也不复用只写 body 的局部请求。 */
   function persistPromptReferences(cardId: string, referenceCardIds: readonly string[]): void {
     if (!store.getState().setPromptReferences(cardId, referenceCardIds)) return
     noteLocalEdit()
@@ -316,7 +306,6 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
           cardId,
           preset
         }),
-      // 预设卡与编辑弹窗都在原地显示具体错误，避免同一失败再顶一条通用 Toast。
       { silentFailure: true }
     )
   }
@@ -328,7 +317,6 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
     const size = defaultCardSize(card.kind)
     const width = card.layout.width || size.width
     const height = card.layout.height || size.height
-    // 复用画布放置的保空逻辑，避免副本与源卡或相邻卡重叠。
     const { position } = findFreeCanvasPosition(
       state.cards,
       { x: card.layout.x + 32, y: card.layout.y + 32 },
@@ -506,7 +494,6 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
 
 let activeCommands: WorkbenchCommands | null = null
 
-/** 页面装配时登记命令。非 React 代码通过它调用同一实例。 */
 export function setActiveWorkbenchCommands(commands: WorkbenchCommands | null): void {
   activeCommands = commands
 }
@@ -521,7 +508,6 @@ function sourceKindOf(facts: SourceFactsView): SessionCard['kind'] | null {
   return contentKind === 'text' ? 'document' : contentKind
 }
 
-/** 保存失败码到界面状态；装载时的间距兜底保存也复用同一映射。 */
 export function saveStateOfCode(code: number): WorkbenchSaveState {
   if (code === 4411) return 'unsaved'
   if (code === 4412) return 'committedUnsubmitted'
@@ -529,7 +515,6 @@ export function saveStateOfCode(code: number): WorkbenchSaveState {
   return 'failed'
 }
 
-/** 保存失败文案；与 `saveStateOfCode` 一起供装载路径复用。 */
 export function saveFailureText(state: WorkbenchSaveState, message: string): string {
   if (state === 'unsaved') return workbenchFeedback.saveUnsaved
   if (state === 'committedUnsubmitted') return workbenchFeedback.saveCommittedUnsubmitted

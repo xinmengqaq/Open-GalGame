@@ -28,11 +28,7 @@ type SourceObservation = {
   readonly stats?: BigIntStats
 }
 
-/** 取得同次文件内容和元信息的只读快照，不依赖 Git 状态。 */
 export class SceneSourceReaderGatewayImpl implements SceneSourceReaderGateway {
-  /**
-   * @throws {AppException} 路径非法、读取失败或内容在读取窗口内变化。
-   */
   async readSceneSource(request: ReadSceneSourceRequest): Promise<SceneSourceSnapshot> {
     try {
       if (!isAbsolute(request.projectRoot)) {
@@ -107,10 +103,6 @@ export class SceneSourceReaderGatewayImpl implements SceneSourceReaderGateway {
   }
 }
 
-/**
- * 保存读取开始时的路径与状态，缺失元信息明确保留为缺失事实。
- * @throws {WebgalInfrastructureError} 必需文件不存在或不是普通文件。
- */
 async function observeSource(
   root: string,
   relativePath: string,
@@ -139,10 +131,6 @@ async function observeSource(
   }
 }
 
-/**
- * 确认路径、链接目标与文件状态仍属于读取开始时的版本。
- * @throws {WebgalInfrastructureError} 状态或存在性发生变化。
- */
 async function verifyObservation(root: string, observation: SourceObservation): Promise<void> {
   try {
     const current = await observeSource(root, observation.relativePath, observation.kind)
@@ -171,10 +159,6 @@ async function verifyObservation(root: string, observation: SourceObservation): 
   }
 }
 
-/** 比较精确时间戳与文件身份，识别替换、写入和删除。 */
-/**
- * @throws {WebgalInfrastructureError} 文件发生变化或读取故障。
- */
 async function readObservedSource(root: string, observation: SourceObservation): Promise<Buffer> {
   await verifyObservation(root, observation)
   let bytes: Buffer
@@ -194,10 +178,6 @@ async function readObservedSource(root: string, observation: SourceObservation):
   return bytes
 }
 
-/**
- * 严格解码 UTF-8，保留 BOM、换行及完整正文。
- * @throws {WebgalInfrastructureError} 非法 UTF-8。
- */
 function decodeSource(bytes: Uint8Array, path: string): string {
   try {
     return decodeStrictUtf8(bytes)
@@ -211,10 +191,6 @@ function decodeSource(bytes: Uint8Array, path: string): string {
   }
 }
 
-/**
- * 创建要求重新读取的失败并保留触发原因。
- * @returns 读取不一致错误。
- */
 function inconsistent(path: string, cause?: unknown): WebgalInfrastructureError {
   return new WebgalInfrastructureError(
     'inconsistent-read',

@@ -6,7 +6,12 @@ import { resolveContained } from '../containedPath'
 import { bytesEqual, decodeBytes, digestBytes, encodeBytes } from '../objects/gitContent'
 import { asGitException } from '../gitErrors'
 import type { GitEffects } from '../gitEffects'
-import { applyTreeEdits, readCommitFile, resolveRefIfExists } from '../objects/gitTree'
+import {
+  applyTreeEdits,
+  isReachableFromHead,
+  readCommitFile,
+  resolveRefIfExists
+} from '../objects/gitTree'
 import {
   fingerprintChanges,
   indexEvidence,
@@ -37,11 +42,6 @@ interface LoadedChange extends WorkPathChange {
   readonly intendedDigest: string | null
 }
 
-/**
- * 复核基线与候选修订后，只把明确路径写入一次新提交。
- * @param request - 预期基线、路径集合、候选修订和调用方复核。
- * @throws {AppException} 基线变化、内容冲突、结果不明或提交失败。补偿失败时同时保留两个原因。
- */
 export async function commitLimited(
   request: LimitedCommitRequest,
   effects: GitEffects
@@ -95,6 +95,15 @@ export async function commitLimited(
     existing.kind === 'ok'
       ? existing.record
       : await beginRecord(request, loaded, fingerprint, effects)
+  if (record.baselineCommitId !== confirmed.headCommitId) {
+    if (request.advanceBaseline !== true || !canAdvanceBaseline(record)) throw baselineConflict()
+    record = await mark(
+      request.projectRoot,
+      record,
+      { baselineCommitId: confirmed.headCommitId, branch: confirmed.branch },
+      effects
+    )
+  }
   const appliedStageOids = new Map<string, string | null>()
   try {
     await applyWorktree(request.projectRoot, record, loaded, effects)
@@ -177,6 +186,21 @@ export async function commitLimited(
       return { commitId: proof.commitId }
     }
     if (proof.state === 'conflict') {
+      if (
+        request.advanceBaseline === true &&
+        (await forwardCommitOrphaned(request.projectRoot, record))
+      ) {
+        await compensateIfUnpublished(
+          request.projectRoot,
+          record,
+          effects,
+          appliedStageOids,
+          error,
+          request.backupBeforeRestore === true
+        )
+        await mark(request.projectRoot, record, { phase: 'compensated' }, effects)
+        throw baselineConflict()
+      }
       throw new AppException({
         code: ProjectVersioningErrorCodes.gitQueryFailed,
         msg: proof.detail
@@ -217,17 +241,15 @@ export async function commitLimited(
       error,
       request.backupBeforeRestore === true
     )
+    if (request.advanceBaseline === true) {
+      await mark(request.projectRoot, record, { phase: 'compensated' }, effects)
+    }
     throw asGitException(error, ProjectVersioningErrorCodes.gitUnavailable, '作品提交失败')
   }
 }
 
 type PublishedMetadataWriteResult = 'repaired' | 'write-failed' | 'conflict'
 
-/**
- * 已证明发布后只补缺失的操作引用和 published 阶段。
- * 不重新提交，不覆盖冲突，不把元数据写入失败改判为发布失败。
- * @returns 已修复、写入失败（已发布结果不变）或无法核实的冲突。
- */
 export async function repairPublishedMetadata(
   projectRoot: string,
   operationId: string,
@@ -268,10 +290,6 @@ export async function repairPublishedMetadata(
   return 'repaired'
 }
 
-/**
- * 记录和引用都缺失时，仍从本次基线之后的提交消息和提交内容证明是否已经发布。
- * 只有基线未前进且找不到本次操作提交时，才允许判为未发布。
- */
 async function provePublishedFromHistory(
   projectRoot: string,
   operationId: string,
@@ -321,11 +339,6 @@ async function commitMatchesLoaded(
   return true
 }
 
-/**
- * 历史补证成功后写回本次操作记录和缺失引用。
- * 只写同一操作、同一基线/指纹且前向提交一致或缺失的记录；写失败不影响已发布成功。
- * @returns 已修复、写入失败（已发布结果不变）或无法核实的冲突。
- */
 async function persistPublishedEvidence(
   projectRoot: string,
   record: OperationRecord,
@@ -374,7 +387,6 @@ async function persistPublishedEvidence(
   try {
     await effects.writeOperationRef(projectRoot, record.operationId, commitId)
   } catch {
-    // 记录已写回时，读取仍可由记录/历史/内容证明已提交；引用留待后续恢复。
     return 'write-failed'
   }
   return 'repaired'
@@ -536,6 +548,31 @@ async function compensateIfUnpublished(
 function sameBytes(left: Uint8Array | null, right: Uint8Array | null): boolean {
   if (left === null || right === null) return left === right
   return bytesEqual(left, right)
+}
+
+function canAdvanceBaseline(record: OperationRecord): boolean {
+  return record.phase === 'prepared' || record.phase === 'compensated'
+}
+
+async function forwardCommitOrphaned(
+  projectRoot: string,
+  record: OperationRecord
+): Promise<boolean> {
+  const commitId = record.forwardCommitId
+  if (!commitId) return false
+  try {
+    await git.readCommit({ fs, dir: projectRoot, oid: commitId })
+    return !(await isReachableFromHead(projectRoot, commitId))
+  } catch {
+    return false
+  }
+}
+
+function baselineConflict(): AppException {
+  return new AppException({
+    code: ErrorCodes.operationConflict,
+    msg: '作品基线或目标文件已变化，已拒绝写入'
+  })
 }
 
 function assertChanges(changes: readonly WorkPathChange[]): void {

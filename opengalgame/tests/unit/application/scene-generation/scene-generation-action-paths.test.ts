@@ -23,7 +23,6 @@ import {
 const instruction = '把结尾改得温暖一些'
 const scope = { projectId: 'project-1', sceneId: 'scene-1' }
 
-/** 构造一条已确认的修改回复；身份与来源执行一致。 */
 function reviseReply(
   source: SceneGenerationExecution,
   body: string,
@@ -43,7 +42,6 @@ function reviseReply(
   }
 }
 
-/** 构造一条已确认的澄清回复；只用于轮次边界。 */
 function clarifyReply(
   source: SceneGenerationExecution,
   body: string,
@@ -231,7 +229,6 @@ describe('场景生成动作分路径', () => {
       instruction,
       blocker: null
     })
-    // 链式重试的来源是这次失败操作自身，而不是它的 repairSource。
     expect(retryRepairRequestOf(failedStatus, scope)?.repair).toMatchObject({
       sourceOperationId: 'operation-2',
       sourceThreadId: created.threadId,
@@ -244,7 +241,6 @@ describe('场景生成动作分路径', () => {
     expect(toRenderStatusVO({ ...created, replies: [] }).userMessages).toEqual([
       { kind: 'revise', body: instruction, round: 1 }
     ])
-    // 修复指令最先生效；后续修改顺延且不吞掉首条指令。
     expect(
       toRenderStatusVO({
         ...created,
@@ -254,7 +250,6 @@ describe('场景生成动作分路径', () => {
       { kind: 'revise', body: instruction, round: 1 },
       { kind: 'revise', body: '另一条修改', round: 2 }
     ])
-    // 澄清按发生顺序排在指令之后。
     expect(
       toRenderStatusVO({
         ...created,
@@ -264,7 +259,6 @@ describe('场景生成动作分路径', () => {
       { kind: 'revise', body: instruction, round: 1 },
       { kind: 'clarify', body: '先补充说明', round: 2 }
     ])
-    // 与指令同文的修改只投影一次。
     expect(
       toRenderStatusVO({
         ...created,
@@ -387,6 +381,124 @@ describe('场景生成动作分路径', () => {
     ).rejects.toMatchObject({
       code: 4103,
       message: '修复重跑没有绑定来源上下文'
+    })
+  })
+
+  it('历史分叉由应用层生成新身份，返回前核对来源分支与检查点', async () => {
+    const f = createSceneGenerationFixture()
+    waitForInteraction(f)
+    await f.service.generateScene(generationRequest)
+    await f.runNext()
+    const source = f.executions.get('operation-1')!
+    const checkpointId = source.checkpointId ?? 'checkpoint-1'
+    const forkExecution = {
+      ...source,
+      operationId: 'operation-fork',
+      branchId: 'branch-fork',
+      state: 'waiting' as const,
+      checkpointId,
+      candidateSnapshotId: 'snapshot-1',
+      fork: {
+        projectId: source.projectId,
+        sceneId: source.sceneId,
+        threadId: source.threadId,
+        branchId: source.branchId,
+        checkpointId,
+        sourceOperationId: source.operationId,
+        candidateSnapshotId: 'snapshot-1'
+      },
+      forkRequest: undefined
+    }
+    const generation = {
+      async forkSceneGeneration(request: { operationId: string }) {
+        f.executions.set(request.operationId, {
+          ...forkExecution,
+          operationId: request.operationId
+        })
+        return {
+          projectId: source.projectId,
+          sceneId: source.sceneId,
+          operationId: request.operationId,
+          threadId: source.threadId,
+          branchId: 'branch-fork',
+          forkFrom: { summary: '候选已发布，等待审阅' }
+        }
+      }
+    } as unknown as SceneGenerationApplicationService
+    const launch = new LaunchSceneGeneration(
+      f.deps,
+      {} as SceneGenerationRenderDependencies,
+      generation,
+      f.coordinator
+    )
+
+    const result = await launch.forkSceneGeneration({
+      projectId: source.projectId,
+      sceneId: source.sceneId,
+      threadId: source.threadId,
+      branchId: source.branchId,
+      checkpointId,
+      policy: { maxCorrections: 2 }
+    })
+    expect(result.status.operationId).toMatch(/^identity-/)
+    expect(result.status.branchId).toBe('branch-fork')
+    expect(result.source).toEqual({ summary: '候选已发布，等待审阅' })
+  })
+
+  it('分叉执行没有绑定请求来源时拒绝返回界面', async () => {
+    const f = createSceneGenerationFixture()
+    waitForInteraction(f)
+    await f.service.generateScene(generationRequest)
+    await f.runNext()
+    const source = f.executions.get('operation-1')!
+    const checkpointId = source.checkpointId ?? 'checkpoint-1'
+    const generation = {
+      async forkSceneGeneration(request: { operationId: string }) {
+        f.executions.set(request.operationId, {
+          ...source,
+          operationId: request.operationId,
+          branchId: 'branch-fork',
+          state: 'waiting',
+          checkpointId,
+          fork: {
+            projectId: source.projectId,
+            sceneId: source.sceneId,
+            threadId: source.threadId,
+            branchId: 'other-branch',
+            checkpointId,
+            sourceOperationId: source.operationId,
+            candidateSnapshotId: source.candidateSnapshotId!
+          }
+        })
+        return {
+          projectId: source.projectId,
+          sceneId: source.sceneId,
+          operationId: request.operationId,
+          threadId: source.threadId,
+          branchId: 'branch-fork',
+          forkFrom: { summary: '候选已发布，等待审阅' }
+        }
+      }
+    } as unknown as SceneGenerationApplicationService
+    const launch = new LaunchSceneGeneration(
+      f.deps,
+      {} as SceneGenerationRenderDependencies,
+      generation,
+      f.coordinator
+    )
+
+    await expect(
+      launch.forkSceneGeneration({
+        projectId: source.projectId,
+        sceneId: source.sceneId,
+        threadId: source.threadId,
+        branchId: source.branchId,
+        checkpointId,
+        policy: { maxCorrections: 2 }
+      })
+    ).rejects.toMatchObject({
+      code: 4103,
+      message: '分叉没有绑定来源历史，已保留原分支'
     })
   })
 })

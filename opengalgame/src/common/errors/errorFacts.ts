@@ -5,7 +5,6 @@ export interface ErrorFacts {
   statuses: number[]
 }
 
-/** 只取异常名、数字错误码和数字状态。不读取消息、堆栈或请求内容。 */
 export function errorFacts(error: unknown): ErrorFacts {
   const names: string[] = []
   const codes: number[] = []

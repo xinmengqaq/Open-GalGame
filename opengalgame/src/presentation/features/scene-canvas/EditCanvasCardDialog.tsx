@@ -24,14 +24,12 @@ interface EditCanvasCardDialogProps {
   onClose: () => void
 }
 
-/** 媒体卡用途说明的示例；文档仍用简介，不显示这段提示。 */
 const mediaSummaryHints: Record<Exclude<SessionSourceCard['kind'], 'document'>, string> = {
   image: '例如：背景、立绘、CG、头像。生成时会按这段说明选用这张图片。',
   audio: '例如：片尾音乐、点击音效、角色配音。生成时会按这段说明选用这段音频。',
   video: '例如：开场动画、过场镜头、结局 CG。生成时会按这段说明选用这段视频。'
 }
 
-/** 按卡片类别只呈现该类别拥有的字段。取消不产生请求。 */
 export function EditCanvasCardDialog({ card, onClose }: EditCanvasCardDialogProps): ReactElement {
   if (!card || card.kind === 'prompt') {
     return (

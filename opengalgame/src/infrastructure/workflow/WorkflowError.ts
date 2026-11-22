@@ -29,12 +29,6 @@ export class WorkflowError extends AppException {
   readonly settlementError?: unknown
   readonly completed?: readonly string[]
 
-  /**
-   * @param category - 技术失败类别。不根据错误文本区分业务结果。
-   * @param cause - 原始失败。
-   * @param code - 覆盖默认错误码，例如路径越界使用拒绝码。
-   * @param settlementError - 预算结算失败。与执行失败同时保留。
-   */
   constructor({
     category,
     msg,

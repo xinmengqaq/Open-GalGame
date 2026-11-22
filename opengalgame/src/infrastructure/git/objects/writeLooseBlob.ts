@@ -6,10 +6,6 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createDeflate } from 'node:zlib'
 
-/**
- * 把文件流式写成 Git loose blob，不把整份内容留在内存里。
- * @param size - 调用前看到的文件字节数，必须与随后读到的内容一致。
- */
 export async function writeLooseBlobFromFile(
   gitDir: string,
   filePath: string,

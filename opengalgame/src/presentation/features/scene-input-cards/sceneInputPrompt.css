@@ -1,5 +1,3 @@
-/* 提示词卡：一块会发亮的思考表面，没有纸纹、折角和左侧竖线。 */
-
 .promptCard {
   position: relative;
   display: flex;
@@ -42,7 +40,6 @@
   opacity: 0;
 }
 
-/* 展示态的编辑提示：悬停时替换右上角引号，不占正文位置，也不拦截拖动。 */
 
 .promptEditHint {
   position: absolute;
@@ -163,7 +160,6 @@
   outline: 0;
 }
 
-/* 展示态正文：只读、不可选中，整卡拖动不受文字选择干扰；长文在卡内滚动。 */
 
 .promptDisplay {
   position: relative;
@@ -201,7 +197,6 @@
   color: color-mix(in srgb, var(--wb-accent) 36%, transparent);
 }
 
-/* 引用条：标签按当前卡片解析；失效身份保留原位，不换成同名卡片。 */
 
 .promptRefs {
   display: flex;
@@ -330,7 +325,6 @@
   opacity: 1;
 }
 
-/* 校验失败留在提示词卡内，错误码和可执行动作都在这里，不依赖 Toast。 */
 
 .promptRefAlert {
   display: flex;
@@ -391,7 +385,6 @@
   outline-offset: 1px;
 }
 
-/* 候选浮层挂在 body，避开卡片 overflow；颜色从全局 token 回退，Portal 不继承工作台局部变量。 */
 
 .promptPicker {
   --picker-text: var(--wb-text, var(--ink));
@@ -591,7 +584,6 @@
 
   .promptEditHint,
   .promptQuote {
-    /* 全局减少动态效果规则会压掉过渡；这里只保留一次短淡入。 */
     transition: opacity 100ms linear !important;
   }
 

@@ -36,15 +36,11 @@ const BUSY_TOAST_ID = 'workbench-drawer-busy'
 interface WorkbenchDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** 页面级标签状态；关闭抽屉不卸载，同一工程/场景内保留开关与顺序。 */
   tabs: DrawerTabsState
-  /** “当前生成”标签的真实状态点。 */
   currentTone: DrawerTabTone | null
-  /** 作品历史写操作在途；标签栏、关闭保护和标签模型共用。 */
   worksBusy: WorkbenchDrawerBusy
   onOpenTab: (tab: DrawerTabId) => void
   onActivateTab: (tab: DrawerTabId) => void
-  /** 关闭标签时把作品历史忙碌事实一起交给标签模型。 */
   onCloseTab: (tab: DrawerTabId, options?: { worksBusy?: boolean }) => void
   onMoveTab: (tab: DrawerTabId, toIndex: number) => void
   projectId: string
@@ -52,24 +48,17 @@ interface WorkbenchDrawerProps {
   versioningClient: ProjectVersioningClient
   generationClient: SceneGenerationClient
   candidatePreviewClient: ScenePreviewClient
-  /** 当前生成交互公开的固定候选；为 null 时不出现“游戏候选”标签。 */
   candidateTarget: CandidatePreviewTarget | null
   writeBlockedReason: string | null
   hasUnsavedEdits: boolean
   captureDraft: () => Promise<SessionSnapshot | null>
   onUndoCommitted: (draft: SessionSnapshot | null) => Promise<void>
   onWorksBusyChange: (busy: WorkbenchDrawerBusy) => void
-  /** 当前生成视图；头部工程/场景/状态/Token 由生成面板自己显示。 */
   currentView: ReactNode
-  /** 输入摘要、AI 历史独立标签内容；由页面按真实状态注入。 */
   summaryView: ReactNode
   historyView: ReactNode
 }
 
-/**
- * 工作台唯一的右侧模态抽屉。壳只负责容器、浏览器式标签栏、焦点和关闭保护；
- * 生成、候选与作品历史视图仍由页面注入或现有客户端提供，壳里不创建状态机。
- */
 export function WorkbenchDrawer({
   open,
   onOpenChange,
@@ -100,7 +89,6 @@ export function WorkbenchDrawer({
 
   useDrawerMotion(root, { tab: tabs.active })
 
-  /* 写操作在途时用持久轻提示说明关闭和关闭标签限制，不占用抽屉头部布局。 */
   useEffect(() => {
     if (worksBusy === null) {
       toast.dismiss(BUSY_TOAST_ID)
@@ -263,10 +251,6 @@ export function WorkbenchDrawer({
   )
 }
 
-/**
- * 标签栏在候选 Provider 内读取真实读取问题数；候选可用性仍由标签模型决定，
- * 两者分别传，不互相推导。
- */
 function DrawerTabBarSlot({
   tabs,
   activeId,

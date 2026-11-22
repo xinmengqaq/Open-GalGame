@@ -19,12 +19,6 @@ export interface WorkflowExecution {
   observation?: AgentStreamObservation
 }
 
-/**
- * 校验运行上下文。预算、信号和观察配置只留在本次调用，不进入图状态。
- * @param input - 调用方提供的执行上下文。
- * @returns 身份已规范化的上下文。预算对象仍是调用方的那一个。
- * @throws {AppException} 身份、预算、递归限制或状态目录不合法。
- */
 export function createWorkflowExecution(input: WorkflowExecution): WorkflowExecution {
   if (!(input.budget instanceof ExecutionBudget)) {
     throw new AppException({ code: ErrorCodes.invalidRequest, msg: '工作流执行缺少执行预算' })

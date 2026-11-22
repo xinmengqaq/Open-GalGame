@@ -48,10 +48,6 @@ type PickerPosition = {
   width: number
 }
 
-/**
- * 提示词正文直接编辑。`@` 只检索当前画布卡片，选中后把稳定 cardId 存进引用集合，
- * 正文只保留用户的自然语言；引用展示按当前卡片的显示名解析，重命名会自动更新。
- */
 export function PromptEditor({
   cardId,
   value,
@@ -162,7 +158,6 @@ export function PromptEditor({
     }
   }, [editing, value])
 
-  // 取消浮层只清理本次触发文本并复位光标，不插入引用；光标已离开触发词时用浮层记录的范围兜底。
   const cancelMention = useCallback((): void => {
     setMention(null)
     setPickerPosition(null)

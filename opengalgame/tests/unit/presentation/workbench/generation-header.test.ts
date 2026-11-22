@@ -11,6 +11,7 @@ import type { SceneGenerationClient } from '@interfaces/scene-generation/client/
 import { GenerationHistory } from '@presentation/pages/workbench/drawer/generation/GenerationHistory'
 import { GenerationHeader } from '@presentation/pages/workbench/drawer/generation/GenerationPanel'
 import type { GenerationActionFailure } from '@presentation/pages/workbench/drawer/generation/generationPresentation'
+import type { ForkUnknownController } from '@presentation/pages/workbench/drawer/generation/useForkUnknownRegistry'
 
 function usageOf(
   inputTokens: number,
@@ -73,7 +74,6 @@ describe('GenerationHeader Token 统计', () => {
     )
   }
 
-  /** 按单元格标签取可见文本，避免只看 data-value 而漏掉输入/输出互换。 */
   function visibleToken(html: string, label: '输入' | '输出' | '总计'): string {
     const match = html.match(new RegExp(`<span>${label}</span><strong>(.*?)</strong>`, 's'))
     expect(match, `${label} 单元格`).not.toBeNull()
@@ -321,8 +321,6 @@ describe('GenerationHeader 重新生成与 start 失败', () => {
       usage: previousUsage
     }
 
-    // resume 期间 pending === 'resume'，GenerationPanel 传入 pendingStart=false；
-    // 头部门控只认 start pending / start 失败，续跑暂停态不属于新会话。
     const html = renderHeader(pausedWithUsage, { pendingStart: false })
 
     expectPill(html, '已暂停', 'muted')
@@ -337,8 +335,20 @@ describe('GenerationHeader 重新生成与 start 失败', () => {
 
 describe('AI 历史进行中行', () => {
   const client = {
-    listHistory: async () => ({ code: ErrorCodes.success, msg: '成功', data: [] })
+    listHistory: async () => ({
+      code: ErrorCodes.success,
+      msg: '成功',
+      data: { items: [], unfinished: [] }
+    })
   } as unknown as SceneGenerationClient
+
+  const forkUnknown: ForkUnknownController = {
+    entries: [],
+    find: () => null,
+    markUnknown: () => undefined,
+    acknowledge: () => undefined,
+    recheck: async () => undefined
+  }
 
   function historyHtml(
     activeStatus: SceneGenerationRenderStatusVO | null,
@@ -349,8 +359,12 @@ describe('AI 历史进行中行', () => {
         activeStatus,
         canCancel,
         client,
+        forkFromHistory: async () => ({ kind: 'busy' as const }),
+        forkUnknown,
         onCancel: () => undefined,
+        onForked: () => undefined,
         onOpenRun: () => undefined,
+        onRefreshDiscovery: async () => ({ ok: true as const }),
         projectId: 'project-1',
         sceneId: 'scene-1'
       })

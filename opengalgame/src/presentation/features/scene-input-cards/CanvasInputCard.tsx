@@ -21,14 +21,9 @@ import type { SessionCard } from '../workbench-session/workbenchSession.types'
 interface CanvasInputCardProps {
   card: SessionCard
   selected: boolean
-  /** 媒体卡用途说明的可见编辑入口；由画布节点提供打开编辑对话框。 */
   onEditSummary?: () => void
 }
 
-/**
- * 画布卡片入口：共同外框和来源状态在这里接线，内容由各类卡片提供。
- * 预设卡的状态来自卡片内部，因此由预设卡自己持有外框。
- */
 export function CanvasInputCard({
   card,
   selected,

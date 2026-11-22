@@ -19,10 +19,6 @@ export interface UseGenerationDraftResult {
   readonly setBody: (body: string) => void
 }
 
-/**
- * 生成草稿的唯一所有者：只按当前状态中的 interaction 更新本会话草稿。
- * 草稿在操作身份切换时清空，但重置由状态协作者在切换瞬间调用，不另建副本。
- */
 export function useGenerationDraft({
   statusRef
 }: UseGenerationDraftOptions): UseGenerationDraftResult {

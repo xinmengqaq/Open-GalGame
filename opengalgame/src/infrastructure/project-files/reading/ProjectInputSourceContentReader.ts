@@ -21,10 +21,6 @@ import type { ProjectFileReadWindow } from './ProjectFileReadWindow'
 export type SourceContentRead =
   { status: 'present'; source: ProjectInputSource } | { status: 'missing' } | { status: 'damaged' }
 
-/**
- * @returns 来源事实，或缺失、损坏。
- * @throws {AppException} 路径越界或读取期间变化。
- */
 export async function readSourceContent(
   window: ProjectFileReadWindow,
   record: Extract<SourceCatalogRecord, { status: 'parsed' }>
@@ -63,7 +59,6 @@ export async function readSourceContent(
   }
 }
 
-/** 轻量判断描述对应的内容是否可访问，不加载全部正文或媒体。 */
 export async function probeSourceReadable(
   window: ProjectFileReadWindow,
   document: ProjectInputSourceDocument

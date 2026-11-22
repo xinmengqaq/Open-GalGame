@@ -97,7 +97,6 @@ export function useInputCatalog(
   const currentFolderId = folderTrail[folderTrail.length - 1] ?? null
   const clipboardApi = useCatalogClipboard(projectId, folders, sources)
 
-  // 切换工程时在渲染期重置本区状态并恢复该工程的门闩；渲染期只改本组件 state，不做 toast 等外部副作用。
   const [renderedProjectId, setRenderedProjectId] = useState(projectId)
   if (renderedProjectId !== projectId) {
     setRenderedProjectId(projectId)
@@ -114,7 +113,6 @@ export function useInputCatalog(
     setFolderDeletionPlan(null)
   }
 
-  // 目录刷新后立即从 state 裁掉失效尾部，文件夹稍后复活也不会自动重新进入。
   const trailTail = folderTrail[folderTrail.length - 1]
   if (
     renderedProjectId === projectId &&
@@ -160,7 +158,6 @@ export function useInputCatalog(
   const pasteEnabled = clipboardApi.canPasteInto(pasteTarget)
 
   useEffect(() => {
-    /** 文件区快捷键：复制、剪切、粘贴；无菜单和对话框时 Escape 取消剪切。 */
     function onKey(event: KeyboardEvent): void {
       const target = event.target
       const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement

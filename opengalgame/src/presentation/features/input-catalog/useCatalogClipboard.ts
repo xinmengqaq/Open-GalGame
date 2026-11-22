@@ -38,7 +38,6 @@ export type CatalogClipboard =
       expectedParentFolderId: CatalogFolderId
     }
 
-/** 工程内会话剪贴板。不保存正文或路径，切换工程时清空。 */
 export function useCatalogClipboard(
   projectId: string,
   folders: readonly ProjectFolderVO[],
@@ -62,21 +61,18 @@ export function useCatalogClipboard(
   const [clearedClipboardCount, setClearedClipboardCount] = useState(0)
   const announcedClearCount = useRef(0)
 
-  // 每次自动清空只提示一次；toast 是外部副作用，仍放在提交后的 effect。
   useEffect(() => {
     if (clearedClipboardCount === announcedClearCount.current) return
     announcedClearCount.current = clearedClipboardCount
     toast(workbenchFeedback.clipboardCleared)
   }, [clearedClipboardCount])
 
-  // 切换工程时在渲染期丢弃上一工程的剪贴板，不等提交后再清。
   const [renderedProjectId, setRenderedProjectId] = useState(projectId)
   if (renderedProjectId !== projectId) {
     setRenderedProjectId(projectId)
     setClipboard(null)
   }
 
-  // 目标已不在当前目录快照里时立即清空并提示一次。
   const clipboardIsStale =
     clipboard !== null &&
     clipboard.projectId === projectId &&

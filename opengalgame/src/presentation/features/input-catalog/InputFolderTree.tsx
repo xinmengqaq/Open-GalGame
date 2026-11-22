@@ -60,7 +60,6 @@ interface InputFolderTreeProps {
   onCreateFolder: () => void
 }
 
-/** 当前目录的文件夹与来源树。子文件夹可原位展开，双击进入目录。 */
 export function InputFolderTree(props: InputFolderTreeProps): ReactElement {
   return (
     <CatalogTreeBody

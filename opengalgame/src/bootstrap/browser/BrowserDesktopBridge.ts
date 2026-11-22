@@ -48,7 +48,6 @@ import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
 
-/** 无 preload 时的浏览器验证桥：隐藏目录选择 + 夹具结果。开发服务可改接真实工程。 */
 function fileOperationUnavailable(): AjaxResult<never> {
   return { code: ErrorCodes.forbidden, msg: '当前环境不能操作工程文件' }
 }
@@ -57,7 +56,6 @@ function devBackendUnavailable(): AjaxResult<never> {
   return { code: ErrorCodes.communicationFailed, msg: '开发文件后端不可用' }
 }
 
-/** 显式夹具查询仍走内存目录，避免视觉验收写到已登记工程。 */
 function usesRealProjectFiles(search: URLSearchParams): boolean {
   if (import.meta.env.VITE_OPENGALGAME_BROWSER_FILES !== 'real') return false
   const projects = search.get('projects')
@@ -149,8 +147,12 @@ function sceneExportUnavailable(): AjaxResult<never> {
   return { code: ErrorCodes.forbidden, msg: '当前环境不支持场景导出' }
 }
 
-function latestPreviewSaveUnavailable(): AjaxResult<never> {
+function latestSavedSceneVersionUnavailable(): AjaxResult<never> {
   return { code: ErrorCodes.forbidden, msg: '当前环境不支持读取场景保存版本' }
+}
+
+function chooseExportDirectoryUnavailable(): AjaxResult<never> {
+  return { code: ErrorCodes.forbidden, msg: '当前环境不能选择导出位置' }
 }
 
 function systemPathUnavailable(): AjaxResult<never> {
@@ -303,14 +305,8 @@ export function createBrowserDesktopBridge(): DesktopBridge {
     listeners.forEach((listener) => listener(progress))
   }
 
-  /**
-   * @returns 选中的顶层目录名，取消时为 null。
-   */
   function pickDirectory(): Promise<string | null> {
     return new Promise((resolve) => {
-      /**
-       * @param name - 选中的目录名，取消时为 null。
-       */
       const finish = (name: string | null): void => {
         picker.removeEventListener('change', onChange)
         picker.removeEventListener('cancel', onCancel)
@@ -322,7 +318,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         const relative = file?.webkitRelativePath || file?.name || ''
         finish(relative.split(/[/\\]/)[0] || file?.name || null)
       }
-      /** 取消选择时按未选中结束等待。 */
       const onCancel = (): void => finish(null)
       picker.addEventListener('change', onChange)
       picker.addEventListener('cancel', onCancel)
@@ -330,14 +325,8 @@ export function createBrowserDesktopBridge(): DesktopBridge {
     })
   }
 
-  /**
-   * @returns 选中的文件，取消时为 null。
-   */
   function pickProjectFiles(): Promise<readonly File[] | null> {
     const { promise, resolve } = Promise.withResolvers<readonly File[] | null>()
-    /**
-     * @param files - 选中的文件，取消时为 null。
-     */
     const finish = (files: readonly File[] | null): void => {
       filePicker.removeEventListener('change', onChange)
       filePicker.removeEventListener('cancel', onCancel)
@@ -348,7 +337,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       const files = filePicker.files ? [...filePicker.files] : []
       finish(files.length > 0 ? files : null)
     }
-    /** 取消选择时按未选中结束等待。 */
     const onCancel = (): void => finish(null)
     filePicker.addEventListener('change', onChange)
     filePicker.addEventListener('cancel', onCancel)
@@ -356,10 +344,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
     return promise
   }
 
-  /**
-   * @param presetFolder - 已暂存的目录，提供时不再弹选择框。
-   * @returns 操作结果，取消时为已取消状态。
-   */
   async function runProject(
     operationId: string,
     kind: 'created' | 'imported',
@@ -384,7 +368,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
   }
 
   return {
-    /** 选择并暂存新建项目的保存位置。 */
     chooseSaveLocation: async (): Promise<AjaxResult<ProjectSaveLocationVO | null>> => {
       if (realFiles) return callDev('chooseSaveLocation', undefined)
       const folder = await pickDirectory()
@@ -392,13 +375,11 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       pendingCreate = folder
       return { code: 2000, msg: '已选择保存位置', data: { directory: folder } }
     },
-    /** 清除暂存的新建保存位置。 */
     clearSaveLocation: (): Promise<AjaxResult<null>> => {
       if (realFiles) return callDev('clearSaveLocation', undefined)
       pendingCreate = null
       return Promise.resolve({ code: 2000, msg: '操作成功', data: null })
     },
-    /** 在已选位置创建项目，缺失保存位置时先弹选择框。 */
     createProject: (request: CreateProjectDTO) => {
       if (realFiles) return callDev('createProject', request)
       if (!request.name.trim()) {
@@ -419,8 +400,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
             name: request.name.trim(),
             synopsis: request.synopsis ?? ''
           })
-          // 走查夹具：模拟“已登记、工作区未就绪”。真实后端 1309 不带 data，
-          // create-with-id 专供验证首页拿到身份后直接核对的支路。
           if (homeFailure === 'create-with-id' || homeFailure === 'create-without-id') {
             if (homeFailure === 'create-without-id')
               return { code: 1309, msg: 'D:/secret/.git 损坏，锁文件无法读取' }
@@ -442,7 +421,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         return result
       })
     },
-    /** 导入所选目录并登记项目。 */
     importProject: (request: ImportProjectDTO) => {
       if (realFiles) return callDev('importProject', request)
       return runProject(request.operationId, 'imported', (folder) => {
@@ -451,7 +429,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         }
         const projectId = `browser-import-${++importedCount}`
         entries.set(projectId, { status: 'available', id: projectId, name: folder, synopsis: '' })
-        // 走查夹具：导入已登记但工作区未就绪，真实后端同样不带工程身份。
         if (homeFailure === 'import')
           return { code: 1309, msg: 'D:/secret/.git 损坏，锁文件无法读取' }
         return {
@@ -461,7 +438,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         }
       })
     },
-    /** 读取夹具中的一页已登记项目。开发文件后端开启时读取真实登记。 */
     listProjects: (request: ListProjectsDTO) => {
       if (realFiles) return callDev('listProjects', request)
       if (readFixtureMode() === 'fail') {
@@ -479,7 +455,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         }
       })
     },
-    /** 打开夹具中的可读项目摘要。开发文件后端开启时打开真实工程。 */
     openProject: (request: OpenProjectDTO) => {
       if (realFiles) return callDev('openProject', request)
       const entry = entries.get(request.id)
@@ -495,7 +470,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         data: { id: entry.id, name: entry.name, synopsis: entry.synopsis }
       })
     },
-    /** 重命名夹具中的已登记项目。开发文件后端开启时重命名真实工程。 */
     renameProject: (request: RenameProjectDTO) => {
       if (realFiles) return callDev('renameProject', request)
       const name = request.name.trim()
@@ -515,7 +489,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         data: { id: updated.id, name: updated.name, synopsis: updated.synopsis }
       })
     },
-    /** 显式重新构建。打开工作台不再调用这里。 */
     ensureProjectWorkspace: (request: EnsureProjectWorkspaceDTO) => {
       if (realFiles) return callDev<ProjectWorkspaceVO>('ensureProjectWorkspace', request)
       if (workspaceNotReady) {
@@ -547,7 +520,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         data: { projectId: request.projectId, sceneId: 'scene-1', canvasId: 'canvas-1' }
       })
     },
-    /** 夹具只读检查。未就绪仍返回身份，打开时不因此补建。 */
     inspectProjectWorkspace: (request: EnsureProjectWorkspaceDTO) => {
       if (realFiles)
         return callDev<ProjectWorkspaceInspectionVO>('inspectProjectWorkspace', request)
@@ -566,12 +538,10 @@ export function createBrowserDesktopBridge(): DesktopBridge {
           : { ready: true, sceneId: 'scene-1', canvasId: 'canvas-1' }
       })
     },
-    /** 检查夹具中的工程输入来源和画布编排。 */
     inspectProjectFiles: (request) =>
       realFiles
         ? callDev('inspectProjectFiles', request)
         : Promise.resolve(fixtureInspect(request.projectId)),
-    /** 扫描夹具中的输入来源摘要。 */
     listProjectInputSources: (request) =>
       realFiles
         ? callDev('listProjectInputSources', request)
@@ -582,7 +552,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         : Promise.resolve(fixtureReadSources(request.projectId, request.sourceIds)),
     readProjectMedia: (request) =>
       realFiles ? readDevMedia(request) : Promise.resolve(fileOperationUnavailable()),
-    /** 读取夹具中的只读场景画布编排；没有保存文件时 data 为 null。 */
     readSceneCanvasArrangement: (request) => {
       if (realFiles) return callDev('readSceneCanvasArrangement', request)
       if (failNextArrangement) {
@@ -626,7 +595,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       generationFixture
         ? Promise.resolve({ code: ErrorCodes.success, msg: '画布已保存（走查夹具）', data: null })
         : devOrBlocked('saveSceneCanvasArrangement', request, sceneCanvasUnavailable()),
-    /** 浏览器用隐藏文件选择。开发后端把字节暂存成本机路径后再导入。 */
     chooseProjectFiles: async (): Promise<AjaxResult<readonly string[] | null>> => {
       const files = await pickProjectFiles()
       if (!files) {
@@ -703,7 +671,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       if (!realFiles) return fixturePathForDroppedFile(file)
       return stageDevFile(file)
     },
-    /** 从夹具中移出已登记项目。开发文件后端开启时移出真实登记。 */
     unregisterProject: (request: UnregisterProjectDTO) => {
       if (realFiles) return callDev('unregisterProject', request)
       if (!entries.delete(request.id)) {
@@ -711,12 +678,10 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       }
       return Promise.resolve({ code: 2000, msg: '已从列表移出', data: { id: request.id } })
     },
-    /** 返回内存中已保存的配置摘要。 */
     getSettingsSummary: () =>
       realFiles
         ? callDev('getSettingsSummary', undefined)
         : Promise.resolve({ code: 2000, msg: 'ok', data: saved }),
-    /** 按模型名模拟连接测试结果。开发后端改为访问真实模型服务。 */
     testConnection: (request: ConnectionSettingsDTO) => {
       if (realFiles) return callDev('testConnection', request)
       if (/fail-timeout/i.test(request.model)) {
@@ -732,7 +697,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       }
       return Promise.resolve(result)
     },
-    /** 保存配置并返回不含凭据的摘要。 */
     saveSettings: (request: ConnectionSettingsDTO) => {
       if (realFiles) return callDev('saveSettings', request)
       saved = {
@@ -753,7 +717,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       }
       return Promise.resolve({ code: 2000, msg: 'ok', data: saved })
     },
-    /** 按服务地址返回演示模型列表。 */
     listModels: (request: ListModelsDTO) => {
       if (realFiles) return callDev('listModels', request)
       if (/fail/i.test(request.baseUrl)) {
@@ -788,7 +751,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
         : Promise.resolve(
             historyFixture ? historyFixture.clearHistory(request) : versionHistoryUnavailable()
           ),
-    /** 订阅项目进度并返回注销函数。 */
     onProjectProgress: (listener) => {
       listeners.add(listener)
       return () => {
@@ -807,7 +769,6 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       generationFixture
         ? Promise.resolve(generationFixture.status(request))
         : devOrBlocked('getSceneGenerationStatus', request, sceneGenerationUnavailable()),
-    /** 夹具没有场景级最近操作；真实 dev 后端按执行记录读取，刷新后仍可见。 */
     getLatestSceneGeneration: (request) =>
       devOrBlocked('getLatestSceneGeneration', request, sceneGenerationUnavailable()),
     replySceneGeneration: (request) =>
@@ -834,6 +795,10 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       generationFixture
         ? Promise.resolve(generationFixture.readCheckpoint(request))
         : devOrBlocked('readSceneGenerationCheckpoint', request, sceneGenerationUnavailable()),
+    forkSceneGeneration: (request) =>
+      generationFixture
+        ? Promise.resolve(generationFixture.fork(request))
+        : devOrBlocked('forkSceneGeneration', request, sceneGenerationUnavailable()),
     openSceneGenerationPreview: (request) =>
       devOrBlocked('openSceneGenerationPreview', request, sceneGenerationUnavailable()),
     closeSceneGenerationPreview: (request) =>
@@ -898,8 +863,14 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       subscribeCandidate(candidateInvalidatedListeners, listener),
     exportSavedScene: (request) =>
       devOrBlocked('exportSavedScene', request, sceneExportUnavailable()),
-    readLatestPreviewSave: (request) =>
-      devOrBlocked('readLatestPreviewSave', request, latestPreviewSaveUnavailable()),
+    readLatestSavedSceneVersion: (request) =>
+      devOrBlocked('readLatestSavedSceneVersion', request, latestSavedSceneVersionUnavailable()),
+    chooseSceneExportDirectory: (request) =>
+      devOrBlocked(
+        'chooseSceneExportDirectory',
+        request,
+        chooseExportDirectoryUnavailable()
+      ),
     checkForUpdate: () => Promise.resolve(appUpdateUnavailable()),
     downloadUpdate: () => Promise.resolve(appUpdateUnavailable()),
     installUpdate: () => Promise.resolve(appUpdateUnavailable()),

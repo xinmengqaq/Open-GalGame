@@ -12,10 +12,6 @@ export class ClearSceneGenerationMemory implements SceneGenerationMemoryService 
     private readonly deps: SceneGenerationDependencies,
     private readonly coordinator: SceneGenerationCoordinator
   ) {}
-  /**
-   * 线程无运行、等待或待恢复操作时清理其本机记忆。
-   * @throws {AppException} 线程仍有未结束操作或记忆清理失败。
-   */
   clearSceneGenerationMemory(
     request: SceneGenerationThreadDTO
   ): Promise<ClearSceneGenerationMemoryVO> {

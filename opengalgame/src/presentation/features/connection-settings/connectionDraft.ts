@@ -6,7 +6,6 @@ import type {
 
 export type ConnectionExtensionMode = 'keep' | 'set' | 'clear'
 
-/** 扩展 JSON 的界面草稿：保存的内容永不回显，这里只保留用户新输入的文本。 */
 export interface ConnectionExtensionDraft {
   readonly hasExtension: boolean
   readonly editorOpen: boolean
@@ -35,11 +34,6 @@ export const emptyConnectionExtensionDraft: ConnectionExtensionDraft = {
   confirmingClear: false
 }
 
-/**
- * 扩展输入的状态机。
- * 清空必须经过 `clear-confirmed` 才进入请求；只点“清空”不会把未修改误当清空。
- * `save-finished` 不带结果时保持现状，失败后用户输入与展开状态都不丢。
- */
 export function connectionExtensionReducer(
   state: ConnectionExtensionDraft,
   action: ConnectionExtensionAction
@@ -80,10 +74,6 @@ export function connectionExtensionReducer(
   }
 }
 
-/**
- * 按用户意图构造三态；没有已存扩展且没有新输入时省略字段，请求与旧版一致。
- * 空输入永远表示保留，不会隐式清空。
- */
 export function connectionExtensionRequest(
   state: ConnectionExtensionDraft
 ): ConnectionExtensionInput | undefined {
@@ -93,7 +83,6 @@ export function connectionExtensionRequest(
   return undefined
 }
 
-/** 只用于比较测试结果是否仍对应当前草稿，不写入界面或持久化。 */
 export function connectionExtensionFingerprint(state: ConnectionExtensionDraft): string {
   return JSON.stringify([state.hasExtension, state.mode, state.mode === 'set' ? state.draft : ''])
 }
@@ -109,7 +98,6 @@ export interface ConnectionDraftFields {
   apiKey: string
 }
 
-/** 保存与测试共用同一份请求形状，扩展三态不会两处不一致。 */
 export function buildConnectionSettingsRequest(
   fields: ConnectionDraftFields,
   extension: ConnectionExtensionInput | undefined
@@ -128,7 +116,6 @@ export function buildConnectionSettingsRequest(
   return request
 }
 
-/** 拉取列表走同一供应商端点时也带上同一份扩展三态。 */
 export function buildListModelsRequest(
   fields: Pick<ConnectionDraftFields, 'providerId' | 'baseUrl' | 'apiKey'>,
   extension: ConnectionExtensionInput | undefined

@@ -1,8 +1,3 @@
-/*
- * 底部 dock：一层薄玻璃浮起视图、历史与唯一的创作入口。
- * 不做分段工具条：没有外框、竖分隔线和图标色块。
- */
-
 .dock {
   position: absolute;
   right: 0;
@@ -138,7 +133,6 @@
   text-align: center;
 }
 
-/* 创作入口是 dock 的主段：一层淡紫光槽，内部只有三个轻按钮。 */
 
 .toolbarGroup[data-group='create'] {
   gap: 2px;

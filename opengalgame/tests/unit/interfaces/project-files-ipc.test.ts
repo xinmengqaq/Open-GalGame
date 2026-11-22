@@ -660,7 +660,6 @@ describe('浏览器工程文件桥', () => {
   })
 })
 
-/** R14：端口位置可变，选择路径/null、无窗口和错误出口不变。 */
 describe('工程文件选择器', () => {
   const expectedOptions = { properties: ['openFile', 'multiSelections'] }
 

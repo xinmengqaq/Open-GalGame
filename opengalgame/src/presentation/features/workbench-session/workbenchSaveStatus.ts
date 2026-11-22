@@ -21,7 +21,6 @@ const labels: Record<WorkbenchSaveState, { label: string; tone: SaveStatusTone }
   failed: { label: '保存失败', tone: 'danger' }
 }
 
-/** 保存状态只由真实保存结果和草稿差异决定。 */
 export function saveStatusOf(
   state: Pick<WorkbenchSessionState, 'saveState' | 'saveError'>
 ): SaveStatusView {

@@ -377,10 +377,6 @@ describe('项目列表通道与客户端', () => {
   })
 })
 
-/**
- * R10 冻结的 preload 通道清单：方法名 → 通道名。
- * 清单是消费者可观察的桥接协议；重构时不得改通道名或增删方法。
- */
 const INVOKE_CHANNELS = {
   chooseSaveLocation: 'project:choose-save-location',
   clearSaveLocation: 'project:clear-save-location',
@@ -445,6 +441,7 @@ const INVOKE_CHANNELS = {
   cancelSceneGeneration: 'scene-generation:cancel',
   listSceneGenerationHistory: 'scene-generation:list-history',
   readSceneGenerationCheckpoint: 'scene-generation:read-checkpoint',
+  forkSceneGeneration: 'scene-generation:fork',
   openSceneGenerationPreview: 'scene-generation:open-preview',
   closeSceneGenerationPreview: 'scene-generation:close-preview',
   subscribeSceneGenerationProgress: 'scene-generation:progress',
@@ -462,7 +459,8 @@ const INVOKE_CHANNELS = {
   readCandidatePreview: 'scene-preview:read-candidate',
   readCandidatePreviewEvent: 'scene-preview:candidate-event',
   exportSavedScene: 'scene-export:export-saved-scene',
-  readLatestPreviewSave: 'scene-export:read-latest-preview-save',
+  readLatestSavedSceneVersion: 'scene-export:read-latest-saved-scene-version',
+  chooseSceneExportDirectory: 'scene-export:choose-directory',
   checkForUpdate: 'app-update:check',
   downloadUpdate: 'app-update:download',
   installUpdate: 'app-update:install',
@@ -470,7 +468,6 @@ const INVOKE_CHANNELS = {
   openDirectory: 'system:open-directory'
 } as const satisfies Record<string, string>
 
-/** R10 冻结的订阅通道清单。 */
 const EVENT_CHANNELS = {
   onProjectProgress: 'project:progress',
   onSceneGenerationProgress: 'scene-generation:progress',
@@ -488,7 +485,7 @@ const expectedMethods = [
 ].sort()
 
 describe('DesktopBridge 单一通道清单基线', () => {
-  it('preload 的 86 个 invoke、7 个订阅和 92 个唯一通道与冻结清单一致', () => {
+  it('preload 的 88 个 invoke、7 个订阅和 94 个唯一通道与冻结清单一致', () => {
     const bridge = createDesktopBridge({
       invoke: async () => ({ code: 2000, msg: '成功' }),
       subscribe: () => () => undefined
@@ -498,9 +495,9 @@ describe('DesktopBridge 单一通道清单基线', () => {
 
     const invokeChannels = Object.values(INVOKE_CHANNELS)
     const eventChannels = Object.values(EVENT_CHANNELS)
-    expect(invokeChannels).toHaveLength(86)
+    expect(invokeChannels).toHaveLength(88)
     expect(eventChannels).toHaveLength(7)
-    expect(new Set([...invokeChannels, ...eventChannels]).size).toBe(92)
+    expect(new Set([...invokeChannels, ...eventChannels]).size).toBe(94)
     expect(invokeChannels.filter((channel) => (eventChannels as readonly string[]).includes(channel))).toEqual([
       'scene-generation:progress'
     ])

@@ -5,10 +5,6 @@ import type { VersionTransactionFact } from '../models/VersionTransactionFact'
 
 const FINGERPRINT_PATTERN = /^[^\s]{1,256}$/u
 
-/**
- * 操作身份只接受既有公共格式，不另建标识类型。
- * @throws {AppException} 身份为空或不符合公共格式。
- */
 export function requireOperationId(operationId: string): string {
   if (typeof operationId !== 'string' || !OPERATION_ID_PATTERN.test(operationId)) {
     throw new AppException({
@@ -19,10 +15,6 @@ export function requireOperationId(operationId: string): string {
   return operationId
 }
 
-/**
- * 内容指纹是应用层给出的稳定摘要，领域层不解释其算法。
- * @throws {AppException} 指纹为空或含空白。
- */
 export function requireContentFingerprint(contentFingerprint: string): string {
   if (typeof contentFingerprint !== 'string' || !FINGERPRINT_PATTERN.test(contentFingerprint)) {
     throw new AppException({
@@ -33,11 +25,6 @@ export function requireContentFingerprint(contentFingerprint: string): string {
   return contentFingerprint
 }
 
-/**
- * 持久事实必须属于当前操作，且自身证据完整。
- * 缺失事实由调用方决定是待核对还是允许继续，不在这里改判。
- * @throws {AppException} 事实属于其他操作，或缺少可核对指纹。
- */
 export function requireOwnedFact(
   operationId: string,
   fact: VersionTransactionFact
@@ -53,11 +40,6 @@ export function requireOwnedFact(
   return fact
 }
 
-/**
- * 声明路径按原样比较。重复、空白和越界都不能取得写入权。
- * 观察路径即使被放进允许集合，也不能成为本次写入路径。
- * @throws {AppException} 路径重复、空白、越出声明范围，或观察路径被写入。
- */
 export function requireOwnedPaths(
   requestedPaths: readonly string[],
   allowedPaths: readonly string[],

@@ -14,7 +14,6 @@ export interface TreeEdit {
   readonly relativePath: string
   readonly action: 'upsert' | 'delete'
   readonly bytes?: Uint8Array
-  /** 已经写入对象库的 blob。提供时不再把字节读入内存。 */
   readonly blobOid?: string
 }
 
@@ -35,14 +34,6 @@ export interface TreeWrite {
   readonly blobs: ReadonlyMap<string, string | null>
 }
 
-/**
- * 在基准树上应用路径编辑并写入新树，不读取或替换索引。
- * 每个文件只写一次 blob，调用方用返回的 OID 更新索引。
- * @param baseTreeOid - 基准树；空树时为 null。
- * @param edits - 相对路径上的新增、覆盖或删除。
- * @returns 新树对象标识，以及每个编辑路径的 blob OID；删除为 null。
- * @throws {AppException} 路径冲突或对象写入失败。
- */
 export async function applyTreeEdits(
   location: GitLocation,
   baseTreeOid: string | null,
@@ -64,10 +55,6 @@ export async function applyTreeEdits(
   }
 }
 
-/**
- * 读取一次提交里的普通文件。符号链接、子模块或缺失对象直接失败。
- * @throws {AppException} 提交或对象不存在，或包含不能恢复的条目。
- */
 export async function readCommitFiles(
   location: GitLocation,
   commitOid: string
@@ -86,11 +73,6 @@ export async function readCommitFiles(
   }
 }
 
-/**
- * 读取提交中单个文件的字节。文件不存在时返回 null。
- * @returns 文件字节；提交中没有该文件时为 null。
- * @throws {AppException} 对象缺失或无法读取。
- */
 export async function readCommitFile(
   location: GitLocation,
   commitOid: string,
@@ -105,11 +87,6 @@ export async function readCommitFile(
   }
 }
 
-/**
- * 读取提交的第一父提交。根提交没有父提交。
- * @returns 父提交标识；没有父提交时为 undefined。
- * @throws {AppException} 提交无法读取。
- */
 export async function readCommitParent(
   location: GitLocation,
   commitOid: string
@@ -126,11 +103,6 @@ export async function readCommitParent(
   }
 }
 
-/**
- * 解析引用。引用不存在时返回 null，其他失败继续抛出。
- * @returns 对象标识；引用不存在时为 null。
- * @throws {AppException} 引用无法读取。
- */
 export async function resolveRefIfExists(
   location: GitLocation,
   ref: string
@@ -143,10 +115,6 @@ export async function resolveRefIfExists(
   }
 }
 
-/**
- * 判断提交能否从当前 HEAD 沿父提交到达。
- * @throws {AppException} 历史无法读取。
- */
 export async function isReachableFromHead(projectRoot: string, oid: string): Promise<boolean> {
   try {
     const head = await git.resolveRef({ fs, dir: projectRoot, ref: 'HEAD' })

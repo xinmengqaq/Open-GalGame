@@ -7,6 +7,20 @@ import type { ReplySceneGenerationInteractionDTO } from '@application/scene-gene
 
 export type WebGalSceneMemoryMessage = { id: string; role: 'user' | 'assistant'; content: string }
 
+/** 本次候选草稿的权威摘要；写入必须携带同一摘要。 */
+export type WebGalSceneDraftFact = {
+  readonly path: string
+  readonly exists: boolean
+  readonly bytes?: number
+  readonly revision: string
+}
+
+/** 本次受信技能的身份与版本摘要；不表示已获得额外读写权限。 */
+export type WebGalSceneSkillFact = {
+  readonly id: string
+  readonly digest: string
+}
+
 export type WebGalSceneAgentInput = {
   mode: 'generate' | 'repair' | 'finalize'
   execution: SceneGenerationExecution
@@ -15,12 +29,13 @@ export type WebGalSceneAgentInput = {
   writtenFiles?: readonly string[]
   memoryMessages?: readonly WebGalSceneMemoryMessage[]
   confirmedReplies?: readonly ReplySceneGenerationInteractionDTO[]
+  draft?: WebGalSceneDraftFact
+  skill?: WebGalSceneSkillFact
+  /** 本轮是否直接执行作者点名修改；自动诊断修正轮为 false，避免把诊断当成作者要求。 */
+  authorRevisionActive?: boolean
 }
 
-export type SceneAgentAction =
-  | 'submit_scene_result'
-  | 'report_blocked'
-  | 'request_clarification'
+export type SceneAgentAction = 'submit_scene_result' | 'report_blocked' | 'request_clarification'
 
 const agentQuestionOption = z.object({
   label: z.string().trim().min(1).max(200),
@@ -31,7 +46,11 @@ const agentQuestion = z.object({
   detail: z.string().trim().max(2000).optional(),
   options: z.array(agentQuestionOption).length(3)
 })
-/** 工具回退路径的稳定提交名。原生路径不把它当工具调用。 */
+/**
+ * 写前追问的题组形状：1 到 4 题，每题恰好三个选项。
+ * 与终态输出共用同一题面 schema；选项身份仍由应用分配。
+ */
+export const sceneClarificationQuestionsSchema = z.array(agentQuestion).min(1).max(4)
 export const SCENE_RESULT_TOOL_NAME = 'submit_scene_result'
 
 export const sceneAgentOutputSchema = z
@@ -81,11 +100,7 @@ export const sceneAgentOutputSchema = z
     title: SCENE_RESULT_TOOL_NAME
   })
 
-export type WebGalSceneAgentOutput = Omit<
-  z.infer<typeof sceneAgentOutputSchema>,
-  'action'
-> & {
-  /** 结构化输出契约强制返回终态动作，调用方不得再按缺省提交兼容。 */
+export type WebGalSceneAgentOutput = Omit<z.infer<typeof sceneAgentOutputSchema>, 'action'> & {
   action: SceneAgentAction
   memoryMessages: readonly WebGalSceneMemoryMessage[]
 }

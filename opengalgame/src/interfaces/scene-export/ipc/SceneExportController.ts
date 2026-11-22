@@ -1,14 +1,17 @@
-import type { ReadLatestPreviewSaveService } from '@application/scene-export/services/ReadLatestPreviewSaveUseCase'
+import type { ChooseSceneExportDirectoryService } from '@application/scene-export/services/ChooseSceneExportDirectory'
+import type { ReadLatestSavedSceneVersionService } from '@application/scene-export/services/ReadLatestSavedSceneVersionUseCase'
 import type { SceneExportApplicationService } from '@application/scene-export/services/SceneExportApplicationService'
-import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewSaveVersionVO'
+import type { SceneExportDirectoryChoiceVO } from '@application/scene-export/vo/SceneExportDestinationVO'
+import type { SavedSceneVersionVO } from '@application/scene-export/vo/SavedSceneVersionVO'
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { IpcExceptionHandler } from '../../ipc/errors/IpcExceptionHandler'
 import { createRequestHandler, type IpcRequestHandler } from '../../ipc/requestHandler'
 import type { IpcRequestAccess } from '../../ipc/RequestSchema'
 import {
+  chooseSceneExportDirectorySchema,
   exportSavedSceneSchema,
-  readLatestPreviewSaveSchema
+  readLatestSavedSceneVersionSchema
 } from './SceneExportRequestSchema'
 
 export class SceneExportController {
@@ -16,7 +19,8 @@ export class SceneExportController {
 
   constructor(
     private readonly sceneExport: SceneExportApplicationService,
-    private readonly latestPreviewSave: ReadLatestPreviewSaveService,
+    private readonly latestSavedSceneVersion: ReadLatestSavedSceneVersionService,
+    private readonly chooseDirectory: ChooseSceneExportDirectoryService,
     exceptions: IpcExceptionHandler
   ) {
     this.handle = createRequestHandler(exceptions)
@@ -31,16 +35,29 @@ export class SceneExportController {
     )
   }
 
-  readLatestPreviewSave(
+  readLatestSavedSceneVersion(
     input: unknown,
     access: IpcRequestAccess
-  ): Promise<AjaxResult<PreviewSaveVersionVO | null>> {
+  ): Promise<AjaxResult<SavedSceneVersionVO | null>> {
     return this.handle(
-      readLatestPreviewSaveSchema,
+      readLatestSavedSceneVersionSchema,
       input,
       access,
-      '最近一次预览保存已返回',
-      (request) => this.latestPreviewSave.readLatestPreviewSave(request)
+      '最新可导出正式版本已返回',
+      (request) => this.latestSavedSceneVersion.readLatestSavedSceneVersion(request)
+    )
+  }
+
+  chooseSceneExportDirectory(
+    input: unknown,
+    access: IpcRequestAccess
+  ): Promise<AjaxResult<SceneExportDirectoryChoiceVO>> {
+    return this.handle(
+      chooseSceneExportDirectorySchema,
+      input,
+      access,
+      '导出位置选择已返回',
+      (request) => this.chooseDirectory.chooseSceneExportDirectory(request)
     )
   }
 }

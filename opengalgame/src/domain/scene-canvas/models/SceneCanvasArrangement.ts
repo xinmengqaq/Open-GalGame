@@ -11,7 +11,6 @@ export type SceneCanvasViewport = {
   zoom: number
 }
 
-/** 卡片挂接的生成使用设置。旧格式没有该字段时由读取映射显式补齐。 */
 export type SceneCanvasUsage = {
   characterId?: string
   locationId?: string
@@ -19,7 +18,6 @@ export type SceneCanvasUsage = {
   targetIds: readonly string[]
 }
 
-/** 已保存的默认关系。读取不按卡片类别重新推断。 */
 export type SceneCanvasDefaultRelation =
   | 'actsOn'
   | 'accompanies'
@@ -29,15 +27,12 @@ export type SceneCanvasDefaultRelation =
   | 'sameSubject'
   | 'associated'
 
-/** 卡片绑定的 WebGAL 命令与名称。未选择时为 null。不解释命令含义。 */
 export type SceneCanvasWebgalPreset = {
   command: string
   name: string
 }
-/** 图片卡的场景用途。来源只说明它是图片，不区分背景、CG、立绘或头像。 */
 export type SceneCanvasImageRole = 'background' | 'cg' | 'characterImage' | 'avatar'
 
-/** 音频卡的场景用途。来源只说明它是音频，不区分音乐、音效或配音。 */
 export type SceneCanvasAudioRole = 'music' | 'soundEffect' | 'voice'
 
 export type SceneCanvasDocumentCard = {
@@ -82,7 +77,6 @@ export type SceneCanvasVideoCard = {
   layout: SceneCanvasCardLayout
 }
 
-/** 提示词绑定的当前画布卡片。身份只保存 cardId，显示名不进入身份。 */
 export type SceneCanvasPromptReference = {
   cardId: string
 }
@@ -134,7 +128,6 @@ export type SceneCanvasRelation = {
   recordCardId: string | null
 }
 
-/** 一份场景编排。不含编排版本、路径、正文、选中状态和撤销栈。 */
 export type SceneCanvasArrangement = {
   projectId: string
   sceneId: string
@@ -144,10 +137,6 @@ export type SceneCanvasArrangement = {
   relations: readonly SceneCanvasRelation[]
 }
 
-/**
- * 卡片挂接的工程来源。提示词和字段卡片没有来源文件。
- * @returns 来源身份；没有来源时为 null。
- */
 export function sceneCanvasCardSourceId(card: SceneCanvasCard): string | null {
   if (
     card.kind === 'document' ||

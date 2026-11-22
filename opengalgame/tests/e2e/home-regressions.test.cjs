@@ -34,7 +34,6 @@ beforeEach(async () => {
   await page.goto('http://127.0.0.1/')
   await page.addStyleTag({ content: stylesheet })
   await page.evaluate(() => {
-    // 应用更新桥按 DesktopBridge 契约返回“当前形态不支持更新”的空闲状态。
     const appUpdateUnavailable = () => ({ code: 5101, msg: '当前运行形态不支持应用内更新' })
     window.opengalgame = {
       getSettingsSummary: async () => ({ code: 2000, msg: 'ok', data: null }),

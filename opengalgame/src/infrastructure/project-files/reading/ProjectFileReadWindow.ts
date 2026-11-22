@@ -27,7 +27,6 @@ type TrackedFile = ObservedProjectFile & { digest: string }
 
 type MissingPath = { relativePath: string }
 
-/** 一次工程文件读取窗口。结束前核对身份文件、已读文件和目录成员。 */
 export class ProjectFileReadWindow {
   private readonly files: TrackedFile[] = []
   private readonly directories: DirectorySnapshot[] = []
@@ -38,9 +37,6 @@ export class ProjectFileReadWindow {
     readonly projectId: string
   ) {}
 
-  /**
-   * @throws {AppException} 工程根或身份文件无法使用。
-   */
   static async open(directory: string, projectId: string): Promise<ProjectFileReadWindow> {
     let root: string
     try {
@@ -94,10 +90,6 @@ export class ProjectFileReadWindow {
     return { bytes, digest }
   }
 
-  /**
-   * 读取不超过 JSON 上限的严格 UTF-8 文本。
-   * @throws {StableFileReadError} 编码非法或文件过大。
-   */
   async readText(relativePath: string): Promise<{ text: string; digest: string }> {
     const { bytes, digest } = await this.readBytes(relativePath, MAX_JSON_BYTES)
     try {
@@ -107,10 +99,6 @@ export class ProjectFileReadWindow {
     }
   }
 
-  /**
-   * 读取可选 JSON 文本。缺失记入窗口；超过大小上限视为损坏。
-   * @returns 文本和摘要；不存在时为 null。
-   */
   async readOptionalText(relativePath: string): Promise<{ text: string; digest: string } | null> {
     try {
       return await this.readText(relativePath)
@@ -123,10 +111,6 @@ export class ProjectFileReadWindow {
     }
   }
 
-  /**
-   * 读取可选文本，不套用来源 JSON 的固定容量上限。
-   * @returns 文本和摘要；不存在时为 null。
-   */
   async readOptionalUnboundedText(
     relativePath: string
   ): Promise<{ text: string; digest: string } | null> {
@@ -146,10 +130,6 @@ export class ProjectFileReadWindow {
     }
   }
 
-  /**
-   * 确认文件存在并只记录状态，不读取内容。
-   * @returns 文件观察结果；不存在时为 null。
-   */
   async observeExisting(relativePath: string): Promise<ObservedProjectFile | null> {
     try {
       const observation = await observeProjectFile(this.root, relativePath)
@@ -164,10 +144,6 @@ export class ProjectFileReadWindow {
     }
   }
 
-  /**
-   * 读取文件前缀，不计算整文件摘要。
-   * @returns 前缀和大小；文件不存在时为 null。
-   */
   async readPrefix(
     relativePath: string,
     length = 8192
@@ -189,11 +165,6 @@ export class ProjectFileReadWindow {
     return { prefix, digest, size: Number(observation.stats.size) }
   }
 
-  /**
-   * 读取可选文件。缺失记入窗口，不立刻失败。
-   * @returns 字节；不存在时为 null。
-   * @throws {StableFileReadError} 超过大小上限、不是文件或无法读取。
-   */
   async readOptionalBytes(
     relativePath: string,
     maxBytes?: number
@@ -209,10 +180,6 @@ export class ProjectFileReadWindow {
     }
   }
 
-  /**
-   * 拍摄目录成员快照。目录不存在时为空快照并记录缺失。
-   * @returns 成员快照；目录不存在时为 null。
-   */
   async captureDirectory(relativePath: string): Promise<DirectorySnapshot | null> {
     const snapshot = await captureProjectDirectory(this.root, relativePath)
     if (snapshot === null) {
@@ -223,10 +190,6 @@ export class ProjectFileReadWindow {
     return snapshot
   }
 
-  /**
-   * 重新核对已观察文件、缺失项、目录成员和身份清单。
-   * @throws {StableFileReadError} 读取期间发生变化。
-   */
   async finish(): Promise<void> {
     for (const file of this.files) {
       await assertSameObservation(this.root, file)
@@ -266,9 +229,6 @@ export class ProjectFileReadWindow {
   }
 }
 
-/**
- * @throws {AppException} 路径、格式或读取变化失败。
- */
 export async function withProjectFileRead<T>(
   directory: string,
   projectId: string,

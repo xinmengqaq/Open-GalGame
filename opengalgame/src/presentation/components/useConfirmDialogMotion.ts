@@ -4,10 +4,6 @@ import type { RefObject } from 'react'
 
 import { prefersReducedMotion } from '../effects/motion'
 
-/**
- * 危险确认的入场：对象、说明、范围和风险依次出现。
- * 组件关闭时内容仍挂载，只在打开时播放；减少动态效果时只做短淡入。
- */
 export function useConfirmDialogMotion(root: RefObject<HTMLElement | null>, open: boolean): void {
   useGSAP(
     () => {

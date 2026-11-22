@@ -4,18 +4,12 @@ import { useEffect, useState, type RefObject } from 'react'
 
 import { prefersReducedMotion } from '@presentation/effects/motion'
 
-/**
- * 更多动作菜单的挂载与开合动效。关闭时先播完再卸载，打开动画在面板真正挂载后补播。
- * 减少动态效果时只做短淡入淡出；完成后清掉内联 transform/opacity。
- */
 export function useMoreActionsMenuMotion(
   panelRef: RefObject<HTMLElement | null>,
   open: boolean
 ): { rendered: boolean } {
   const [rendered, setRendered] = useState(open)
 
-  /* 打开相位在渲染期并入挂载状态：面板与 open 同一次提交挂载，不再用 effect 推后一帧。
-     关闭相位仍由退出动画 onComplete 收尾，中断关闭/重开保持同一套 latch。 */
   if (open && !rendered) {
     setRendered(true)
   }

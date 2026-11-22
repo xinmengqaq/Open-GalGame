@@ -18,9 +18,98 @@ const ARCHIVE_PATH = fileURLToPath(
   new URL('../../../scripts/legacy-data-migration/execution-archive.cjs', import.meta.url)
 )
 
+interface MigrateProjectResult {
+  projectId: string
+  status: string
+  blocked?: boolean
+  blockedRecords?: Array<{ operationId: string; state: string }>
+  blockedReason?: string
+  remediation?: string
+  counts?: Record<string, number>
+}
+
+interface MigratePayload {
+  ok: boolean
+  summary: Record<string, number>
+  projects: MigrateProjectResult[]
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
+
+it('批量迁移遇未结束旧记录时 dry-run/--apply 都报告阻断且零写，结算后正常迁移', async () => {
+  const stateRoot = await temporaryRoot('opengalgame-r29-blocked-')
+  const current = currentRecord({ operationId: 'operation-current' })
+  const waiting = legacyRecord({ operationId: 'operation-waiting-repair', state: 'waiting' })
+  const terminal = legacyRecord({ operationId: 'operation-legacy-terminal', state: 'failed' })
+  const sourceBytes = Buffer.from(
+    JSON.stringify({ version: 1, executions: [current, waiting, terminal] })
+  )
+  const path = await writeDocument(stateRoot, 'project-1', sourceBytes)
+  const archiveRoot = join(
+    stateRoot,
+    'scene-generation/projects/project-1/legacy-executions'
+  )
+
+  const dryRun = await runNode(MIGRATE_PATH, ['--state-root', stateRoot])
+  expect(dryRun.code).toBe(0)
+  const dryJson = dryRun.json as MigratePayload
+  const dryProject = dryJson.projects[0]
+  expect(dryProject).toMatchObject({
+    projectId: 'project-1',
+    status: 'blocked',
+    blocked: true,
+    counts: { total: 3, current: 1, legacy: 2 },
+    blockedRecords: [{ operationId: 'operation-waiting-repair', state: 'waiting' }]
+  })
+  expect(dryProject?.blockedReason).toEqual(expect.stringContaining('旧版生成记录仍有未结束操作'))
+  expect(dryProject?.remediation).toEqual(expect.stringContaining('先用旧版'))
+  expect(dryJson.ok).toBe(false)
+  expect(dryJson.summary.blocked).toBe(1)
+  expect(await readFile(path)).toEqual(sourceBytes)
+  await expect(readdir(archiveRoot)).rejects.toMatchObject({ code: 'ENOENT' })
+
+  const applied = await runNode(MIGRATE_PATH, ['--state-root', stateRoot, '--apply'])
+  expect(applied.code).toBe(3)
+  const appliedJson = applied.json as MigratePayload
+  expect(appliedJson.projects[0]).toMatchObject({
+    status: 'blocked',
+    blocked: true
+  })
+  expect(await readFile(path)).toEqual(sourceBytes)
+  await expect(readdir(archiveRoot)).rejects.toMatchObject({ code: 'ENOENT' })
+
+  // 旧版结算后重跑同一命令：终态旧记录按原归档路径迁移，不再阻断。
+  const settled = JSON.parse(sourceBytes.toString('utf8')) as {
+    executions: Array<Record<string, unknown>>
+  }
+  settled.executions[1] = { ...settled.executions[1], state: 'failed' }
+  const settledBytes = Buffer.from(JSON.stringify(settled))
+  await writeFile(path, settledBytes)
+  const retried = await runNode(MIGRATE_PATH, ['--state-root', stateRoot, '--apply'])
+  expect(retried.code).toBe(0)
+  const retriedJson = retried.json as MigratePayload
+  expect(retriedJson.summary).toEqual({
+    projects: 1,
+    unchanged: 0,
+    planned: 0,
+    migrated: 1,
+    blocked: 0,
+    failed: 0
+  })
+  const saved = JSON.parse(await readFile(path, 'utf8')) as {
+    version: number
+    executions: Array<{ operationId: string }>
+  }
+  expect(saved.version).toBe(7)
+  expect(saved.executions.map((item) => item.operationId)).toEqual(['operation-current'])
+  const archiveDirectory = join(
+    archiveRoot,
+    createHash('sha256').update(settledBytes).digest('hex')
+  )
+  expect(await readFile(join(archiveDirectory, 'source.json'))).toEqual(settledBytes)
+}, 30_000)
 
 it('批量迁移入口 dry-run 只报告，--apply 与产品首访迁移同一实现且幂等', async () => {
   const stateRoot = await temporaryRoot('opengalgame-r29-batch-')
@@ -72,6 +161,7 @@ it('批量迁移入口 dry-run 只报告，--apply 与产品首访迁移同一�
     unchanged: 1,
     planned: 1,
     migrated: 0,
+    blocked: 0,
     failed: 0
   })
   expect(dryJson.projects.find((project) => project.projectId === 'project-1')).toMatchObject({
@@ -117,11 +207,13 @@ it('批量迁移入口 dry-run 只报告，--apply 与产品首访迁移同一�
 
   const repeated = await runNode(MIGRATE_PATH, ['--state-root', stateRoot, '--apply'])
   expect(repeated.code).toBe(0)
-  expect((repeated.json as { summary: Record<string, number> }).summary).toEqual({
+  const repeatedJson = repeated.json as { summary: Record<string, number> }
+  expect(repeatedJson.summary).toEqual({
     projects: 2,
     unchanged: 2,
     planned: 0,
     migrated: 0,
+    blocked: 0,
     failed: 0
   })
   expect(await readFile(join(archiveDirectory, 'manifest.json'))).toEqual(manifestBytes)
@@ -180,11 +272,15 @@ it('归档 verify/restore dry-run/apply 逐字节恢复，且恢复后首访迁�
       legacyRecords: number
       legacyReasons: Record<string, number>
       counts: Record<string, number>
+      continuable: boolean
+      unfinishedRecords: unknown[]
     }>
   }
   expect(verifyJson.ok).toBe(true)
   expect(verifyJson.archives).toHaveLength(1)
   expect(verifyJson.archives[0]?.counts).toEqual({ total: 3, current: 1, legacy: 2 })
+  expect(verifyJson.archives[0]?.continuable).toBe(false)
+  expect(verifyJson.archives[0]?.unfinishedRecords).toEqual([])
   expect(verifyJson.archives[0]?.legacyReasons).toEqual({
     'missing-record-time': 1,
     'current-schema-incomplete': 1
@@ -227,7 +323,6 @@ it('归档 verify/restore dry-run/apply 逐字节恢复，且恢复后首访迁�
   expect(await readFile(manifestPath)).toEqual(manifestBytes)
   expect(await readFile(join(archiveDirectory, 'source.json'))).toEqual(sourceBytes)
 
-  // 恢复后产品首次读取重新迁移：服务同一次迁移实现，归档按来源摘要复用。
   const repository = new FileSceneGenerationExecutionRepositoryImpl(stateRoot)
   await expect(
     repository.readExecution({

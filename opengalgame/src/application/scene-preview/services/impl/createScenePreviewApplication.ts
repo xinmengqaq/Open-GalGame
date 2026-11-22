@@ -20,10 +20,6 @@ export type ScenePreviewApplicationDependencies = {
   readonly sessions?: ScenePreviewSessionStore
 }
 
-/**
- * 组合根：创建唯一的会话存储，向四个用例服务各注入同一实例，
- * 再把 11 个动作装配成外部消费的应用服务形状。
- */
 export function createScenePreviewApplication(
   deps: ScenePreviewApplicationDependencies
 ): ScenePreviewApplicationService {

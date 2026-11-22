@@ -17,7 +17,6 @@ const presetSchema = z.strictObject({
   name: z.string()
 })
 
-/** 请求和响应共用的编排结构。不引用持久化 Document。 */
 export const sceneCanvasArrangementSchema = z.strictObject({
   projectId: z.string(),
   sceneId: z.string(),

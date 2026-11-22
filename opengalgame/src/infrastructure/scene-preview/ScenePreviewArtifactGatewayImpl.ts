@@ -10,10 +10,6 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { RegisteredSceneLocationGatewayImpl } from '@infrastructure/scenes/RegisteredSceneLocationGatewayImpl'
 import { isRealWorkspaceFile } from '@infrastructure/projects/projectWorkspaceFiles'
 
-/**
- * 只判断当前正式场景入口是否存在、非空且能解析出台词。
- * 不返回正文，不查询生成历史或提交记录。
- */
 export class ScenePreviewArtifactGatewayImpl implements ScenePreviewArtifactGateway {
   constructor(
     private readonly locations: RegisteredSceneLocationGatewayImpl,

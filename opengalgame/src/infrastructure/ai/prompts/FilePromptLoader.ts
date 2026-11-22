@@ -17,15 +17,10 @@ export interface LoadedPrompt {
 export class FilePromptLoader {
   private readonly resourcesRoot: string
 
-  /** 在构造时把资源根固定为绝对路径。之后工作目录变化不影响读取。 */
   constructor(resourcesRoot: string) {
     this.resourcesRoot = resolve(resourcesRoot)
   }
 
-  /**
-   * @param reference - 不含正文的提示词引用。
-   * @throws {AppException} 引用非法、文件缺失、正文为空、编码非法或链接越界。
-   */
   async load(reference: PromptReference): Promise<LoadedPrompt> {
     const agentId = assertPromptReference(reference)
     let absolute: string
@@ -58,9 +53,6 @@ export class FilePromptLoader {
   }
 }
 
-/**
- * @throws {AppException} 字节不是合法 UTF-8。
- */
 function decodeStrict(bytes: Buffer): string {
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
@@ -73,7 +65,6 @@ function decodeStrict(bytes: Buffer): string {
   }
 }
 
-/** 判断底层错误是不是文件不存在。 */
 function isMissing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === 'ENOENT'
 }

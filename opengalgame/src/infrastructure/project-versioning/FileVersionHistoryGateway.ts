@@ -52,10 +52,6 @@ const clearSchema = z.strictObject({
   historyIds: z.array(z.string().regex(OPERATION_ID_PATTERN))
 })
 
-/**
- * 保存可重建的历史投影和独立的清理标记。
- * 不删除作品文件、提交或操作绑定。
- */
 export class FileVersionHistoryGateway implements VersionHistoryGateway {
   constructor(private readonly userDirectory: string) {}
 

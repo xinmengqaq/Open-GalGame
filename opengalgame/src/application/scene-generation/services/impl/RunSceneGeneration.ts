@@ -6,6 +6,7 @@ import type {
   SceneGenerationScopeDTO
 } from '../../dto/SceneGenerationDTO'
 import type {
+  SceneGenerationForkResultVO,
   SceneGenerationOperationVO,
   SceneGenerationReplyReceiptVO,
   SceneGenerationStatusVO
@@ -83,7 +84,7 @@ export class RunSceneGeneration implements SceneGenerationApplicationService {
 
   forkSceneGeneration(
     request: ForkSceneGenerationDTO
-  ): Promise<SceneGenerationOperationVO> {
+  ): Promise<SceneGenerationForkResultVO> {
     return this.fork.forkSceneGeneration(request)
   }
 }

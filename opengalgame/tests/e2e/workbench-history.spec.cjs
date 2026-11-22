@@ -16,7 +16,6 @@ async function openHistory(page) {
   return dialog
 }
 
-/** 提示词卡展示态双击进入编辑；编辑中的正文是 combobox，不是 textbox。 */
 async function fillPrompt(page, value) {
   const card = page
     .locator('article')
@@ -69,7 +68,6 @@ test('筛选重置记录区并保留分页追加', async ({ page }) => {
   await dialog.getByRole('button', { name: '加载更多' }).dispatchEvent('click')
   await expect(dialog.getByText('已加载 29 条')).toBeVisible()
   const after = await scroller.evaluate((node) => node.scrollTop)
-  // 末尾没有下一页时“加载更多”入口隐藏，列表高度收紧会带来小幅回夹，但不能回到顶部。
   expect(after).toBeGreaterThan(100)
   expect(after).toBeGreaterThan(before - 40)
 

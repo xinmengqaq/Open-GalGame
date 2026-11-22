@@ -9,7 +9,7 @@ import {
 } from '@presentation/pages/workbench/shell/sceneTaskPresentation'
 
 const saved = {
-  requestId: 'request-saved',
+  versionReference: { kind: 'preview-save' as const, requestId: 'request-saved' },
   contentBasis: { digest: 'content-digest', parserVersion: '4.6.5', engineVersion: '4.6.5' }
 }
 
@@ -35,6 +35,20 @@ describe('工作台场景工具呈现', () => {
     expect(JSON.stringify(request)).not.toMatch(/candidate|draft|path|stageUrl/i)
   })
 
+  it('生成提交来源原样进入导出请求，不改写成预览保存', () => {
+    const versionReference = {
+      kind: 'generation-commit' as const,
+      operationId: 'generation-operation-1',
+      commitId: 'a'.repeat(40)
+    }
+    const request = exportRequestOf('project-1', 'scene-1', {
+      versionReference,
+      contentBasis: saved.contentBasis
+    })
+    expect(request.versionReference).toEqual(versionReference)
+    expect(JSON.stringify(request)).not.toMatch(/requestId|candidateSnapshot|commitMessage/i)
+  })
+
   it('导出成功带出产物绝对路径，进行中不当作成功', () => {
     expect(
       exportNoticeOf({
@@ -47,7 +61,7 @@ describe('工作台场景工具呈现', () => {
           containsFixedEngine: true,
           entryRelativePath: 'game/scene/start.txt',
           contentBasis: saved.contentBasis,
-          versionReference: { kind: 'preview-save', requestId: saved.requestId }
+          versionReference: saved.versionReference
         }
       })
     ).toEqual({

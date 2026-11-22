@@ -102,10 +102,6 @@ interface GenerationRunDetailsPanelProps {
   view: GenerationRunView
 }
 
-/**
- * 运行详情的纯内容：六步阶段轨、Token、调用与活动、最近安全进度。
- * 不显示耗时；暂停、失败和取消不给活动节点，只显示终止说明。
- */
 export function GenerationRunDetailsPanel({ view }: GenerationRunDetailsPanelProps): ReactElement {
   const railIndex = stageRailIndex(view.stage)
   const tokens = tokenViewOf(view.usage)
@@ -250,7 +246,6 @@ export function GenerationRunDetailsPanel({ view }: GenerationRunDetailsPanelPro
   )
 }
 
-/** 运行详情浮层内容；紧凑行和终态文字入口共用同一份锚定与外观。 */
 function RunDetailsPopoverContent({ view }: { view: GenerationRunView }): ReactElement {
   return (
     <PopoverContent
@@ -268,18 +263,10 @@ function RunDetailsPopoverContent({ view }: { view: GenerationRunView }): ReactE
 
 interface GenerationRunDetailsProps {
   view: GenerationRunView
-  /**
-   * `quiet` 用于终态气泡底部的文字动作入口。它不是紧凑进度行，
-   * 保留轻量 button 作为设计绑定的有意例外，不再套 Task/TaskTrigger。
-   */
   variant?: 'pill' | 'quiet'
   label?: string
 }
 
-/**
- * 运行详情浮层。入口锚定触发按钮，宽度 360–420px、最大高度不超过 60vh 且
- * 留在窗口内，由 Radix 负责 Esc/外点关闭、焦点返回和空间不足时翻转。
- */
 export function GenerationRunDetails({
   view,
   variant = 'pill',
@@ -302,7 +289,6 @@ export function GenerationRunDetails({
   )
 }
 
-/** 当前生成里的紧凑进度行；点击整行打开运行详情。 */
 export function GenerationRunStrip({ view }: { view: GenerationRunView }): ReactElement {
   const railIndex = stageRailIndex(view.stage)
   const animated =
@@ -317,8 +303,6 @@ export function GenerationRunStrip({ view }: { view: GenerationRunView }): React
 
   return (
     <Popover>
-      {/* 设计绑定要求运行详情入口使用 Task/TaskTrigger；展开内容由 Popover 承载，
-          Collapsible 只保留触发语义，不参与展开状态。 */}
       <Task className="wb-gen-run" onOpenChange={() => undefined} open={false}>
         <PopoverTrigger asChild>
           <TaskTrigger

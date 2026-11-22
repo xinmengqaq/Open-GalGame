@@ -4,7 +4,6 @@ import path from 'node:path'
 
 import { AppException } from '@common/errors/AppException'
 import type { ExportSavedSceneDTO } from '@application/scene-export/dto/ExportSavedSceneDTO'
-import type { SceneExportContentBasis } from '@application/scene-export/vo/SceneExportContentBasis'
 import type {
   SavedSceneExportSource,
   SavedSceneReferencedAsset,
@@ -13,19 +12,18 @@ import type {
 import type { ScenePreviewSourceFact } from '@application/scene-preview/models/ScenePreviewSourceFact'
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
 import type { ScenePreviewSourceGateway } from '@application/scene-preview/ports/ScenePreviewSourceGateway'
-import { PREVIEW_SAVE_SOURCE_MODULE } from '@application/scene-preview/ports/PreviewSaveVersionGateway'
 import {
   SceneExportErrorCodes,
   sceneExportErrorMessages
 } from '@domain/scene-export/errors/SceneExportErrorCodes'
 
-import { previewCallerOperationId } from '../scene-preview/previewSaveIdentity'
-import { readPreviewSaveRecord } from '../scene-preview/previewSaveRecord'
+import { readPreviewSaveAuthority } from '../scene-preview/previewSaveAuthority'
 import { resolveProjectWorkRoot } from '../project-versioning/projectWorkRoot'
 import {
   resolveSceneAssetReference,
   SCENE_ASSET_RUNTIME_DIRECTORIES
 } from '@infrastructure/webgal/assetPath'
+import { verifyGenerationCommit } from './generationCommitVerification'
 
 export class LocalSceneExportSourceGateway implements SceneExportSourceGateway {
   constructor(
@@ -36,64 +34,93 @@ export class LocalSceneExportSourceGateway implements SceneExportSourceGateway {
 
   async readSavedScene(request: ExportSavedSceneDTO): Promise<SavedSceneExportSource> {
     const preview = await this.sources.readScenePreviewSource(request)
-    const callerOperationId = previewCallerOperationId(
-      request.projectId,
-      request.sceneId,
-      request.versionReference.requestId
-    )
     const root = await resolveProjectWorkRoot(this.userDirectory, request.projectId)
-    const record = await readPreviewSaveRecord(root, callerOperationId)
-    if (!record || record.projectId !== request.projectId || record.sceneId !== request.sceneId) {
-      throw exportError(SceneExportErrorCodes.saveNotCommitted)
-    }
-    const link = await this.versioning.findCallerOperation({
-      sourceModule: PREVIEW_SAVE_SOURCE_MODULE,
-      callerOperationId
-    })
-    if (!link || link.projectId !== request.projectId || link.operationId !== record.operationId) {
-      throw exportError(SceneExportErrorCodes.saveNotCommitted)
-    }
-    const settlement = await this.versioning.readOperationSettlement({
-      projectId: request.projectId,
-      operationId: record.operationId
-    })
-    if (settlement.state !== '已提交' && settlement.state !== '无变更') {
-      throw exportError(SceneExportErrorCodes.saveNotCommitted)
-    }
-    if (!record.contentDigest) throw exportError(SceneExportErrorCodes.saveNotCommitted)
-    if (
-      preview.contentBasis.digest !== request.contentBasis.digest ||
-      preview.contentBasis.digest !== record.contentDigest ||
-      preview.contentBasis.parserVersion !== request.contentBasis.parserVersion ||
-      preview.contentBasis.engineVersion !== request.contentBasis.engineVersion ||
-      record.parserVersion !== request.contentBasis.parserVersion ||
-      record.engineVersion !== request.contentBasis.engineVersion
-    ) {
-      throw exportError(SceneExportErrorCodes.savedContentMismatch)
-    }
-    const contentBasis: SceneExportContentBasis = {
-      digest: record.contentDigest,
-      parserVersion: record.parserVersion,
-      engineVersion: record.engineVersion
-    }
+    const contentBasis = preview.contentBasis
     const entryRelativePath = `${preview.location.sceneDirectory}/${preview.location.entryFile}`
-    if (entryRelativePath !== record.relativePath || entryRelativePath.split('/').includes('..')) {
+    if (entryRelativePath.split('/').includes('..')) {
       throw exportError(SceneExportErrorCodes.savedContentMismatch)
     }
     const bytes = await readFile(path.join(preview.location.projectRoot, entryRelativePath))
     const currentDigest = createHash('sha256').update(bytes).digest('hex')
-    if (currentDigest !== record.revisionDigest)
+
+    if (request.versionReference.kind === 'preview-save') {
+      await this.requirePreviewSave(
+        request,
+        root,
+        preview,
+        entryRelativePath,
+        currentDigest
+      )
+    } else {
+      const verified = await verifyGenerationCommit({
+        root,
+        versioning: this.versioning,
+        projectId: request.projectId,
+        sceneId: request.sceneId,
+        entryRelativePath,
+        currentEntryDigest: currentDigest,
+        operationId: request.versionReference.operationId,
+        expectedCommitId: request.versionReference.commitId
+      })
+      if (verified.state === 'contentMismatch') {
+        throw exportError(SceneExportErrorCodes.savedContentMismatch)
+      }
+      if (verified.state !== 'verified') {
+        throw exportError(SceneExportErrorCodes.saveNotCommitted)
+      }
+    }
+
+    if (
+      contentBasis.digest !== request.contentBasis.digest ||
+      contentBasis.parserVersion !== request.contentBasis.parserVersion ||
+      contentBasis.engineVersion !== request.contentBasis.engineVersion
+    ) {
       throw exportError(SceneExportErrorCodes.savedContentMismatch)
+    }
+
     const assets = referencedAssets(preview.references)
     return {
       scene: { projectId: request.projectId, sceneId: request.sceneId },
       contentBasis,
       versionReference: request.versionReference,
       entryRelativePath,
+      entrySha256: currentDigest,
       sceneText: bytes.toString('utf8'),
       referencedAssets: assets
     }
   }
+
+  private async requirePreviewSave(
+    request: ExportSavedSceneDTO,
+    root: string,
+    preview: ScenePreviewSourceFact,
+    entryRelativePath: string,
+    currentDigest: string
+  ): Promise<void> {
+    if (request.versionReference.kind !== 'preview-save') {
+      throw exportError(SceneExportErrorCodes.exportInputRejected)
+    }
+    const authority = await readPreviewSaveAuthority({
+      root,
+      versioning: this.versioning,
+      projectId: request.projectId,
+      sceneId: request.sceneId,
+      requestId: request.versionReference.requestId
+    })
+    if (!authority) throw exportError(SceneExportErrorCodes.saveNotCommitted)
+    const record = authority.record
+    if (!record.contentDigest) throw exportError(SceneExportErrorCodes.saveNotCommitted)
+    if (
+      preview.contentBasis.digest !== record.contentDigest ||
+      preview.contentBasis.parserVersion !== record.parserVersion ||
+      preview.contentBasis.engineVersion !== record.engineVersion ||
+      record.relativePath !== entryRelativePath ||
+      record.revisionDigest !== currentDigest
+    ) {
+      throw exportError(SceneExportErrorCodes.savedContentMismatch)
+    }
+  }
+
 }
 
 function exportError(

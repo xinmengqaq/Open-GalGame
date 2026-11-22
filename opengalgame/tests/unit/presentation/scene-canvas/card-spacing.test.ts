@@ -52,7 +52,6 @@ describe('卡片隔离间距', () => {
   })
 
   it('斜向同时不足 32 时沿穿透较浅的轴弹开', () => {
-    // 水平间隙 15（穿透 17），垂直间隙 21（穿透 11）：沿垂直轴推开。
     const cards = [documentCard('a', 0, 0), documentCard('b', 315, 245)]
     expect(resolveCardSpacing(cards)).toEqual([{ cardId: 'b', x: 315, y: 256 }])
   })

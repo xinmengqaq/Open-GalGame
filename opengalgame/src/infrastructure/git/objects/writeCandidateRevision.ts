@@ -9,16 +9,9 @@ import { AppException } from '@common/errors/AppException'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 
 export type CandidateEdit = TreeEdit & {
-  /** 从该文件流式写入 blob，避免再保留一份完整字节。 */
   readonly sourceFile?: string
 }
 
-/**
- * 把明确路径的内容写入候选修订，供正式提交读取。
- * 不依赖生成线程或检查点。
- * @param edits - 要放进修订的新增或覆盖内容。删除不写入修订。
- * @throws {AppException} 修订无法建立或发布。
- */
 export async function writeCandidateRevision(
   gitDir: string,
   edits: readonly CandidateEdit[]

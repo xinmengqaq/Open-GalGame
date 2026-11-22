@@ -7,10 +7,7 @@ import type {
   WebgalPreviewConnection,
   WebgalRuntimeHost
 } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
-import type {
-  CandidateStageFeed,
-  CandidateTrustedInput
-} from '@infrastructure/webgal/compatibility/candidateGameStart'
+import type { CandidateStageFeed } from '@infrastructure/webgal/compatibility/candidateGameStart'
 
 import { runtimeFailure } from '../previewRuntimeErrors'
 
@@ -25,9 +22,7 @@ export type RuntimeSession = {
   entryName: string
   readonly pendingExchanges: Set<() => void>
   packageVersion?: string
-  trustedInput?: CandidateTrustedInput
-  trustedInputAbort?: AbortController
-  stagePageUrl?: string
+  autoStart?: boolean
   startedConnection?: WebgalPreviewConnection
   startupConnection?: WebgalPreviewConnection
   startup?: Promise<PreviewErrorVO | null>
@@ -70,10 +65,6 @@ export type RuntimeSnapshotSink = {
   ): void
 }
 
-/**
- * 会话、连接和就绪等待的唯一所有者。
- * 连接消息在这里过滤并交给快照接收方；舞台和启动状态仍保存在同一 session 对象上。
- */
 export class PreviewRuntimeSessionRegistry {
   private readonly sessions = new Map<string, RuntimeSession>()
   private readonly candidateSessions = new Map<string, { readonly candidateSnapshotId: string }>()

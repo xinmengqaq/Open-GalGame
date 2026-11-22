@@ -12,7 +12,6 @@ interface InputCatalogEmptyStateProps {
   onCreateFolder: () => void
 }
 
-/** 扫描成功但工程里没有任何来源和文件夹。刷新由顶栏统一负责。 */
 export function InputCatalogEmptyState({
   onImport,
   onCreateFolder

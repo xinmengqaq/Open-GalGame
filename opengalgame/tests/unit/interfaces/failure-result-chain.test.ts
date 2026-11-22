@@ -440,10 +440,6 @@ describe('R19 提示词引用失败整链基线', () => {
   })
 })
 
-/**
- * 生产 call site 传 FailureState { code, msg }；R19 后只按 reason 判别。
- * 非引用 4401/4402 无 reason，显示原始错误、不亮提示词卡。
- */
 describe('R19 非引用误标纠正', () => {
   it('非引用 4401 保存不亮提示词卡，Toast 显示原始错误', async () => {
     const { logger } = loggerOf()

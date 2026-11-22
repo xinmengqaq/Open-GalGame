@@ -53,12 +53,9 @@ const TEXT_EXTENSIONS = new Map<string, 'markdown' | 'plainText'>([
   ['.txt', 'plainText']
 ])
 const MEDIA_PREFIX_BYTES = 8192
-/** SVG 需要完整文档才能解析，超过这个大小就不再整份读入。 */
 const SVG_PARSE_LIMIT_BYTES = 1_048_576
 
-/** 本机工程文件的定位和写入准备。正式写入由作品版本端口执行。 */
 export class LocalProjectFileOperationGatewayImpl implements ProjectFileOperationGateway {
-  /** 识别工程外文件。普通格式问题返回失败事实。 */
   async inspectImportFile(
     _project: VerifiedProjectReadLocation,
     localFilePath: string
@@ -96,7 +93,6 @@ export class LocalProjectFileOperationGatewayImpl implements ProjectFileOperatio
     }
   }
 
-  /** 用来源记录中的显示名作为占用事实。 */
   async listOccupiedFileNames(project: VerifiedProjectReadLocation): Promise<readonly string[]> {
     return withProjectFileRead(project.location.directory, project.projectId, async (window) => {
       const records = await loadSourceCatalog(window)
@@ -107,7 +103,6 @@ export class LocalProjectFileOperationGatewayImpl implements ProjectFileOperatio
     })
   }
 
-  /** 准备来源记录和内容字节，不写入正式工程。 */
   async prepareImport(
     _project: VerifiedProjectReadLocation,
     sourceId: string,
@@ -181,7 +176,6 @@ export class LocalProjectFileOperationGatewayImpl implements ProjectFileOperatio
     }
   }
 
-  /** 读取已登记素材的完整字节。描述和内容在同一次读取窗口内核对。 */
   async readProjectMedia(
     project: VerifiedProjectReadLocation,
     sourceId: string
@@ -227,7 +221,6 @@ export class LocalProjectFileOperationGatewayImpl implements ProjectFileOperatio
     })
   }
 
-  /** 准备文件名变更和记录更新。文本正文仍按来源身份存放。 */
   async prepareRename(
     project: VerifiedProjectReadLocation,
     sourceId: string,

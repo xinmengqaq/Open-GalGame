@@ -2,7 +2,6 @@ import type { SessionCard } from '../workbench-session/workbenchSession.types'
 
 import { CANVAS_PLACEMENT_GAP } from './canvasPlacement'
 
-/** 一轮最多把整张画布扫几遍；兜底防止极端布局在弹开时来回振荡。 */
 export const CARD_SPACING_MAX_ROUNDS = 8
 
 export interface CardSpacingMove {
@@ -12,9 +11,7 @@ export interface CardSpacingMove {
 }
 
 export interface CardSpacingOptions {
-  /** 卡片之间的最小间距（flow px），默认沿用画布放置间距 32。 */
   gap?: number
-  /** 最多扫描轮数，默认 {@link CARD_SPACING_MAX_ROUNDS}。 */
   maxRounds?: number
 }
 
@@ -37,16 +34,6 @@ function verticalGap(a: WorkingCard, b: WorkingCard): number {
   return Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height)
 }
 
-/**
- * 把互相重叠、或水平/垂直间隙同时小于 `gap` 的卡片按阅读顺序弹开。
- *
- * 处理顺序固定为 (y, x, cardId)，同一对卡片只移动排序靠后的那张：比较两个轴的
- * 穿透深度，沿穿透较浅的轴朝远离前一张卡的方向推到恰好 `gap`。坐标取整时向外取
- * （右/下用 ceil，左/上用 floor），保证取整后不会重新掉回不足 `gap` 的状态，
- * 因此对同一结果再调用一次必定返回空数组。
- *
- * 输入已满足间距时返回 `[]`；只返回位置发生变化的卡片，尺寸不变。
- */
 export function resolveCardSpacing(
   cards: readonly SessionCard[],
   options: CardSpacingOptions = {}
@@ -74,7 +61,6 @@ export function resolveCardSpacing(
     return []
   }
 
-  // 仅用于两两扫描的稳定顺序；返回值仍按调用方传入顺序排列。
   const ordered = [...working].sort(
     (a, b) =>
       a.y - b.y ||

@@ -2,11 +2,6 @@ import { z } from 'zod'
 
 import { MAX_IDENTITY_BYTES } from '@infrastructure/project-files/public/projectFileStorage'
 
-/**
- * R11 之前的场景画布当前格式，现仅由迁移工具读取。
- * 字段集冻结，不允许承载 title/summary/usage/defaultRelation 等后续业务字段；
- * 旧 v4 转当前格式必须经迁移映射显式补齐默认值，产品读取不再使用该版本。
- */
 export const SCENE_CANVAS_ARRANGEMENT_V4_FORMAT_VERSION = 4
 
 const identity = z

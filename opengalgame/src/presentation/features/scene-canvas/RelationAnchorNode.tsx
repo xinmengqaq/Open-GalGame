@@ -8,10 +8,6 @@ import { RecordIcon } from './SceneCanvasIcons'
 import type { RelationAnchorNode } from './sceneCanvas.types'
 import { useRelationLabelMotion } from './useRelationMotion'
 
-/**
- * 关系标签锚点。普通点击编辑特殊关系；连接来自文档或提示词卡时，
- * 标签行内的记录落点接收连接，把卡片装载为这条线的关系记录。
- */
 export function RelationAnchorNodeView({ id, data }: NodeProps<RelationAnchorNode>): ReactElement {
   const nodeActions = useContext(CanvasNodeContext)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -35,8 +31,6 @@ export function RelationAnchorNodeView({ id, data }: NodeProps<RelationAnchorNod
     loadable: canLoadRecord
   })
 
-  // 记录装载会改变标签高度，handle 的实测位置要跟着重新测量；
-  // 依赖只放节点身份与记录身份，避免每次渲染都触发测量。
   useEffect(() => {
     updateNodeInternals(id)
   }, [id, updateNodeInternals, data.recordCardId])
@@ -98,7 +92,6 @@ export function RelationAnchorNodeView({ id, data }: NodeProps<RelationAnchorNod
             ×
           </button>
         ) : null}
-        {/* 记录落点留在标签行内：命中区只覆盖可见标签，可装载时才拦截点击。 */}
         <Handle
           type="target"
           id="record"

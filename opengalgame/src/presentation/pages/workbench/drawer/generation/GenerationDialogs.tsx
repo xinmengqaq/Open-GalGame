@@ -38,7 +38,6 @@ const copy = {
   }
 } as const
 
-/** 取消和丢弃都先确认；确认框只表达当前对象，不宣称撤销已提交作品。 */
 export function GenerationDialog({
   kind,
   pending,

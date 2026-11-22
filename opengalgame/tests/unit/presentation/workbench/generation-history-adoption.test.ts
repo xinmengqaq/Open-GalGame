@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type {
+  SceneGenerationHistoryPageVO,
   SceneGenerationHistorySummaryVO,
   SceneGenerationRenderProgressEventVO,
   SceneGenerationRenderStatusVO
@@ -22,7 +23,11 @@ import {
   userMessageLabelOf
 } from '@presentation/pages/workbench/drawer/generation/generationPresentation'
 import { generationRunViewOf } from '@presentation/pages/workbench/drawer/generation/generationRunView'
-import { activeHistoryRowViewOf } from '@presentation/pages/workbench/drawer/generation/generationHistoryPresentation'
+import {
+  activeHistoryRowViewOf,
+  unfinishedOperationRowViewOf
+} from '@presentation/pages/workbench/drawer/generation/generationHistoryPresentation'
+import { unfinishedSelectionOf } from '@presentation/pages/workbench/drawer/generation/useGenerationStatus'
 import {
   prepareGenerationWorkspace,
   readGenerationHistory,
@@ -31,6 +36,13 @@ import {
 
 function ok<T>(data: T): AjaxResult<T> {
   return { code: ErrorCodes.success, msg: 'ok', data }
+}
+
+function historyPage(
+  items: readonly SceneGenerationHistorySummaryVO[],
+  unfinished: readonly SceneGenerationRenderStatusVO[] = []
+): SceneGenerationHistoryPageVO {
+  return { items, unfinished }
 }
 
 function status(
@@ -145,20 +157,22 @@ describe('生成历史投影', () => {
 
   it('历史失败终态投影后开始新操作不再被阻断', () => {
     const view = generationRunViewOf(failedHistory())
-    const active = view !== null && !isTerminalState(view.runState)
 
+    expect(view?.runState).toBe('failed')
+    expect(isTerminalState(failedHistory().state)).toBe(true)
     expect(
       startBlockedReason({
         saveState: 'saved',
         pageBlocked: false,
         canvasReady: true,
-        active,
+        statusCheck: 'ready',
+        blockingOperation: null,
         unavailableReason: null
       })
     ).toBeNull()
   })
 
-  it('历史读取返回最新失败状态，不带终态过滤', async () => {
+  it('历史非空仍合并无检查点未完成操作，不带终态过滤', async () => {
     const latest = failedHistory()
     const summary: SceneGenerationHistorySummaryVO = {
       projectId: 'project-1',
@@ -172,7 +186,29 @@ describe('生成历史投影', () => {
       message: '生成已停止',
       createdAt: '2026-10-31T12:00:00.000Z'
     }
-    const listHistory = vi.fn(async () => ok([summary]))
+    const orphan = status({
+      operationId: 'operation-orphan',
+      state: 'running',
+      stage: 'generating',
+      updatedAt: '2026-10-30T12:00:00.000Z',
+      canResumeUnfinished: true
+    })
+    const pendingVerification = status({
+      operationId: 'operation-verification',
+      state: 'interrupted',
+      stage: 'failed',
+      updatedAt: '2026-10-29T12:00:00.000Z',
+      canVerifyResult: true,
+      failure: {
+        code: ErrorCodes.operationConflict,
+        message: '提交结果待核对',
+        reason: 'modelFailure',
+        unverified: true
+      }
+    })
+    const listHistory = vi.fn(async () =>
+      ok(historyPage([summary], [orphan, pendingVerification]))
+    )
     const readStatus = vi.fn(async () => ok(latest))
     const client = {
       listHistory,
@@ -182,16 +218,83 @@ describe('生成历史投影', () => {
 
     const history = await readGenerationHistory(client, 'project-1', 'scene-1')
 
-    expect(history).toEqual({ kind: 'status', status: latest })
+    expect(history).toEqual({
+      kind: 'status',
+      status: latest,
+      unfinished: [orphan, pendingVerification]
+    })
     expect(listHistory).toHaveBeenCalledWith({
       projectId: 'project-1',
       sceneId: 'scene-1',
-      limit: 1
+      limit: 1,
+      unfinishedLimit: 100
     })
     expect(readStatus).toHaveBeenCalledWith({
       projectId: 'project-1',
       sceneId: 'scene-1',
       operationId: latest.operationId
+    })
+  })
+
+  it('只从发现列表选择遗留操作，不把列表外操作当成可选项', async () => {
+    const orphan = status({
+      operationId: 'operation-orphan',
+      state: 'running',
+      stage: 'generating',
+      updatedAt: '2026-10-30T12:00:00.000Z',
+      canResumeUnfinished: true
+    })
+    const pendingVerification = status({
+      operationId: 'operation-verification',
+      state: 'interrupted',
+      stage: 'failed',
+      canVerifyResult: true,
+      failure: {
+        code: ErrorCodes.operationConflict,
+        message: '结果待核对',
+        unverified: true
+      }
+    })
+    const history = await readGenerationHistory(
+      {
+        listHistory: vi.fn(async () => ok(historyPage([], [orphan, pendingVerification]))),
+        status: vi.fn(),
+        latest: vi.fn(async () => ok(null))
+      } as unknown as Pick<SceneGenerationClient, 'listHistory' | 'status' | 'latest'>,
+      'project-1',
+      'scene-1'
+    )
+    if (history.kind === 'error') throw new Error('历史读取失败')
+
+    expect(history.unfinished.map((item) => item.operationId)).toEqual([
+      'operation-orphan',
+      'operation-verification'
+    ])
+    expect(
+      unfinishedSelectionOf(history.unfinished, 'operation-verification', {
+        projectId: 'project-1',
+        sceneId: 'scene-1'
+      })
+    ).toBe(pendingVerification)
+    expect(
+      unfinishedSelectionOf(history.unfinished, 'operation-missing', {
+        projectId: 'project-1',
+        sceneId: 'scene-1'
+      })
+    ).toBeNull()
+    expect(
+      unfinishedSelectionOf(history.unfinished, 'operation-orphan', {
+        projectId: 'project-2',
+        sceneId: 'scene-1'
+      })
+    ).toBeNull()
+    expect(unfinishedOperationRowViewOf(orphan)).toMatchObject({
+      status: '生成中',
+      canResume: true
+    })
+    expect(unfinishedOperationRowViewOf(pendingVerification)).toMatchObject({
+      status: '结果待核对',
+      canVerify: true
     })
   })
 
@@ -207,7 +310,7 @@ describe('生成历史投影', () => {
         lastActivityAt: '2026-10-31T12:00:00.000Z'
       }
     })
-    const listHistory = vi.fn(async () => ok([]))
+    const listHistory = vi.fn(async () => ok(historyPage([])))
     const readStatus = vi.fn()
     const readLatest = vi.fn(async () => ok(running))
     const client = {
@@ -218,11 +321,12 @@ describe('生成历史投影', () => {
 
     const history = await readGenerationHistory(client, 'project-1', 'scene-1')
 
-    expect(history).toEqual({ kind: 'status', status: running })
+    expect(history).toEqual({ kind: 'status', status: running, unfinished: [] })
     expect(listHistory).toHaveBeenCalledWith({
       projectId: 'project-1',
       sceneId: 'scene-1',
-      limit: 1
+      limit: 1,
+      unfinishedLimit: 100
     })
     expect(readLatest).toHaveBeenCalledWith({ projectId: 'project-1', sceneId: 'scene-1' })
     expect(readStatus).not.toHaveBeenCalled()
@@ -235,7 +339,7 @@ describe('生成历史投影', () => {
   })
 
   it('历史为空且没有最近一次执行时保持空，不伪造历史条目', async () => {
-    const listHistory = vi.fn(async () => ok([]))
+    const listHistory = vi.fn(async () => ok(historyPage([])))
     const readStatus = vi.fn()
     const noExecution = {
       listHistory,
@@ -243,7 +347,8 @@ describe('生成历史投影', () => {
       latest: vi.fn(async () => ok(null))
     } as unknown as Pick<SceneGenerationClient, 'listHistory' | 'status' | 'latest'>
     await expect(readGenerationHistory(noExecution, 'project-1', 'scene-1')).resolves.toEqual({
-      kind: 'empty'
+      kind: 'empty',
+      unfinished: []
     })
 
     const failedLatest = {
@@ -252,7 +357,8 @@ describe('生成历史投影', () => {
       latest: vi.fn(async () => ({ code: ErrorCodes.internalError, msg: '读取失败' }))
     } as unknown as Pick<SceneGenerationClient, 'listHistory' | 'status' | 'latest'>
     await expect(readGenerationHistory(failedLatest, 'project-1', 'scene-1')).resolves.toEqual({
-      kind: 'empty'
+      kind: 'empty',
+      unfinished: []
     })
     expect(readStatus).not.toHaveBeenCalled()
   })
@@ -316,7 +422,7 @@ describe('生成历史读取错误与启动前工作区核对', () => {
     }
     const readLatest = vi.fn()
     const client = {
-      listHistory: vi.fn(async () => ok([summary])),
+      listHistory: vi.fn(async () => ok(historyPage([summary]))),
       status: vi.fn(async () => ({ code: ErrorCodes.internalError, msg: '状态读取失败' })),
       latest: readLatest
     } as unknown as Pick<SceneGenerationClient, 'listHistory' | 'status' | 'latest'>

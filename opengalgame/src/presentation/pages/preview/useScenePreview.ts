@@ -103,11 +103,6 @@ export interface UseScenePreviewResult {
   readonly closeSession: () => Promise<boolean>
 }
 
-/**
- * 当前场景预览的会话、台词草稿和保存编排。
- * 打开、准备、订阅、草稿、定位、保存和结算都只经用户接口层客户端；
- * 这里不创建第二套播放状态，也不用计时器推进舞台。
- */
 export function useScenePreview({
   client,
   projectId,
@@ -116,7 +111,6 @@ export function useScenePreview({
 }: UseScenePreviewOptions): UseScenePreviewResult {
   const availability = useScenePreviewAvailability({ client, projectId, sceneId })
   const draft = usePreviewDraftEditing()
-  // 唯一实例：save 写入，stage 只读，外层只负责注入。
   const saveInFlightRef = useRef(false)
 
   const lifecycle = usePreviewSessionLifecycle({
@@ -165,7 +159,6 @@ export function useScenePreview({
   const { syncRefs } = draft
   const { syncStateRefs } = save
 
-  // 与拆分前相同的渲染后同步点：状态先落渲染，再按原顺序回写 ref。
   useEffect(() => {
     syncSessionRef()
     syncRefs()

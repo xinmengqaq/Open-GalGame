@@ -7,7 +7,6 @@ import { AppUpdateSection, ManualDownloadLink } from './AppUpdateSection'
 import styles from './AppSettingsDialog.module.css'
 import type { AppUpdateFlow } from './useAppUpdate'
 
-/** 首页入口的常驻应用设置对话框；开关只改变可见性，不清主进程更新状态。 */
 export function AppSettingsDialog({ flow }: { flow: AppUpdateFlow }): ReactElement {
   return (
     <Dialog
@@ -28,7 +27,6 @@ export function AppSettingsDialog({ flow }: { flow: AppUpdateFlow }): ReactEleme
   )
 }
 
-/** 更新失败提示：只展示主进程映射过的安全文案，关闭不改变主进程状态。 */
 export function AppUpdateErrorDialog({ flow }: { flow: AppUpdateFlow }): ReactElement {
   const error = flow.error
   return (

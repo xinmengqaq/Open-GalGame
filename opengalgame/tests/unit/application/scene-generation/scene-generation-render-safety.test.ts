@@ -137,15 +137,12 @@ it('工作区核对成功后才保存画布并启动', async () => {
 it('成功启动绑定素材正文和编排版本，并固定候选审阅', async () => {
   const f = createSceneGenerationFixture()
   f.input.readInputs.mockResolvedValue(await materialInputs('saved-version'))
-  f.workflow.executeGeneration.mockResolvedValue({
-    ...f.ready,
-    budget: {
-      ...f.ready.budget,
-      inputTokens: 11,
-      outputTokens: 7,
-      totalTokens: 18,
-      tokenLimit: 100
-    }
+  honorPauseAtReady(f, {
+    ...f.ready.budget,
+    inputTokens: 11,
+    outputTokens: 7,
+    totalTokens: 18,
+    tokenLimit: 100
   })
   const started = await launchFor(f, async () => {}, 'saved-version').startSceneGeneration(
     startRequest()
@@ -410,7 +407,7 @@ it('素材增强诊断只透出安全引用事实，工程路径不进渲染状�
 it('暂停后的渲染状态带当前检查点，旧检查点和错绑身份仍不能恢复', async () => {
   const f = createSceneGenerationFixture()
   f.input.readInputs.mockResolvedValue(await materialInputs('saved-version'))
-  f.workflow.executeGeneration.mockResolvedValue(f.ready)
+  honorPauseAtReady(f)
   const launch = launchFor(f, async () => {}, 'saved-version')
   const started = await launch.startSceneGeneration(startRequest())
   expect(started.checkpointId).toBeUndefined()
@@ -570,6 +567,26 @@ it('暂停事件读取检查点失败时保留已暂停记录，非暂停写入�
   expect(observed.fixture.workflow.readCheckpoint).toHaveBeenCalledTimes(reads)
 })
 
+/**
+ * 模拟真实工作流：暂停意图已持久时返回安全暂停，而不是先假装 ready 再等提交门兜底。
+ * 渲染消费者只关心暂停后的状态与进度，不依赖 ready 直接提交。
+ */
+function honorPauseAtReady(
+  fixture: SceneGenerationTestFixture,
+  budget: SceneGenerationTestFixture['ready']['budget'] = fixture.ready.budget
+): void {
+  fixture.workflow.executeGeneration.mockImplementation(async () => {
+    const pauseRequested = [...fixture.executions.values()].some(
+      (execution) => execution.pauseRequested === true
+    )
+    return {
+      ...fixture.ready,
+      budget,
+      ...(pauseRequested ? { state: 'interrupted' as const } : {})
+    }
+  })
+}
+
 function startRequest(): StartSceneGenerationDTO {
   return {
     projectId: 'project-1',
@@ -699,7 +716,6 @@ type PausedProgressObservation = {
   }
 }
 
-/** 启动可控工作流并安全暂停；按钮只根据进度事件采纳结果，不重新查询状态。 */
 async function observePausedProgress(
   canContinue: boolean,
   checkpointReadFails = false
@@ -718,7 +734,7 @@ async function observePausedProgress(
     })
   }
   fixture.input.readInputs.mockResolvedValue(await materialInputs('saved-version'))
-  fixture.workflow.executeGeneration.mockResolvedValue(fixture.ready)
+  honorPauseAtReady(fixture)
   const started = await launchFor(fixture, async () => {}, 'saved-version').startSceneGeneration(
     startRequest()
   )
@@ -921,7 +937,7 @@ it('失败按原因使用固定安全文案，未知原文回退阶段文案', (
   }
 })
 
-it('只有 commitUnknown 标记待核对，5102 本身不改变核对状态', () => {
+it('commitUnknown 与 writeUnknown 标记待核对，5102 本身不改变核对状态', () => {
   const failed = {
     projectId: 'project-1',
     sceneId: 'scene-1',
@@ -971,6 +987,19 @@ it('只有 commitUnknown 标记待核对，5102 本身不改变核对状态', ()
   ).toEqual({
     code: ErrorCodes.operationConflict,
     message: '提交结果待核对',
+    reason: 'modelFailure',
+    reference: 'c0a17b93e52d',
+    unverified: true
+  })
+  expect(
+    toRenderStatusVO({
+      ...failed,
+      state: 'interrupted',
+      interruptReason: 'writeUnknown'
+    }).failure
+  ).toEqual({
+    code: ErrorCodes.operationConflict,
+    message: '候选写入结果待核对',
     reason: 'modelFailure',
     reference: 'c0a17b93e52d',
     unverified: true
@@ -1364,7 +1393,7 @@ it('有安全分类但缺下一步动作时保持缺失，不在投影补造', (
 
 it('待核对或候选冲突中断不补历史失败原因', () => {
   const createdAt = '2026-11-04T12:00:00.000Z'
-  for (const interruptReason of ['commitUnknown', 'candidateConflict'] as const) {
+  for (const interruptReason of ['commitUnknown', 'writeUnknown', 'candidateConflict'] as const) {
     const execution = projectionExecution({
       state: 'interrupted',
       step: undefined,
@@ -1740,6 +1769,39 @@ function detailInputs(): SceneGenerationInputsDTO {
     ]
   }
 }
+
+it('历史摘要把写前题组呈现为等待确认，而不是已就绪候选', () => {
+  const checkpointId = 'checkpoint-question'
+  const execution = projectionExecution({
+    state: 'waiting',
+    step: undefined,
+    checkpointId,
+    interaction: {
+      interactionId: 'interaction-question',
+      checkpointId,
+      kind: 'decision',
+      message: '本轮需要你先确认 1 个创作决定，确认后会继续生成。',
+      options: [],
+      questions: [
+        {
+          questionId: 'q1',
+          prompt: '开场停在哪里？',
+          options: [
+            { id: 'q1o1', label: '门外', description: '保留悬念' },
+            { id: 'q1o2', label: '桌边', description: '收在日常' },
+            { id: 'q1o3', label: '雨里', description: '强调离别' }
+          ]
+        }
+      ],
+      allowedReplies: ['answers', 'discard']
+    }
+  })
+  const summary = toHistorySummary(execution, '2026-11-21T00:00:00.000Z')
+  expect(summary).toMatchObject({ boundary: 'waitingDecision', message: '等待你确认创作问题' })
+  expect(summary?.candidateSnapshotId).toBeUndefined()
+  expect(toRenderStatusVO(execution).interaction?.questions).toHaveLength(1)
+  expect(toRenderStatusVO(execution).stageMessage).toBe('等待你确认创作问题')
+})
 
 function projectionExecution(
   patch: Partial<SceneGenerationExecution> = {}

@@ -22,6 +22,7 @@ import {
 } from './SceneGenerationExecutionDocument'
 import {
   LEGACY_EXECUTION_RECORD_REASONS,
+  isUnfinishedLegacyOperationState,
   legacyExecutionRecordReason,
   legacyExecutionRecordTimeFacts,
   legacyOperationFactSchema,
@@ -61,7 +62,6 @@ const LEGACY_IDENTITY_KEYS = [
   'state'
 ] as const
 
-/** 归档格式只在迁移与恢复工具内读取，产品不把归档当数据源。 */
 export const EXECUTION_ARCHIVE_FORMAT_VERSION = 1
 export const EXECUTION_ARCHIVE_KIND = 'execution-record-legacy-archive'
 export const EXECUTION_ARCHIVE_TOOL_VERSION = '1'
@@ -157,7 +157,6 @@ export function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-/** 与 writeJsonDocument 的默认序列化保持一致，归档记录的摘要才有确定含义。 */
 export function serializeJsonDocument(value: unknown): Buffer {
   return Buffer.from(`${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
@@ -280,7 +279,6 @@ function assertLegacyRecord(
   }
 }
 
-/** 严格校验 manifest 事实；复用归档前必须通过，损坏或字段漂移都不再重写。 */
 export function validateExecutionArchiveManifest(
   value: unknown,
   expected?: Partial<ReadExecutionRecordArchiveExpectation>
@@ -433,7 +431,6 @@ export function validateExecutionArchiveManifest(
   }
 }
 
-/** 用生产 schema 复核源文件与 manifest 的 legacy 记录一一对应，防止归档事实漂移。 */
 export function validateExecutionArchiveSource(
   manifest: ExecutionArchiveManifest,
   sourceBytes: Uint8Array
@@ -507,7 +504,6 @@ async function lstatIfExists(path: string): Promise<Stats | null> {
   }
 }
 
-/** 逐段拒绝符号链接/junction；缺失路径视为尚未创建。 */
 async function assertNoSymlinkComponents(
   root: string,
   target: string,
@@ -566,7 +562,6 @@ async function readArchiveFiles(
   return { manifest, sourceBytes }
 }
 
-/** 读取并完整校验一个归档；产品只在复用/恢复前调用。 */
 export async function readExecutionRecordArchive(
   directory: string,
   expectation: ReadExecutionRecordArchiveExpectation
@@ -584,7 +579,6 @@ async function writeExclusiveFile(path: string, bytes: Uint8Array): Promise<void
   }
 }
 
-/** 原子替换文件；失败时清理临时文件，重启后不会读到半个 JSON。 */
 export async function writeBytesAtomically(path: string, bytes: Uint8Array): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
   const temporary = join(dirname(path), `.opengalgame-tmp-${randomUUID()}`)
@@ -643,10 +637,6 @@ function buildManifest(
   }
 }
 
-/**
- * 迁前把原始字节和事实写入 sidecar；同一来源摘要只写一次。
- * 已存在的归档必须完整匹配当前事实才复用，损坏归档不会被覆盖。
- */
 export async function writeExecutionRecordArchive(
   input: WriteExecutionRecordArchiveInput
 ): Promise<ExecutionRecordArchiveResult> {
@@ -660,6 +650,11 @@ export async function writeExecutionRecordArchive(
     throw archiveFailure('执行记录归档计数不自洽')
   if (input.counts.legacy !== input.legacyRecords.length)
     throw archiveFailure('执行记录归档 legacy 计数与记录不一致')
+  const unfinished = input.legacyRecords.filter((record) =>
+    isUnfinishedLegacyOperationState(record.state)
+  )
+  if (unfinished.length > 0)
+    throw archiveFailure('未结束的旧记录不能归档升级，请先在旧版完成或取消该操作')
 
   let stateRoot: string
   try {
@@ -728,10 +723,6 @@ export async function writeExecutionRecordArchive(
   return { directory, manifest: validated, reused: false }
 }
 
-/**
- * 条件恢复：只有磁盘仍是本次迁移写出的目标摘要才回写原始字节，
- * 外部新写不会被覆盖。
- */
 export async function restoreExecutionRecordSource(input: {
   readonly stateRoot: string
   readonly projectId: string
@@ -777,7 +768,6 @@ export async function restoreExecutionRecordSource(input: {
   return true
 }
 
-/** 文件不存在时返回 null；读取失败归类为执行记录读写失败。 */
 export async function readExecutionRecordDocumentBytes(path: string): Promise<Buffer | null> {
   try {
     return await readFile(path)
@@ -787,7 +777,6 @@ export async function readExecutionRecordDocumentBytes(path: string): Promise<Bu
   }
 }
 
-/** 迁移 manifest 的 modifiedAt 直接取源文件真实修改时间。 */
 export async function executionRecordDocumentModifiedAt(path: string): Promise<string> {
   try {
     return (await stat(path)).mtime.toISOString()

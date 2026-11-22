@@ -4,11 +4,6 @@ import { useEffect, type RefObject } from 'react'
 
 import { prefersReducedMotion } from '../../effects/motion'
 
-/**
- * 失败/损坏状态进入：印章落下、正文错峰出现，损坏态额外散开一圈警示光环。
- * 按钮按下、重试请求发出时给短反馈；减少动态效果时只保留短淡入。
- * 所有补间结束都清掉内联 transform/opacity，避免影响后续布局。
- */
 export function useSceneCanvasFailureMotion(
   scope: RefObject<HTMLElement | null>,
   signature: string

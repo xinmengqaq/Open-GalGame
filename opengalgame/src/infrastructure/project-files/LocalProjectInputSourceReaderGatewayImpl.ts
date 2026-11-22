@@ -33,9 +33,7 @@ import { probeSourceReadable, readSourceContent } from './reading/ProjectInputSo
 import { withProjectFileRead, type ProjectFileReadWindow } from './reading/ProjectFileReadWindow'
 import { StableFileReadError } from '@infrastructure/storage/StableProjectFileReader'
 
-/** 本机工程输入来源读取适配。不执行领域合法性判断。 */
 export class LocalProjectInputSourceReaderGatewayImpl implements ProjectInputSourceReaderGateway {
-  /** 扫描来源摘要，不加载全部正文或媒体字节。 */
   scanProjectInputSources(
     project: VerifiedProjectReadLocation
   ): Promise<readonly ProjectInputSourceSummary[]> {
@@ -116,7 +114,6 @@ export class LocalProjectInputSourceReaderGatewayImpl implements ProjectInputSou
     })
   }
 
-  /** 读取一致目录快照。不创建缺失的目录文件。 */
   readProjectInputCatalog(
     project: VerifiedProjectReadLocation
   ): Promise<ProjectInputCatalogReadFact> {
@@ -127,7 +124,6 @@ export class LocalProjectInputSourceReaderGatewayImpl implements ProjectInputSou
     })
   }
 
-  /** 读取文件夹删除计划。子树无法完整确定时失败。 */
   readFolderDeletionPlan(
     project: VerifiedProjectReadLocation,
     folderId: string

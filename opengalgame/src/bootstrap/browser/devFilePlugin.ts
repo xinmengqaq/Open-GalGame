@@ -26,9 +26,6 @@ interface LoadedBackend {
   subscribeCandidatePreviewEvents(publish: (event: unknown) => void): () => void
 }
 
-/**
- * 只挂在 Vite 开发服务上。监听地址已限定为 127.0.0.1，请求再核对回环来源。
- */
 export function browserDevFilesPlugin(): Plugin {
   return {
     name: 'opengalgame-browser-dev-files',
@@ -110,10 +107,6 @@ async function writeProgress(
   request.on('close', () => watched.stop())
 }
 
-/**
- * 预览运行时事件走同源 SSE。事件已在应用层按会话过滤；渲染端仍按会话身份再过滤。
- * 订阅命令单独走 `/dev/call`，这里只负责把已确认的运行时事实送到页面。
- */
 function writePreviewRuntime(
   backend: LoadedBackend,
   request: IncomingMessage,
@@ -275,10 +268,6 @@ function isLoopback(address: string | undefined): boolean {
   )
 }
 
-/**
- * 回环地址挡不住本机其他网页。写操作和事件流必须来自开发页自身。
- * 浏览器会带 Origin 或 Sec-Fetch-Site；两者都没有时只接受无来源的本机调用。
- */
 function isSameOriginDevRequest(request: IncomingMessage): boolean {
   const site = singleHeader(request.headers['sec-fetch-site'])
   if (site === 'cross-site' || site === 'same-site') return false

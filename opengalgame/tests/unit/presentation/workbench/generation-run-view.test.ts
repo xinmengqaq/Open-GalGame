@@ -181,7 +181,6 @@ describe('generationRunViewOf', () => {
     })
     const actions = generationRunActionsOf(view!)
     expect(actions).toEqual(['view-previous-candidate', 'regenerate', 'reload', 'open-summary'])
-    // 同操作重试和连接检查当前没有公开客户端能力，不能出现在页面动作里。
     expect(actions.join('|')).not.toContain('retryOperation')
     expect(actions.join('|')).not.toContain('checkConnection')
   })

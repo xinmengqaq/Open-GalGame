@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProjectVersioningApplicationService } from '@application/project-versioning/services/ProjectVersioningApplicationService'
-import { ReadLatestPreviewSaveUseCase } from '@application/scene-export/services/ReadLatestPreviewSaveUseCase'
+import { ReadLatestSavedSceneVersionUseCase } from '@application/scene-export/services/ReadLatestSavedSceneVersionUseCase'
 import { ExportSavedScene } from '@application/scene-export/services/impl/ExportSavedScene'
 import type { SavedSceneExportSource } from '@application/scene-export/ports/SceneExportSourceGateway'
 import type { WindowsScenePackager } from '@application/scene-export/ports/WindowsScenePackager'
@@ -19,7 +19,7 @@ import { RegisteredSceneLocationGatewayImpl } from '@infrastructure/scenes/Regis
 import { SceneAssetReferenceGatewayImpl } from '@infrastructure/scenes/SceneAssetReferenceGatewayImpl'
 import { SceneScriptParserGatewayImpl } from '@infrastructure/scenes/SceneScriptParserGatewayImpl'
 import { SceneSourceReaderGatewayImpl } from '@infrastructure/scenes/SceneSourceReaderGatewayImpl'
-import { LocalPreviewSaveVersionQueryGateway } from '@infrastructure/scene-export/LocalPreviewSaveVersionQueryGateway'
+import { LocalSavedSceneVersionQueryGateway } from '@infrastructure/scene-export/LocalSavedSceneVersionQueryGateway'
 import { LocalSceneExportSourceGateway } from '@infrastructure/scene-export/LocalSceneExportSourceGateway'
 import { LocalScenePreviewSourceGateway } from '@infrastructure/scene-preview/LocalScenePreviewSourceGateway'
 import { previewCallerOperationId } from '@infrastructure/scene-preview/previewSaveIdentity'
@@ -28,7 +28,7 @@ import {
   type PreviewSaveRecord
 } from '@infrastructure/scene-preview/previewSaveRecord'
 import {
-  parseLatestPreviewSaveResult,
+  parseLatestSavedSceneVersionResult,
   parseSceneExportResult
 } from '@interfaces/scene-export/contracts/SceneExportResponseSchema'
 
@@ -60,7 +60,6 @@ interface PreparedOptions {
   readonly contentDigest?: string | null
 }
 
-/** 落盘一个已登记的正式工程，并写入该场景的预览保存记录。 */
 async function preparedExport(options: PreparedOptions = {}): Promise<PreparedExport> {
   const root = await mkdtemp(join(tmpdir(), 'scene-export-content-basis-'))
   roots.push(root)
@@ -124,8 +123,10 @@ async function preparedExport(options: PreparedOptions = {}): Promise<PreparedEx
   return { userDirectory, projectRoot, reader, preview, record, versioning: settledVersioning(record) }
 }
 
-/** 只替换已结算边界；保存记录、工程文件和查询目录都走真实文件系统。 */
-function settledVersioning(record: PreviewSaveRecord): ProjectVersioningApplicationService {
+function settledVersioning(
+  record: PreviewSaveRecord,
+  linkOperationId = record.operationId
+): ProjectVersioningApplicationService {
   return {
     findCallerOperation: vi.fn(
       async (request: { sourceModule: string; callerOperationId: string }) => {
@@ -134,7 +135,7 @@ function settledVersioning(record: PreviewSaveRecord): ProjectVersioningApplicat
           projectId: record.projectId,
           sourceModule: request.sourceModule,
           callerOperationId: record.callerOperationId,
-          operationId: record.operationId
+          operationId: linkOperationId
         }
       }
     ),
@@ -145,30 +146,44 @@ function settledVersioning(record: PreviewSaveRecord): ProjectVersioningApplicat
       return {
         operationId: request.operationId,
         state: '已提交' as const,
-        revisionRef: 'revision-r16'
+        revisionRef: 'a'.repeat(40)
       }
     })
   } as unknown as ProjectVersioningApplicationService
 }
 
+function queryGateway(prepared: PreparedExport): LocalSavedSceneVersionQueryGateway {
+  return new LocalSavedSceneVersionQueryGateway(
+    prepared.userDirectory,
+    prepared.versioning,
+    prepared.reader
+  )
+}
+
 async function latestSave(prepared: PreparedExport): Promise<{
-  requestId: string
+  versionReference: { kind: 'preview-save'; requestId: string }
   revisionDigest: string
   contentBasis: { digest: string; parserVersion: string; engineVersion: string }
 }> {
-  const useCase = new ReadLatestPreviewSaveUseCase(
-    new LocalPreviewSaveVersionQueryGateway(prepared.userDirectory, prepared.versioning)
-  )
-  const latest = await useCase.readLatestPreviewSave({ projectId, sceneId })
-  if (!latest) throw new Error('测试夹具没有已结算的预览保存')
-  return latest
+  const useCase = new ReadLatestSavedSceneVersionUseCase(queryGateway(prepared))
+  const latest = await useCase.readLatestSavedSceneVersion({ projectId, sceneId })
+  if (!latest || latest.versionReference.kind !== 'preview-save') {
+    throw new Error('测试夹具没有已结算的预览保存')
+  }
+  return latest as {
+    versionReference: { kind: 'preview-save'; requestId: string }
+    revisionDigest: string
+    contentBasis: { digest: string; parserVersion: string; engineVersion: string }
+  }
 }
 
-function exportRequest(basis: {
-  digest: string
-  parserVersion: string
-  engineVersion: string
-}): {
+function exportRequest(
+  latest: {
+    contentBasis: { digest: string; parserVersion: string; engineVersion: string }
+    versionReference: { kind: 'preview-save'; requestId: string }
+  },
+  patch: Partial<{ digest: string; parserVersion: string; engineVersion: string }> = {}
+): {
   projectId: string
   sceneId: string
   contentBasis: { digest: string; parserVersion: string; engineVersion: string }
@@ -177,51 +192,33 @@ function exportRequest(basis: {
   return {
     projectId,
     sceneId,
-    contentBasis: basis,
-    versionReference: { kind: 'preview-save', requestId }
+    contentBasis: { ...latest.contentBasis, ...patch },
+    versionReference: latest.versionReference
   }
 }
 
 describe('导出内容依据的保存记录消费', () => {
   it('保存查询按落盘记录生成固定的 contentBasis 形状与 wire 序列化', async () => {
-    const prepared = await preparedExport({
-      parserVersion: 'parser-r16-pin',
-      engineVersion: 'engine-r16-pin'
-    })
-    const gateway = new LocalPreviewSaveVersionQueryGateway(
-      prepared.userDirectory,
-      prepared.versioning
-    )
-    const candidates = await gateway.listSettledPreviewSaves({ projectId, sceneId })
+    const prepared = await preparedExport()
+    const gateway = queryGateway(prepared)
+    const candidates = await gateway.listExportableSavedSceneVersions({ projectId, sceneId })
     expect(candidates).toHaveLength(1)
     const candidate = candidates[0]!
-    expect(candidate.contentBasis).toEqual({
-      digest: prepared.preview.contentBasis.digest,
-      parserVersion: 'parser-r16-pin',
-      engineVersion: 'engine-r16-pin'
-    })
+    expect(candidate.versionReference).toEqual({ kind: 'preview-save', requestId })
+    expect(candidate.contentBasis).toEqual(prepared.preview.contentBasis)
     expect(Object.keys(candidate.contentBasis).sort()).toEqual([
       'digest',
       'engineVersion',
       'parserVersion'
     ])
-    expect(JSON.parse(JSON.stringify(candidate.contentBasis))).toEqual({
-      digest: prepared.preview.contentBasis.digest,
-      parserVersion: 'parser-r16-pin',
-      engineVersion: 'engine-r16-pin'
-    })
 
     const latest = await latestSave(prepared)
     expect(latest).toEqual({
-      requestId,
+      versionReference: { kind: 'preview-save', requestId },
       revisionDigest: prepared.record.revisionDigest,
-      contentBasis: {
-        digest: prepared.preview.contentBasis.digest,
-        parserVersion: 'parser-r16-pin',
-        engineVersion: 'engine-r16-pin'
-      }
+      contentBasis: prepared.preview.contentBasis
     })
-    const wire = parseLatestPreviewSaveResult(
+    const wire = parseLatestSavedSceneVersionResult(
       JSON.parse(
         JSON.stringify({
           code: ErrorCodes.success,
@@ -233,41 +230,46 @@ describe('导出内容依据的保存记录消费', () => {
     expect(wire).toEqual({
       code: ErrorCodes.success,
       msg: '读取成功',
-      data: {
-        requestId,
-        revisionDigest: prepared.record.revisionDigest,
-        contentBasis: {
-          digest: prepared.preview.contentBasis.digest,
-          parserVersion: 'parser-r16-pin',
-          engineVersion: 'engine-r16-pin'
-        }
-      }
+      data: latest
     })
+  })
+
+  it('解析或引擎版本不再是当前审计版本时，预览保存不进入可导出候选', async () => {
+    const prepared = await preparedExport({
+      parserVersion: 'parser-r16-pin',
+      engineVersion: 'engine-r16-pin'
+    })
+    const gateway = queryGateway(prepared)
+    await expect(
+      gateway.listExportableSavedSceneVersions({ projectId, sceneId })
+    ).resolves.toEqual([])
+    await expect(
+      new ReadLatestSavedSceneVersionUseCase(gateway).readLatestSavedSceneVersion({
+        projectId,
+        sceneId
+      })
+    ).resolves.toBeNull()
   })
 
   it('导出边界消费同一条已结算保存记录，结果与 wire 中的 contentBasis 不变', async () => {
     const prepared = await preparedExport()
     const latest = await latestSave(prepared)
-    const expectedBasis = {
-      digest: prepared.preview.contentBasis.digest,
-      parserVersion: '4.6.5',
-      engineVersion: '4.6.5'
-    }
+    const expectedBasis = prepared.preview.contentBasis
     expect(latest.contentBasis).toEqual(expectedBasis)
     const sourceGateway = new LocalSceneExportSourceGateway(
       prepared.userDirectory,
       prepared.versioning,
       prepared.reader
     )
-    const request = exportRequest(latest.contentBasis)
+    const request = exportRequest(latest)
     const source = await sourceGateway.readSavedScene(request)
     expect(source.contentBasis).toEqual(expectedBasis)
+    expect(source.versionReference).toEqual({ kind: 'preview-save', requestId })
     expect(Object.keys(source.contentBasis).sort()).toEqual([
       'digest',
       'engineVersion',
       'parserVersion'
     ])
-    expect(JSON.parse(JSON.stringify(source.contentBasis))).toEqual(expectedBasis)
     expect(source.entryRelativePath).toBe(entryRelativePath)
     expect(source.sceneText).toBe(script)
 
@@ -280,7 +282,7 @@ describe('导出内容依据的保存记录消费', () => {
           artifact: {
             executableName: 'WebGAL.exe',
             directoryName: 'scene-r16',
-            directoryPath: 'D:/opengalgame/exports/scene-r16',
+            directoryPath: 'D:/projects/exported/exports/scene-r16',
             bytes: 128,
             containsFixedEngine: true,
             entryRelativePath: input.entryRelativePath,
@@ -288,10 +290,21 @@ describe('导出内容依据的保存记录消费', () => {
             versionReference: input.versionReference
           }
         }
+      },
+      async verifyWindowsScene() {
+        return true
       }
     }
     const service = new ExportSavedScene({
       sources: sourceGateway,
+      destinations: {
+        chooseParentDirectory: vi.fn(async () => ({ status: 'canceled' as const })),
+        resolveDestination: async () => ({
+          kind: 'workspace',
+          parentDirectory: 'D:/projects/exported/exports',
+          projectRoot: 'D:/projects/exported'
+        })
+      },
       packager
     })
     const result = await service.exportSavedScene(request)
@@ -299,11 +312,6 @@ describe('导出内容依据的保存记录消费', () => {
     if (result.status !== 'succeeded') throw new Error('导出没有成功')
     expect(packaged!.contentBasis).toEqual(expectedBasis)
     expect(result.artifact.contentBasis).toEqual(expectedBasis)
-    expect(Object.keys(result.artifact.contentBasis).sort()).toEqual([
-      'digest',
-      'engineVersion',
-      'parserVersion'
-    ])
     expect(JSON.parse(JSON.stringify(result.artifact.contentBasis))).toEqual(expectedBasis)
     const wire = parseSceneExportResult(
       JSON.parse(
@@ -333,21 +341,37 @@ describe('导出内容依据的保存记录消费', () => {
       prepared.versioning,
       prepared.reader
     )
-    const request = exportRequest({ ...latest.contentBasis, ...patch })
-    await expect(sourceGateway.readSavedScene(request)).rejects.toMatchObject({
+    await expect(
+      sourceGateway.readSavedScene(exportRequest(latest, patch))
+    ).rejects.toMatchObject({
       code: SceneExportErrorCodes.savedContentMismatch
+    })
+  })
+
+  it('预览保存的 caller link operation 不一致时导出点击拒绝', async () => {
+    const prepared = await preparedExport()
+    const latest = await latestSave(prepared)
+    const sourceGateway = new LocalSceneExportSourceGateway(
+      prepared.userDirectory,
+      settledVersioning(prepared.record, 'another-operation'),
+      prepared.reader
+    )
+    await expect(sourceGateway.readSavedScene(exportRequest(latest))).rejects.toMatchObject({
+      code: SceneExportErrorCodes.saveNotCommitted
     })
   })
 
   it('已结算但保存记录没有内容摘要时不产生导出依据', async () => {
     const prepared = await preparedExport({ contentDigest: null })
-    const gateway = new LocalPreviewSaveVersionQueryGateway(
-      prepared.userDirectory,
-      prepared.versioning
+    const gateway = queryGateway(prepared)
+    await expect(gateway.listExportableSavedSceneVersions({ projectId, sceneId })).resolves.toEqual(
+      []
     )
-    await expect(gateway.listSettledPreviewSaves({ projectId, sceneId })).resolves.toEqual([])
     await expect(
-      new ReadLatestPreviewSaveUseCase(gateway).readLatestPreviewSave({ projectId, sceneId })
+      new ReadLatestSavedSceneVersionUseCase(gateway).readLatestSavedSceneVersion({
+        projectId,
+        sceneId
+      })
     ).resolves.toBeNull()
     const sourceGateway = new LocalSceneExportSourceGateway(
       prepared.userDirectory,
@@ -355,7 +379,12 @@ describe('导出内容依据的保存记录消费', () => {
       prepared.reader
     )
     await expect(
-      sourceGateway.readSavedScene(exportRequest(prepared.preview.contentBasis))
+      sourceGateway.readSavedScene(
+        exportRequest({
+          contentBasis: prepared.preview.contentBasis,
+          versionReference: { kind: 'preview-save', requestId }
+        })
+      )
     ).rejects.toMatchObject({ code: SceneExportErrorCodes.saveNotCommitted })
   })
 
@@ -363,14 +392,35 @@ describe('导出内容依据的保存记录消费', () => {
     const prepared = await preparedExport()
     const latest = await latestSave(prepared)
     await writeFile(join(prepared.projectRoot, entryRelativePath), '小明:第三句;\r\n', 'utf8')
+    await expect(
+      queryGateway(prepared).listExportableSavedSceneVersions({ projectId, sceneId })
+    ).resolves.toEqual([])
     const sourceGateway = new LocalSceneExportSourceGateway(
       prepared.userDirectory,
       prepared.versioning,
       prepared.reader
     )
-    await expect(sourceGateway.readSavedScene(exportRequest(latest.contentBasis))).rejects.toMatchObject(
-      { code: SceneExportErrorCodes.savedContentMismatch }
-    )
+    await expect(sourceGateway.readSavedScene(exportRequest(latest))).rejects.toMatchObject({
+      code: SceneExportErrorCodes.savedContentMismatch
+    })
+  })
+
+  it('其他场景的保存记录不会成为当前场景候选', async () => {
+    const prepared = await preparedExport()
+    const otherSceneId = 'scene-other'
+    const otherRecord: PreviewSaveRecord = {
+      ...prepared.record,
+      sceneId: otherSceneId,
+      callerOperationId: previewCallerOperationId(projectId, otherSceneId, requestId)
+    }
+    await writePreviewSaveRecord(prepared.projectRoot, otherRecord)
+    const candidates = await queryGateway(prepared).listExportableSavedSceneVersions({
+      projectId,
+      sceneId
+    })
+    expect(candidates.map((candidate) => candidate.versionReference)).toEqual([
+      { kind: 'preview-save', requestId }
+    ])
   })
 
   it('内容依据出现额外 wire 字段时拒绝导出请求且不读取保存内容', async () => {
@@ -381,15 +431,26 @@ describe('导出内容依据的保存记录消费', () => {
     })
     const service = new ExportSavedScene({
       sources: { readSavedScene },
+      destinations: {
+        chooseParentDirectory: vi.fn(async () => ({ status: 'canceled' as const })),
+        resolveDestination: async () => ({
+          kind: 'workspace',
+          parentDirectory: 'D:/projects/exported/exports',
+          projectRoot: 'D:/projects/exported'
+        })
+      },
       packager: {
         async packageWindowsScene() {
           throw new Error('输入被拒绝时不应打包')
+        },
+        async verifyWindowsScene() {
+          return true
         }
       }
     })
     await expect(
       service.exportSavedScene(
-        exportRequest({ ...latest.contentBasis, extra: 'not-on-the-wire' } as never)
+        exportRequest(latest, { extra: 'not-on-the-wire' } as never)
       )
     ).rejects.toMatchObject({ code: SceneExportErrorCodes.exportInputRejected })
     expect(readSavedScene).not.toHaveBeenCalled()

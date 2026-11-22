@@ -13,18 +13,9 @@ import type {
 } from '../models/SceneCanvasArrangement'
 
 export type SceneCanvasArrangementValidationOptions = {
-  /**
-   * 为 false 时不校验提示词引用的卡片身份与跨卡关系。
-   * 生成输入读取沿用 assembleInputs.promptReferences 的既有引用错误语义。
-   */
   promptReferences?: boolean
 }
 
-/**
- * 校验整份编排的身份、卡片、关联和布局。
- * 不推断关系，不因来源缺失删除卡片。
- * @throws {AppException} 身份冲突、引用缺失、字段无效或记录不合法。
- */
 export function validateSceneCanvasArrangement(
   arrangement: SceneCanvasArrangement,
   options: SceneCanvasArrangementValidationOptions = {}
@@ -180,7 +171,6 @@ function validatePromptReferences(cards: ReadonlyMap<string, SceneCanvasCard>): 
   }
 }
 
-/** 按卡片身份生成无方向的关联键。 */
 export function relationPair(left: string, right: string): string {
   return left < right ? `${left}\u0000${right}` : `${right}\u0000${left}`
 }

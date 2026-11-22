@@ -43,7 +43,6 @@ export type PreviewSessionServiceDependencies = {
   readonly availability: Pick<PreviewAvailabilityService, 'readScenePreviewAvailability'>
 }
 
-/** 管理当前场景会话的打开、准备、订阅和关闭。 */
 export class PreviewSessionService {
   constructor(private readonly deps: PreviewSessionServiceDependencies) {}
 
@@ -136,7 +135,6 @@ export class PreviewSessionService {
       try {
         listener(event)
       } catch {
-        // 监听器异常不中断运行时。
       }
     })
     return () => {

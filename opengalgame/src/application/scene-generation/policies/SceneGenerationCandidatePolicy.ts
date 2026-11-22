@@ -13,7 +13,6 @@ import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { SceneGenerationVersionConflict } from '../errors/SceneGenerationVersionConflict'
 
-/** 将应用执行事实转换为不含技术细节的领域请求。 */
 export function toDomainRequest(
   execution: SceneGenerationExecution,
   facts: SceneGenerationVersionFacts

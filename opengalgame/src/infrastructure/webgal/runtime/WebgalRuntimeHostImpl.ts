@@ -11,7 +11,6 @@ import {
   WEBGAL_COMPATIBILITY_PROFILE,
   type WebgalRuntimeBuildEvidence
 } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
-import { serveBrowserStageInput } from '@infrastructure/webgal/compatibility/BrowserStageTrustedInput'
 import { defaultRuntimeAssetFor } from '@infrastructure/webgal/runtime/defaultRuntimeAssets'
 import {
   buildEngineExtensionScriptTag,
@@ -29,17 +28,8 @@ export interface WebgalRuntimeRequest {
 
 export interface WebgalPreviewConnection {
   readonly id: string
-  /**
-   * @throws 连接已关闭时抛出错误。
-   */
   send(message: unknown): void
-  /**
-   * @returns 取消订阅函数。
-   */
   onMessage(listener: (message: unknown) => void): () => void
-  /**
-   * @returns 取消订阅函数。
-   */
   onClose(listener: (reason?: string) => void): () => void
   close(): void
 }
@@ -49,34 +39,16 @@ export interface WebgalRuntimeHandle {
   readonly previewUrl: string
   readonly port: number
   readonly build: WebgalRuntimeBuildEvidence
+  /** 宿主是否启用了受限自动开始；只有启用时才等待真实游戏快照。 */
+  readonly autoStart: boolean
 }
 
 export interface WebgalRuntimeHost {
-  /**
-   * @throws 端口监听或兼容性校验失败时抛出错误。
-   */
   start(): Promise<WebgalRuntimeHandle>
-  /**
-   * @returns 取消订阅函数。
-   */
   onPreviewConnection(listener: (connection: WebgalPreviewConnection) => void): () => void
-  /**
-   * @returns 取消订阅函数。
-   */
   onRequest(listener: (request: WebgalRuntimeRequest) => void): () => void
-  /**
-   * @returns 已启动时的句柄；未启动时为 undefined。
-   */
   getHandle(): WebgalRuntimeHandle | undefined
-  /**
-   * 把已校验的正式工程根绑定到当前宿主。
-   * 越界、不存在或不是目录时拒绝，错误不含路径。
-   */
   useProjectRoot(projectRoot: string): Promise<void>
-  /**
-   * 只覆盖当前会话的场景入口文本。
-   * 旧修订、错属会话和摘要不一致时拒绝，不写磁盘。
-   */
   setSceneTextOverlay(overlay: SceneTextOverlay): Promise<void>
   currentSceneTextOverlayRevision(scope: SceneTextOverlayScope): Promise<number>
   clearSceneTextOverlay(scope: SceneTextOverlayScope): Promise<void>
@@ -89,10 +61,6 @@ export interface WebgalRuntimeHostOptions {
   readonly engineRoot: string
   readonly host?: string
   readonly port?: number
-  /**
-   * 自制引擎扩展：默认启用，向引擎页面注入脚本并保留 `/figure/` 立绘纹理。
-   * 显式 `{ enabled: false }` 时不注入，扩展路由返回 404。
-   */
   readonly engineExtension?: EngineExtensionOptions
 }
 
@@ -113,7 +81,6 @@ export interface SceneTextOverlayScope {
 export type SceneOverlayUnavailableReason =
   'stale-revision' | 'stale-generation' | 'foreign-session' | 'digest-mismatch' | 'invalid-overlay'
 
-/** 场景覆盖被宿主拒绝。消息保持稳定，原因交给网关映射成预览失败码。 */
 export class SceneOverlayUnavailable extends Error {
   readonly name = 'SceneOverlayUnavailable'
 
@@ -145,18 +112,11 @@ const contentTypes: Record<string, string> = {
   webm: 'video/webm'
 }
 
-/**
- * @returns HTTP 内容类型；未知扩展名回退为二进制流。
- */
 function contentType(path: string): string {
   const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
   return contentTypes[extension] ?? 'application/octet-stream'
 }
 
-/**
- * 校验并按需解码请求路径，拒绝空字节、反斜杠和向上跨越的片段。
- * @returns 去掉前导斜杠的相对路径；非法时为 undefined。
- */
 function safePathname(pathname: string): string | undefined {
   let decoded: string
   try {
@@ -170,7 +130,6 @@ function safePathname(pathname: string): string | undefined {
   return normalized
 }
 
-/** 输出纯文本响应，运行时不缓存任何内容。 */
 function writeText(response: ServerResponse, statusCode: number, body: string): void {
   response.writeHead(statusCode, {
     'Content-Type': 'text/plain; charset=utf-8',
@@ -179,7 +138,6 @@ function writeText(response: ServerResponse, statusCode: number, body: string): 
   response.end(body)
 }
 
-/** 请求命中的磁盘文件，或工程缺失时按精确路径提供的运行时默认资源。 */
 type ResolvedRuntimeFile =
   | { readonly kind: 'file'; readonly filePath: string }
   | { readonly kind: 'default-asset'; readonly body: string; readonly contentType: string }
@@ -204,7 +162,6 @@ class WsPreviewConnection implements WebgalPreviewConnection {
     socket.on('error', (error) => this.finish(error.message))
   }
 
-  /** 序列化后发送，连接不可用时抛出。 */
   send(message: unknown): void {
     if (this.closed || this.socket.readyState !== this.socket.OPEN) {
       throw new Error('WebGAL 预览连接已关闭')
@@ -212,13 +169,11 @@ class WsPreviewConnection implements WebgalPreviewConnection {
     this.socket.send(JSON.stringify(message))
   }
 
-  /** 订阅协议消息，返回取消订阅函数。 */
   onMessage(listener: (message: unknown) => void): () => void {
     this.messageListeners.add(listener)
     return () => this.messageListeners.delete(listener)
   }
 
-  /** 订阅连接关闭，返回取消订阅函数。 */
   onClose(listener: (reason?: string) => void): () => void {
     this.closeListeners.add(listener)
     return () => this.closeListeners.delete(listener)
@@ -230,7 +185,6 @@ class WsPreviewConnection implements WebgalPreviewConnection {
     this.finish('closed by host')
   }
 
-  /** 统一收尾：向关闭监听器广播一次原因，随后清空监听器。 */
   private finish(reason?: string): void {
     if (this.closed) return
     this.closed = true
@@ -240,11 +194,6 @@ class WsPreviewConnection implements WebgalPreviewConnection {
   }
 }
 
-/**
- * 承载固定 WebGAL dist，并把工程文件只读映射到引擎的 `game/` 路径。
- * 当前会话可以在磁盘解析前覆盖一个场景入口，覆盖不写作品源。
- * 4.6.5 构建主动连接 `/api/webgalsync`，所以这里用 `ws` 应答，不自写帧解析。
- */
 export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
   private readonly previewListeners = new Set<(connection: WebgalPreviewConnection) => void>()
   private readonly requestListeners = new Set<(request: WebgalRuntimeRequest) => void>()
@@ -260,7 +209,6 @@ export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
 
   constructor(private readonly options: WebgalRuntimeHostOptions) {}
 
-  /** 启动 HTTP 与 WebSocket 服务，并装配预览协议端点。 */
   async start(): Promise<WebgalRuntimeHandle> {
     if (this.handle) return this.handle
     const configuredRoot = this.options.projectRoot
@@ -303,7 +251,8 @@ export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
       baseUrl,
       previewUrl: `ws://${host}:${address.port}${WEBGAL_COMPATIBILITY_PROFILE.previewPath}`,
       port: address.port,
-      build
+      build,
+      autoStart: this.engineExtensionEnabled() && this.options.engineExtension?.autoStart === true
     }
     return this.handle
   }
@@ -426,13 +375,7 @@ export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
     })
   }
 
-  /** 处理一次静态资源请求，只读放行工程素材与运行时构建文件。 */
   private async serve(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    if (serveBrowserStageInput(request, response)) {
-      const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
-      this.notifyRequest(pathname, response.statusCode)
-      return
-    }
     const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       writeText(response, 405, '运行时只允许 GET 或 HEAD')
@@ -492,11 +435,6 @@ export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
     }
   }
 
-  /**
-   * 把请求路径映射到磁盘文件：`game/` 走工程素材候选，其余走运行时构建目录。
-   * 工程内文件永远优先；`game/` 文件缺失时只对精确命中的可选文件回落默认资源。
-   * @returns 命中的文件或默认资源；都不存在时为 undefined。
-   */
   private async resolveRequestFile(pathname: string): Promise<ResolvedRuntimeFile | undefined> {
     const engineDist = this.engineDist
     if (!engineDist) return undefined
@@ -526,11 +464,6 @@ export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
     }
   }
 
-  /**
-   * 解析并确认文件仍在根目录内，拒绝符号链接越界。
-   * @param root - 允许的根目录。
-   * @returns 命中的普通文件路径；越界或不存在时为 undefined。
-   */
   private async resolveContainedFile(root: string, candidate: string): Promise<string | undefined> {
     if (!isInsideRoot(root, candidate)) return undefined
     try {
@@ -543,7 +476,6 @@ export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
     }
   }
 
-  /** 校验 WebSocket 子协议与路径后升级连接，其余升级请求直接拒绝。 */
   private upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
     const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
     const requestedProtocols = request.headers['sec-websocket-protocol']
@@ -569,30 +501,21 @@ export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
     for (const listener of this.requestListeners) listener(request)
   }
 
-  /** @returns 引擎扩展是否启用；缺省启用。 */
   private engineExtensionEnabled(): boolean {
     return this.options.engineExtension?.enabled !== false
   }
 
-  /**
-   * @returns 需要注入引擎页面的脚本标签；扩展关闭或运行时尚未就绪时为 undefined。
-   */
   private engineExtensionScriptTag(): string | undefined {
     const build = this.runtimeBuild
     if (!this.engineExtensionEnabled() || !build) return undefined
     return buildEngineExtensionScriptTag({
       engineVersion: build.engineVersion,
       supportedEngineVersions:
-        this.options.engineExtension?.supportedEngineVersions ?? DEFAULT_SUPPORTED_ENGINE_VERSIONS
+        this.options.engineExtension?.supportedEngineVersions ?? DEFAULT_SUPPORTED_ENGINE_VERSIONS,
+      autoStart: this.options.engineExtension?.autoStart === true
     })
   }
 
-  /**
-   * 只在引擎入口 HTML 上注入扩展脚本，其余静态文件原样返回。
-   * @param safePath - 已解码、去掉前导斜杠的请求路径。
-   * @param content - 磁盘上的入口内容。
-   * @returns 注入后的内容；未注入时返回原 Buffer。
-   */
   private injectEngineExtension(safePath: string, content: Buffer): Buffer {
     if (safePath !== '' && safePath !== 'index.html') return content
     const tag = this.engineExtensionScriptTag()
@@ -601,7 +524,6 @@ export class WebgalRuntimeHostImpl implements WebgalRuntimeHost {
     return injected.injected ? Buffer.from(injected.html, 'utf8') : content
   }
 
-  /** 提供扩展脚本，并记录请求；关闭扩展时按不存在处理。 */
   private serveEngineExtension(
     request: IncomingMessage,
     response: ServerResponse,

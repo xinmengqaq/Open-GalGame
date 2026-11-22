@@ -13,7 +13,6 @@ import { MediaPurposeText } from './MediaPurposeText'
 import { mediaBlockStateOf } from './cardPresentation'
 import styles from './SceneInputCards.module.css'
 
-/** 视频卡片内容。真实视频按原始比例缩放，播放、进度与时长在卡内提供。 */
 export function VideoInputCard({
   card,
   onEditSummary

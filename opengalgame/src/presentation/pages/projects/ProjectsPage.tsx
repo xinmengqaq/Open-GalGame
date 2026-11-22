@@ -24,10 +24,6 @@ interface ProjectsPageProps {
   projectClient: ProjectClient
 }
 
-/**
- * 项目页：分页陈列、单击打开、右键重命名与移出列表。
- * 实现思路：重命名失败按错误码落到对应字段，名称留空则按当前取值就地提示。
- */
 export function ProjectsPage({ projectClient }: ProjectsPageProps): ReactElement {
   const visit = useNavigationStore((state) => state.visit)
   const creating = useProjectCreate(projectClient)
@@ -65,7 +61,6 @@ export function ProjectsPage({ projectClient }: ProjectsPageProps): ReactElement
     setRenameFailure(null)
   }
 
-  /** 提交重命名：失败就地展示错误，成功则关闭弹窗。 */
   async function submitRename(): Promise<void> {
     if (!renameTarget) return
     if (!renameName.trim()) return

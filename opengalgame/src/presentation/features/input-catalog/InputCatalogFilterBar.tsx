@@ -18,7 +18,6 @@ interface InputCatalogFilterBarProps {
   onType: (value: CatalogTypeFilter) => void
 }
 
-/** 搜索、分组与来源类型筛选。分组指示块与焦点线由目录动效拥有。 */
 export function InputCatalogFilterBar({
   query,
   group,

@@ -4,10 +4,6 @@ const path = require('node:path')
 
 const { dependencies } = require('../package.json')
 
-/**
- * 以内联别名构建主进程代码并运行根工程创建脚本，透传子进程退出码。
- * @throws {Error} 构建或启动子进程失败。
- */
 async function run() {
   const src = path.join(__dirname, '../src')
   await build({

@@ -49,7 +49,8 @@ function status(): SceneGenerationRenderStatusVO {
 
 function renderConversation(
   renderStatus: SceneGenerationRenderStatusVO | null,
-  actionError: GenerationActionFailure | null
+  actionError: GenerationActionFailure | null,
+  startBlockedReason: string | null = null
 ): string {
   return renderToStaticMarkup(
     createElement(GenerationConversation, {
@@ -63,7 +64,9 @@ function renderConversation(
       loadError: null,
       projectName: '测试项目',
       sceneLabel: '测试场景',
-      startBlockedReason: null,
+      startBlockedReason,
+      startBlockedByGeneration: false,
+      repairBlockedReason: startBlockedReason,
       startPhase: null,
       reviseOpen: false,
       onStart: () => undefined,
@@ -111,5 +114,13 @@ describe('GenerationConversation 启动冲突提示', () => {
     expect(html).toContain('role="alert"')
     expect(html).toContain(SCENE_GENERATION_START_CONFLICT_MESSAGE)
     expect(html).not.toContain('wb-gen-outcome__error')
+  })
+
+  it('状态核对期间空态开始按钮按同一禁止原因禁用并显示原因', () => {
+    const reason = '正在核对当前场景是否已有任务，核对完成前不能开始生成。'
+    const html = renderConversation(null, null, reason)
+
+    expect(html).toContain(reason)
+    expect(html).toMatch(/<button[^>]*wb-gen-empty__primary[^>]*disabled/)
   })
 })

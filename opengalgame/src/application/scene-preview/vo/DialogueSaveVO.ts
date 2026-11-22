@@ -25,10 +25,6 @@ export type SaveDialogueChangesVO =
   | {
       readonly status: 'saved'
       readonly contentBasis: SceneContentBasisVO
-      /**
-       * 保存后的运行时依据已经换代。
-       * 0 表示保存时还没有可用的舞台代次；后续定位必须使用这里返回的代次。
-       */
       readonly runtimeGeneration: number
       readonly committedEdits: readonly DialogueTextEditDTO[]
       readonly previewUpdate: PreviewUpdateVO

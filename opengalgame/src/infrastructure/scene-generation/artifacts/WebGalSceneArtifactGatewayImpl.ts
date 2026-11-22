@@ -32,11 +32,6 @@ import { projectAssetRelativePaths } from '@infrastructure/webgal/assetPath'
 import { assetCategoriesAllowedByCommand } from '@domain/scene-generation/services/validateSceneArtifact'
 import { enrichMissingAssetDiagnostics } from '@infrastructure/scene-generation/artifacts/missingAssetDiagnostics'
 
-/**
- * 在同一路径的多张卡片中选择命令可以使用的那一张。
- * 只按素材类别匹配；同类别有多张时取第一张，不再按角色用途精确区分。
- * @returns 类别相符的卡片；类别不符时为 undefined。
- */
 export function selectAuthorizedAsset(
   assets: SceneGenerationInputsDTO['assets'],
   reference: { kind: string; rawReference: string; relativePath?: string },
@@ -62,7 +57,6 @@ export class WebGalSceneArtifactGatewayImpl implements SceneArtifactGateway {
     private readonly domain: SceneGenerationDomainService
   ) {}
 
-  /** 人工编辑仅能改当前入口，真实写入后先保存修订再返回。 */
   async writeCandidateFiles(
     execution: SceneGenerationExecution,
     request: EditSceneGenerationCandidateDTO
@@ -93,7 +87,6 @@ export class WebGalSceneArtifactGatewayImpl implements SceneArtifactGateway {
     }
   }
 
-  /** 保存候选 Git 修订，发布失败不返回快照引用。 */
   async saveCandidateRevision(
     execution: SceneGenerationExecution
   ): Promise<{ candidateSnapshotId: string }> {
@@ -220,7 +213,6 @@ export class WebGalSceneArtifactGatewayImpl implements SceneArtifactGateway {
     }
   }
 
-  /** 比较候选所有真实字节与不可变修订，禁止用旧校验提交新内容。 */
   async verifyRevision(
     execution: SceneGenerationExecution,
     candidateSnapshotId: string
@@ -247,14 +239,12 @@ export class WebGalSceneArtifactGatewayImpl implements SceneArtifactGateway {
   }
 }
 
-/** 未授权时的引用事实仍需要类别：由引用目录给出媒体类别，不猜用途。 */
 function categoryOfReferenceKind(kind: string): SceneAssetCategory {
   if (kind === 'video') return 'video'
   if (kind === 'bgm' || kind === 'vocal') return 'audio'
   return 'image'
 }
 
-/** 一条语句只取生成契约的首个语法问题，避免同一行重复进入修正。 */
 function generationContractFact(
   diagnostics: readonly SceneParseDiagnostic[],
   sentence: ParsedSceneSentence
@@ -272,11 +262,6 @@ function generationContractFact(
   return { issue: diagnostic.kind, message: diagnostic.message }
 }
 
-/**
- * 从解析事实提取姓名、自动推进、静态跳过和同文件跳转。
- * 连续对白保留明确的继承语义。next 不是完整的调度模型。
- * @returns 姓名、next、是否等待、跳过和跳转目标。
- */
 function statementSemantics(
   sentence: ParsedSceneSentence,
   sentences: readonly ParsedSceneSentence[]
@@ -312,29 +297,16 @@ function statementSemantics(
   }
 }
 
-/**
- * @returns 参数值；没有该参数时为 undefined。
- */
 function argumentValue(sentence: ParsedSceneSentence, key: string): SceneArgumentValue | undefined {
   return sentence.arguments.find((argument) => argument.key === key)?.value
 }
 
-/**
- * 判断 when 是否为引擎会直接跳过的恒 false。
- * 条件字面值区分大小写；动态变量不能提前当成 false。
- * @returns 语句会被跳过并继续推进时为 true。
- */
 function constantFalseWhen(sentence: ParsedSceneSentence): boolean {
   const value = argumentValue(sentence, 'when')
   if (value === false) return true
   return typeof value === 'string' && value.trim() === 'false'
 }
 
-/**
- * 解析指向同一脚本已有标签的静态跳转。
- * 缺失标签和动态目标不在这里展开。
- * @returns 目标语句序号；不是这种跳转时为 undefined。
- */
 function staticJumpTarget(
   sentence: ParsedSceneSentence,
   sentences: readonly ParsedSceneSentence[]

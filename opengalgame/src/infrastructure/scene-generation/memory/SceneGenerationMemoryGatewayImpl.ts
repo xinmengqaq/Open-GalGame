@@ -13,7 +13,6 @@ export class SceneGenerationMemoryGatewayImpl implements SceneGenerationMemoryGa
     private readonly executions: FileSceneGenerationExecutionRepositoryImpl
   ) {}
 
-  /** 原子应用终态作为清理前提，按共用引用协调清理，不修改正式文件。 */
   async clearMemory(scope: SceneGenerationThreadDTO): Promise<void> {
     const operations = await this.executions.listThread(scope)
     if (operations.some((item) => !isTerminal(item) || item.workspaceCleanupPending))

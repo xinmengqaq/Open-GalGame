@@ -24,7 +24,6 @@ export type SourceFactsView = {
   disconnected: boolean
 }
 
-/** 卡片上的来源状态只由来源目录与详情决定，不复制进编排。 */
 export function sourceFactsOf(
   state: Pick<WorkbenchSessionState, 'sources' | 'sourceDetails'>,
   sourceId: string
@@ -45,7 +44,6 @@ export type RelationLabelView = {
   kind: 'name' | 'documentRecord' | 'promptRecord' | 'empty'
 }
 
-/** 线上标签：特殊关系名优先，其次文档记录标题，再次提示词记录，最后“关系还没写”。 */
 export function relationLabelOf(
   state: { cards: readonly SessionCard[] },
   relation: SessionRelation

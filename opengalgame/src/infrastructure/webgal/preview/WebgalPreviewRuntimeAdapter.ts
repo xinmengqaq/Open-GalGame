@@ -106,7 +106,6 @@ const supportedCommandTypes = new Set([
   'preview.command.set-text-read-mode'
 ])
 
-/** 校验未知消息是否为受支持的协议信封，字段缺失或类型不符一律拒绝。 */
 function isProtocolEnvelope(value: unknown): value is ProtocolEnvelope {
   if (!value || typeof value !== 'object') return false
   const envelope = value as Record<string, unknown>
@@ -134,20 +133,14 @@ function isProtocolEnvelope(value: unknown): value is ProtocolEnvelope {
   return true
 }
 
-/** 生成一次请求的唯一标识，用于匹配对应的响应。 */
 function requestId(): string {
   return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-/** 取场景文件名作为引擎侧场景名，并统一分隔符以跨平台比较。 */
 function sceneName(scene: ParsedScene): string {
   return basename(scene.sourceFile.relativePath.replaceAll('\\', '/'))
 }
 
-/**
- * 把中止信号还原成取消错误，并区分是被新请求取代还是主动取消。
- * @returns 过期或取消对应的技术错误。
- */
 function cancellationError(signal: AbortSignal): WebgalInfrastructureError {
   const reason = signal.reason as { kind?: string } | undefined
   if (reason?.kind === 'stale-response') {
@@ -156,10 +149,6 @@ function cancellationError(signal: AbortSignal): WebgalInfrastructureError {
   return new WebgalInfrastructureError('preview-cancelled', '预览请求已取消')
 }
 
-/**
- * 把边界内错误映射成预览失败分类与可展示消息。
- * @returns 失败分类与消息；未知错误归为运行时错误。
- */
 function errorForFailure(error: unknown): { kind: PreviewFailureKind; message: string } {
   if (error instanceof WebgalInfrastructureError) {
     const kinds: Partial<Record<WebgalInfrastructureError['kind'], PreviewFailureKind>> = {
@@ -188,7 +177,6 @@ export interface WebgalPreviewRuntimeAdapterOptions {
   readonly timeoutMs?: number
 }
 
-/** 适配固定 WebGAL 编辑器同步 V1 协议，并把协议状态转换成预览结果。 */
 export class WebgalPreviewRuntimeAdapter {
   private readonly timeoutMs: number
   private readonly pending = new Map<string, PendingResponse>()
@@ -207,7 +195,6 @@ export class WebgalPreviewRuntimeAdapter {
   private readonly stageListeners = new Set<(snapshot: StageSnapshot) => void>()
   private readonly sentCommandListeners = new Set<(command: string) => void>()
 
-  /** 订阅承载给出的预览连接，超时未指定时取默认值。 */
   constructor(private readonly options: WebgalPreviewRuntimeAdapterOptions) {
     this.timeoutMs = options.timeoutMs ?? 5000
     this.removeHostConnection = options.host.onPreviewConnection((connection) =>
@@ -215,7 +202,6 @@ export class WebgalPreviewRuntimeAdapter {
     )
   }
 
-  /** 每个真实舞台快照都通知监听者。调用方自己判断它是不是游戏状态。 */
   onStageSnapshot(listener: (snapshot: StageSnapshot) => void): () => void {
     this.stageListeners.add(listener)
     return () => {
@@ -223,7 +209,6 @@ export class WebgalPreviewRuntimeAdapter {
     }
   }
 
-  /** 只报告本连接实际发出的公开命令，不发送候选启动命令。 */
   onSentCommand(listener: (command: string) => void): () => void {
     this.sentCommandListeners.add(listener)
     return () => {
@@ -231,11 +216,6 @@ export class WebgalPreviewRuntimeAdapter {
     }
   }
 
-  /**
-   * 等待目标场景的首个舞台快照。
-   * 不发送同步、运行或控制命令；页面加载和连接建立都不算就绪。
-   * @throws 超时、断开、取消或会话销毁时抛出技术错误。
-   */
   async awaitSceneSnapshot(
     expectedSceneName: string,
     signal?: AbortSignal
@@ -258,10 +238,6 @@ export class WebgalPreviewRuntimeAdapter {
     })
   }
 
-  /**
-   * 把预览定位到指定语句：确认内容摘要未变后同步场景，并等待舞台快照。
-   * @returns 定位结果；失败时携带失败分类与消息。
-   */
   async syncScene(
     scene: ParsedScene,
     target: ScenePreviewTarget,
@@ -315,9 +291,6 @@ export class WebgalPreviewRuntimeAdapter {
     }
   }
 
-  /**
-   * @throws 内容摘要与当前源文件不一致时抛出技术错误。
-   */
   async runSceneContent(
     scene: ParsedScene,
     contentDigest: string,
@@ -363,7 +336,6 @@ export class WebgalPreviewRuntimeAdapter {
     await this.runCommand('preview.command.set-text-read-mode', { isRead: enabled }, signal)
   }
 
-  /** 销毁会话：中止进行中的操作、断开连接并拒绝所有等待中的请求。 */
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
@@ -400,11 +372,6 @@ export class WebgalPreviewRuntimeAdapter {
     })
   }
 
-  /**
-   * 建立一次操作的中止域：新操作会取代旧操作，信号中止时统一转成取消错误。
-   * @param signal - 调用方传入的中止信号。
-   * @throws 操作被取代、取消或自身失败时抛出错误。
-   */
   private async withOperation<T>(
     signal: AbortSignal | undefined,
     action: (operationSignal: AbortSignal) => Promise<T>
@@ -428,10 +395,6 @@ export class WebgalPreviewRuntimeAdapter {
     }
   }
 
-  /**
-   * 等待连接建立并完成注册就绪，期间连接被替换或中止都会失败。
-   * @throws 会话销毁、连接被替换、未就绪或取消时抛出技术错误。
-   */
   private async waitUntilReady(signal: AbortSignal): Promise<WebgalPreviewConnection> {
     if (this.disposed) throw new WebgalInfrastructureError('preview-cancelled', '预览会话已销毁')
     const connection = await this.waitForConnection(signal)
@@ -506,9 +469,6 @@ export class WebgalPreviewRuntimeAdapter {
     return promise
   }
 
-  /**
-   * @throws 会话销毁、超时或取消时抛出技术错误。
-   */
   private waitForConnection(
     signal: AbortSignal,
     timeoutMs = this.timeoutMs
@@ -556,10 +516,6 @@ export class WebgalPreviewRuntimeAdapter {
     })
   }
 
-  /**
-   * 发送一条命令请求并等待匹配的响应，期间超时或中止会拒绝。
-   * @throws 命令不受支持、连接被替换、超时或取消时抛出技术错误。
-   */
   private sendRequest(
     connection: WebgalPreviewConnection,
     type: string,
@@ -618,9 +574,6 @@ export class WebgalPreviewRuntimeAdapter {
     })
   }
 
-  /**
-   * @throws 会话销毁、连接被替换、超时或取消时抛出技术错误。
-   */
   private waitForSnapshot(
     connection: WebgalPreviewConnection,
     expectedSceneName: string,
@@ -683,10 +636,6 @@ export class WebgalPreviewRuntimeAdapter {
     })
   }
 
-  /**
-   * 把预览语句序号换算成引擎语句下标。
-   * @throws 目标语句不属于当前场景时抛出技术错误。
-   */
   private engineSentenceId(scene: ParsedScene, target: ScenePreviewTarget): number {
     const sentence = scene.sentences.find((item) => item.sequence === target.sentenceSequence)
     if (!sentence)
@@ -712,7 +661,6 @@ export class WebgalPreviewRuntimeAdapter {
     for (const waiter of this.connectionWaiters.splice(0)) waiter.resolve(connection)
   }
 
-  /** 断开当前连接，并让挂在其上的请求、快照与就绪等待全部失败。 */
   private detachConnection(reason: string): void {
     this.removeConnectionMessage?.()
     this.removeConnectionClose?.()

@@ -278,7 +278,6 @@
   justify-content: flex-end;
 }
 
-/* 图片能力已关闭：用克制的虚线胶囊说明“不可用”，不抢正文主视觉。 */
 .imageUnavailableBadge {
   display: inline-flex;
   flex: none;
@@ -301,13 +300,11 @@
   height: 11px;
 }
 
-/* 编辑器外壳只负责挂载图片能力守卫，不改变原有布局。 */
 .documentGuard {
   display: block;
   min-width: 0;
 }
 
-/* 双保险：即使库重渲染覆盖了行内 display，被关闭的入口也不会重新出现。 */
 .documentGuard :global([data-document-image-unavailable]),
 .editor :global([data-document-image-unavailable]) {
   display: none !important;
@@ -642,7 +639,6 @@
   font-weight: 700;
 }
 
-/* 新建文档的空编辑器沿用同一套纸面语言，外部用法保持不变。 */
 
 .draftLayer {
   position: fixed;
@@ -674,7 +670,6 @@
   box-shadow: var(--wb-shadow-soft);
 }
 
-/* 返回、文档字段与保存按三组排布；标签与控件同一行，不再一高一低。 */
 .header .back {
   display: inline-flex;
   min-height: 40px;

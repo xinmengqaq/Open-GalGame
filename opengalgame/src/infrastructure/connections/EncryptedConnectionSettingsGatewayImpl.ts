@@ -69,11 +69,6 @@ const credentialReadFailure: StorageFailure = {
   ...technicalFailure
 }
 
-/**
- * 密钥只对同一次写入的协议、地址和修订号有效。错配或中断留下的组合不采用。
- * @param credentials - 已保存的密钥文档。
- * @returns 密钥与配置属于同一次写入时为 true。
- */
 function belongsToModels(
   credentials: ConnectionCredentialsDocument,
   models: ConnectionSettingsDocument
@@ -85,11 +80,6 @@ function belongsToModels(
   )
 }
 
-/**
- * 密钥内容损坏才当成没有密钥。磁盘、权限和其他读取失败继续抛出。
- * @param error - 读取密钥时捕获的失败。
- * @returns 失败源于密钥内容损坏时为 true。
- */
 function isDamagedCredentials(error: unknown): boolean {
   if (
     !(error instanceof AppException) ||
@@ -100,10 +90,6 @@ function isDamagedCredentials(error: unknown): boolean {
   return error.cause === undefined || error.cause instanceof SyntaxError
 }
 
-/**
- * 去掉内部修订号，得到可对外展示的设置。
- * @returns 不含修订号的可见设置。
- */
 function visibleSettings(
   models: ConnectionSettingsDocument
 ): Omit<ConnectionSettingsDocument, 'revision'> {
@@ -119,9 +105,6 @@ function visibleSettings(
 }
 
 export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSettingsGateway {
-  /**
-   * @param userDirectory - 用户级 `.opengalgame` 目录，配置与密钥分开放在这里。
-   */
   constructor(
     private readonly userDirectory: string,
     private readonly cipher: SecretCipher,
@@ -131,7 +114,6 @@ export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSetting
     }
   ) {}
 
-  /** 查询时不解密凭据。 */
   async getSummary(): Promise<ConnectionSettingsVO | null> {
     const models = await this.readModels()
     if (!models) return null
@@ -144,7 +126,6 @@ export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSetting
     }
   }
 
-  /** 只读加载内部配置，解密失败由技术边界转换。 */
   async loadSettings(): Promise<ConnectionSettingsInfo | null> {
     const models = await this.readModels()
     if (!models) return null
@@ -170,7 +151,6 @@ export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSetting
     }
   }
 
-  /** 先加密，再写密钥与配置。配置写入失败时恢复原密钥文件。 */
   async saveSettings(settings: ConnectionSettingsInfo): Promise<ConnectionSettingsVO> {
     let encryptedKey: string
     let encryptedExtension: string | undefined
@@ -227,15 +207,10 @@ export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSetting
     return join(this.userDirectory, this.documents.models)
   }
 
-  /** 密钥文档路径。 @returns 用户目录下的密钥文档路径。 */
   private get credentialsFile(): string {
     return join(this.userDirectory, this.documents.credentials)
   }
 
-  /**
-   * @returns 模型配置文档；文件不存在时为 null。
-   * @throws {AppException} 读取失败或内容损坏。
-   */
   private async readModels(): Promise<ConnectionSettingsDocument | null> {
     const value = await readJsonDocument(this.modelsFile, readFailure)
     if (value === null) return null
@@ -247,10 +222,6 @@ export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSetting
     )
   }
 
-  /**
-   * 密钥文件缺失或内容损坏按没有可用密钥处理。磁盘与权限失败继续抛出。
-   * @returns 凭据文档；缺失或损坏时为 null。
-   */
   private async readCredentials(): Promise<ConnectionCredentialsDocument | null> {
     try {
       const value = await readJsonDocument(this.credentialsFile, credentialReadFailure)
@@ -267,11 +238,6 @@ export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSetting
     }
   }
 
-  /**
-   * 记住写入前的密钥文件字节，供配置写入失败时原样恢复。
-   * @returns 写入前的文件内容；原来没有文件时为 null。
-   * @throws {AppException} 读取失败且不是文件不存在。
-   */
   private async readCredentialsBytes(): Promise<string | null> {
     try {
       return await readFile(this.credentialsFile, 'utf8')
@@ -281,12 +247,6 @@ export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSetting
     }
   }
 
-  /**
-   * 配置没写上时恢复密钥文件。恢复也失败时保留两次失败。
-   * @param previous - 写入前的文件内容；原来没有文件时为 null。
-   * @param error - 本次保存失败。
-   * @throws {AppException} 密钥文件无法恢复。
-   */
   private async restoreCredentials(previous: string | null, error: unknown): Promise<void> {
     try {
       if (previous === null) {
@@ -304,10 +264,6 @@ export class EncryptedConnectionSettingsGatewayImpl implements ConnectionSetting
   }
 }
 
-/**
- * 解密后的扩展必须仍是保存时的普通对象。形状被改过按凭据损坏处理，不回显内容。
- * @throws {AppException} 内容不是对象，或 JSON 无法解析。
- */
 function parseStoredExtension(value: string): ConnectionExtension {
   let parsed: unknown
   try {

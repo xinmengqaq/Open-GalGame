@@ -4,7 +4,6 @@ import type { LoggerGateway } from '@common/logging/LoggerGateway'
 
 export class LocalProjectNotificationGatewayImpl implements ProjectNotificationGateway {
   constructor(private readonly logger: LoggerGateway) {}
-  /** 隔离观察者故障，通知不改变提交结果。 */
   publishProgress(progress: ProjectProgressVO, listener?: ProjectProgressListener): void {
     try {
       listener?.(progress)

@@ -17,27 +17,21 @@ export type ProjectMediaView =
 export type MediaCacheSnapshot = ProjectMediaView | { status: 'loading' }
 
 export type MediaAcquire = {
-  /** 首次读取或共享同一份在途读取。 */
   result: Promise<ProjectMediaView>
-  /** 释放一份引用；最后一个引用释放后撤销 Blob URL 并移除缓存。 */
   release: () => void
 }
 
 export type MediaAcquireOptions = {
-  /** 重试代数；与 sourceId 一起决定缓存分区，空串等价于默认分区。 */
   generation?: string
-  /** 读取完成时接收通知；随 release 解绑。 */
   onChange?: () => void
 }
 
 export type MediaPeekOptions = {
-  /** 重试代数；需与 acquire 使用的分区一致。 */
   generation?: string
 }
 
 export type ProjectMediaCache = {
   acquire(sourceId: string, options?: MediaAcquireOptions): MediaAcquire
-  /** 当前来源的稳定快照；尚未读取时为 loading，没有缓存项时为 null。 */
   peek(sourceId: string, options?: MediaPeekOptions): MediaCacheSnapshot | null
 }
 
@@ -56,10 +50,6 @@ interface ProjectMediaCacheDeps {
   revokeObjectUrl?: (url: string) => void
 }
 
-/**
- * 按来源身份共享一次受控媒体读取。目录与画布同时挂载时只发一次请求；
- * 最后一个消费者卸载（或短暂让位给 React 开发态复跑）后撤销 Blob URL。
- */
 export function createProjectMediaCache(deps: ProjectMediaCacheDeps): ProjectMediaCache {
   const createObjectUrl = deps.createObjectUrl ?? ((blob: Blob) => URL.createObjectURL(blob))
   const revokeObjectUrl = deps.revokeObjectUrl ?? ((url: string) => URL.revokeObjectURL(url))
@@ -77,7 +67,6 @@ export function createProjectMediaCache(deps: ProjectMediaCacheDeps): ProjectMed
 
   function queueRevoke(key: string, entry: CacheEntry): void {
     if (entry.revokeTimer !== null) return
-    // 延后一个任务再撤销：React 开发态会同步重放订阅，期间复用同一份字节。
     entry.revokeTimer = setTimeout(() => {
       entry.revokeTimer = null
       if (entry.refs > 0 || !entry.settled) return
@@ -119,7 +108,6 @@ export function createProjectMediaCache(deps: ProjectMediaCacheDeps): ProjectMed
       .catch(() => finishRead(key, { status: 'failed', code: null }))
   }
 
-  // 读取完成后才拿到当前 entry；用闭包找回同一份缓存项。
   function finishRead(key: string, view: ProjectMediaView): ProjectMediaView {
     const entry = entries.get(key)
     if (!entry) {

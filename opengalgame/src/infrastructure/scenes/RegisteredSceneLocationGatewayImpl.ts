@@ -13,10 +13,6 @@ import { LocalProjectListQueryGatewayImpl } from '@infrastructure/projects/Local
 import { LocalProjectStorageGatewayImpl } from '@infrastructure/projects/LocalProjectStorageGatewayImpl'
 import { WEBGAL_COMPATIBILITY_PROFILE } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
 
-/**
- * 从本机已登记工程和已保存场景画布定位正式场景。
- * 不读取静态测试登记，也不把唯一脚本猜测成已登记场景。
- */
 export class RegisteredSceneLocationGatewayImpl {
   constructor(private readonly userDirectory: string) {}
 

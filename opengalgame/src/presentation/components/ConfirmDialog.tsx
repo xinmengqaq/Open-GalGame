@@ -15,13 +15,9 @@ export interface ConfirmDialogTarget {
 interface ConfirmDialogProps {
   open: boolean
   title: string
-  /** 调用方指明的操作对象，不由组件推断业务含义。 */
   target?: ConfirmDialogTarget | null
-  /** 调用方给出的主要说明。 */
   message: ReactNode
-  /** 调用方给出的范围、影响和边界条目。 */
   scope?: readonly ReactNode[]
-  /** 需要单独强调的风险或边界说明。 */
   caveat?: ReactNode
   caveatTone?: 'danger' | 'neutral'
   blockedReason?: string | null
@@ -31,7 +27,6 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   busy?: boolean
   confirmDisabled?: boolean
-  /** 结果待核对时，用恢复动作替代确认。 */
   alternateAction?: { label: string; onClick: () => void } | null
   onConfirm: () => void
   onCancel: () => void
@@ -54,10 +49,6 @@ function ShieldIcon(): ReactElement {
   )
 }
 
-/**
- * 通用确认框：对象、范围、风险、动词和危险级别全部由调用方提供。
- * 组件只负责一致的层级、可读性与危险确认的视觉语义。
- */
 export function ConfirmDialog({
   open,
   title,

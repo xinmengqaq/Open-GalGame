@@ -22,14 +22,12 @@ import '@presentation/effects/ai-elements.css'
 
 gsap.registerPlugin(useGSAP)
 
-// 数据只由本机的具名操作改动，靠变更显式失效；IPC 失败按提示由用户重试，不自动重试。
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { refetchOnWindowFocus: false, retry: false, staleTime: Infinity }
   }
 })
 
-/** 装配表现层。有 preload 用桌面桥，否则用浏览器验证桥。 */
 function startRenderer(): void {
   const rootElement = document.getElementById('root')
   if (rootElement === null) {

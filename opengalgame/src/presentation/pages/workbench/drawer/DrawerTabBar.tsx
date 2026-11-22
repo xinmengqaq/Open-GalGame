@@ -32,7 +32,6 @@ import {
 } from './drawerTabs'
 import './drawerTabs.css'
 
-/** `+` 菜单只解释入口，不重复标签里的状态。 */
 const DRAWER_TAB_HINT: Readonly<Record<Exclude<DrawerTabId, 'current'>, string>> = {
   summary: '本轮输入依据与固定快照',
   history: '当前场景的只读生成记录',
@@ -41,25 +40,15 @@ const DRAWER_TAB_HINT: Readonly<Record<Exclude<DrawerTabId, 'current'>, string>>
 }
 
 export interface DrawerTabBarProps {
-  /** 已打开标签，`current` 固定在首位。 */
   tabs: readonly DrawerTabId[]
   activeId: DrawerTabId
-  /**
-   * 当前范围是否存在可打开的固定候选；只决定 `+` 菜单是否列出“游戏候选”，
-   * 与读取角标解耦。候选不可用时由标签模型移除已打开标签。
-   */
   candidateAvailable: boolean
-  /** 候选读取角标；null 表示还没有读取结果，不表示候选不可用。 */
   candidateBadge?: DrawerTabBadge | null
-  /** “当前生成”的状态点；null 不显示装饰。 */
   currentTone?: DrawerTabTone | null
-  /** 作品历史写操作在途时禁止关闭该标签。 */
   worksBusy?: boolean
   onActivate: (tab: DrawerTabId) => void
   onClose: (tab: DrawerTabId) => void
-  /** 标签移动后的最终下标；`current` 固定第一，调用方按同一规则拒绝。 */
   onReorder: (tab: DrawerTabId, toIndex: number) => void
-  /** 从 `+` 菜单打开视图；已打开的视图由模型聚焦，不重复创建。 */
   onOpenView: (tab: DrawerTabId) => void
 }
 
@@ -81,7 +70,6 @@ function tabAriaLabel(
   return parts.join('，')
 }
 
-/** 打开浮层时把焦点交给第一个菜单项，键盘用户不用再按一次 Tab。 */
 function focusFirstMenuItem(event: Event): void {
   const target = event.currentTarget
   if (!(target instanceof HTMLElement)) return
@@ -91,7 +79,6 @@ function focusFirstMenuItem(event: Event): void {
   first.focus()
 }
 
-/** 菜单内上下键移动焦点；Esc 和外点关闭由 Popover 负责。 */
 function handleMenuKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
   const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
   if (!keys.includes(event.key)) return
@@ -185,10 +172,6 @@ function AddViewMenu({
   )
 }
 
-/**
- * 生成抽屉的浏览器式标签栏。受控组件：标签的开关、激活和顺序都由
- * `drawerTabs.ts` 的模型决定，这里只把交互转成回调。
- */
 export function DrawerTabBar({
   tabs,
   activeId,
@@ -210,13 +193,7 @@ export function DrawerTabBar({
     edge: 'before' | 'after'
   } | null>(null)
   const [menuTab, setMenuTab] = useState<DrawerTabId | null>(null)
-  /**
-   * 菜单因外点关闭时，焦点应跟随用户点击目标，不能抢回标签。
-   * Radix 的非模态 Popover 会在关闭时把焦点交给 trigger，而标签菜单没有
-   * `PopoverTrigger`，所以由调用侧接管关闭后的焦点。
-   */
   const menuPointerOutsideRef = useRef(false)
-  /** 关闭回调在卸载后异步执行，用 ref 读到关闭瞬间是否已换成另一个菜单。 */
   const menuTabRef = useRef<DrawerTabId | null>(null)
   useEffect(() => {
     menuTabRef.current = menuTab
@@ -234,11 +211,6 @@ export function DrawerTabBar({
     setMenuTab(tab)
   }, [])
 
-  /**
-   * 非模态 Popover 的内容关闭后异步卸载，焦点可能已被 Radix 焦点域放到
-   * dialog 根或 body。Esc、菜单动作和普通关闭都要把焦点交回打开菜单的标签；
-   * 只有外点跟随用户点击目标，或另一个菜单已经接管焦点时不抢。
-   */
   const handleMenuCloseAutoFocus = useCallback((tab: DrawerTabId, event: Event) => {
     if (menuPointerOutsideRef.current) {
       menuPointerOutsideRef.current = false
@@ -252,7 +224,6 @@ export function DrawerTabBar({
       owner.focus()
       return
     }
-    /* 标签已被模型移除时，把焦点交给当前活动标签，不留在 body 或 dialog 根。 */
     listRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus()
   }, [])
 
@@ -266,7 +237,6 @@ export function DrawerTabBar({
     [focusTab, onClose, tabs]
   )
 
-  /* 模型移除标签（如候选不可用）时清掉菜单状态，避免同一 id 重新加入后自动弹出。 */
   if (menuTab !== null && !tabs.includes(menuTab)) setMenuTab(null)
 
   const rovingId =
@@ -277,7 +247,6 @@ export function DrawerTabBar({
         : (tabs[0] ?? activeId)
   const tabKey = tabs.join('|')
 
-  /* 活动标签始终滚入可见区；减少动态效果时直接跳位。 */
   useEffect(() => {
     const node = listRef.current?.querySelector<HTMLElement>('[data-active="true"]')
     node?.scrollIntoView({
@@ -288,7 +257,6 @@ export function DrawerTabBar({
   }, [activeId, tabKey])
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    /* 浮层菜单里的方向键和删除键归菜单自己处理，不移动标签焦点。 */
     if (event.target instanceof HTMLElement && event.target.closest('[role="menu"]')) return
     const index = tabs.indexOf(rovingId)
     if (index < 0) return
@@ -334,7 +302,6 @@ export function DrawerTabBar({
           const tone = tab === 'current' ? currentTone : null
           const badge = tab === 'candidate' ? candidateBadge : null
           const drop = dropTarget?.tab === tab ? dropTarget.edge : null
-          /* `current` 固定第一、不可关闭也不可移动，没有可执行的标签菜单。 */
           const hasMenu = tab !== 'current'
           const menuOpen = hasMenu && menuTab === tab
           const moveBlocked = tab === 'current' || index < 0

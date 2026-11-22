@@ -19,7 +19,6 @@ export type ProjectCatalogWriteScopeDTO = {
 export type ImportProjectFilesDTO = ProjectCatalogWriteScopeDTO & {
   parentFolderId: string | null
   localFilePaths: readonly string[]
-  /** 与 localFilePaths 一一对应。 */
   operationIds: readonly string[]
 }
 
@@ -28,7 +27,6 @@ export type ProjectFileScopeDTO = {
   sourceId: string
 }
 
-/** 按已登记工程和来源身份读取媒体。不接受路径。 */
 export type ReadProjectMediaDTO = {
   projectId: string
   sourceId: string
@@ -52,7 +50,6 @@ export type CreateProjectTextFileDTO = ProjectCatalogWriteScopeDTO & {
   content: { textKind: 'document'; format: 'markdown' | 'plainText'; body: string }
 }
 
-/** 只更新已导入文档的正文。文件名、格式和目录不变。 */
 export type UpdateProjectTextFileBodyDTO = {
   projectId: string
   operationId: string

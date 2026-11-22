@@ -13,10 +13,6 @@ interface InputCatalogFailureStateProps {
   onRetry: () => void
 }
 
-/**
- * 来源读取失败或目录内容损坏，与空目录、搜索无结果区分。
- * 标题、说明和下一步来自统一目录状态；只有可重新读取的状态才提供重试。
- */
 export function InputCatalogFailureState({
   error,
   onRetry

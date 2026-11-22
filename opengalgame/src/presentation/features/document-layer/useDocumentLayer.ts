@@ -34,10 +34,6 @@ type DocumentLoadKey = {
   detail: ProjectInputSourceVO | undefined
 }
 
-/**
- * 文档正文只从工程来源读取。已有详情直接使用，否则按当前卡片重新读取。
- * `reload` 在已有详情时也强制重读，用于保存冲突后取最新正文。
- */
 export function useDocumentBody(
   client: ProjectFilesClient,
   card: SessionDocumentCard
@@ -70,8 +66,6 @@ export function useDocumentBody(
   }, [])
 
   const needsLoad = detail === undefined || refresh
-  // 客户端、卡片、尝试次数、重载意图或来源详情构成一次读取的身份。身份变化时
-  // 在渲染期重建请求，替代 effect 内的同步 setState（避免级联渲染）；异步结果只写 request。
   if (
     applied.client !== loadKey.client ||
     applied.cardId !== loadKey.cardId ||

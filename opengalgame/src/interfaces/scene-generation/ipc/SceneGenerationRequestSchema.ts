@@ -47,7 +47,6 @@ export const startSceneGenerationSchema = z.strictObject({
   policy: policySchema
 })
 
-/** 修复重跑只接受来源身份和确认正文，拒绝路径与检查点内部。 */
 export const retrySceneGenerationRepairSchema = startSceneGenerationSchema.extend({
   repair: z.strictObject({
     sourceOperationId: identity,
@@ -72,24 +71,56 @@ export const replySceneGenerationSchema = z.strictObject({
   reply: replySchema
 })
 
-export const resumeSceneGenerationSchema = z.strictObject({
-  ...branch,
-  checkpointId: identity,
-  candidateSnapshotId: identity.optional()
-})
+export const resumeSceneGenerationSchema = z.union([
+  z.strictObject({
+    ...branch,
+    checkpointId: identity,
+    candidateSnapshotId: identity.optional()
+  }),
+  z.strictObject({
+    ...branch,
+    recovery: z.literal('unfinished')
+  }),
+  z.strictObject({
+    ...branch,
+    recovery: z.literal('cleanup')
+  }),
+  z.strictObject({
+    ...branch,
+    recovery: z.literal('verify')
+  })
+])
 
-export const listSceneGenerationHistorySchema = z.strictObject({
-  projectId: identity,
-  sceneId: identity,
-  cursor: identity.optional(),
-  limit: z.number().int().min(1).max(100)
-})
+export const listSceneGenerationHistorySchema = z
+  .strictObject({
+    projectId: identity,
+    sceneId: identity,
+    cursor: identity.optional(),
+    limit: z.number().int().min(1).max(100),
+    /** 需要作者处理的操作专用游标；与历史 cursor 互斥。 */
+    unfinishedCursor: identity.optional(),
+    unfinishedLimit: z.number().int().min(1).max(100).optional()
+  })
+  .refine((request) => request.cursor === undefined || request.unfinishedCursor === undefined, {
+    message: '历史游标与需要处理的操作游标不能同时使用',
+    path: ['unfinishedCursor']
+  })
 
-/** 最近一次生成只按场景身份读取；不暴露操作、线程或检查点内部。 */
 export const latestSceneGenerationSchema = z.strictObject({
   projectId: identity,
   sceneId: identity
 })
+
+/** 未完成操作只按场景读取；不接收操作或线程身份，避免定向探测其它场景。 */
+export const listUnfinishedSceneGenerationsSchema = z.strictObject({
+  projectId: identity,
+  sceneId: identity,
+  cursor: identity.optional(),
+  limit: z.number().int().min(1).max(100).optional()
+})
+
+/** 待核对结果只按当前操作五元身份重新读取，不接受检查点、候选或路径。 */
+export const verifySceneGenerationUnknownSchema = z.strictObject(branch)
 
 export const readSceneGenerationCheckpointSchema = z.strictObject({
   projectId: identity,
@@ -97,6 +128,16 @@ export const readSceneGenerationCheckpointSchema = z.strictObject({
   threadId: identity,
   branchId: identity,
   checkpointId: identity
+})
+
+/** 历史分叉只接受来源分支、检查点和已批准策略；新操作身份由应用层生成。 */
+export const forkSceneGenerationSchema = z.strictObject({
+  projectId: identity,
+  sceneId: identity,
+  threadId: identity,
+  branchId: identity,
+  checkpointId: identity,
+  policy: policySchema
 })
 
 export const openSceneGenerationPreviewSchema = z.strictObject({

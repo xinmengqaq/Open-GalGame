@@ -1,7 +1,3 @@
-/*
- * 工作台统一抽屉壳。所有选择器限定在 .wb-drawer 根作用域：
- * Sheet 内容由 .wb-drawer 标记；AlertDialog portal 用 .wb-drawer--dialog 复用同一套变量。
- */
 .wb-drawer,
 .wb-drawer--dialog {
   color: var(--wb-text);
@@ -26,7 +22,6 @@
   border: 0;
 }
 
-/* Sheet 内容面板：右侧浮动，不贴死窗口边缘。 */
 .wb-drawer[data-slot='sheet-content'] {
   top: 14px;
   right: 14px;
@@ -51,7 +46,6 @@
   color: var(--wb-text);
 }
 
-/* 只作用于本抽屉的遮罩；:has 把覆盖层与本抽屉内容绑定。 */
 [data-slot='sheet-overlay']:has(+ .wb-drawer[data-slot='sheet-content']) {
   background:
     radial-gradient(ellipse 46% 56% at 62% 48%, rgb(255 246 227 / 22%), transparent 62%),
@@ -66,7 +60,6 @@
   flex-direction: column;
 }
 
-/* 头部 */
 .wb-drawer__header {
   position: relative;
   flex: none;
@@ -165,7 +158,6 @@
   height: 17px;
 }
 
-/* 内容区 */
 .wb-drawer__body {
   display: flex;
   min-height: 0;
@@ -195,7 +187,6 @@
   flex-direction: column;
 }
 
-/* 抽屉内文本可选、滚动条可见；不依赖全局 base.css 的隐藏规则。 */
 .wb-drawer *::-webkit-scrollbar,
 .wb-drawer--dialog *::-webkit-scrollbar {
   display: block;
@@ -223,7 +214,6 @@
   scrollbar-color: var(--wb-hairline-strong) transparent;
 }
 
-/* 窄窗口占满可用宽度，不横向溢出。 */
 @media (max-width: 720px) {
   .wb-drawer[data-slot='sheet-content'] {
     top: 0;

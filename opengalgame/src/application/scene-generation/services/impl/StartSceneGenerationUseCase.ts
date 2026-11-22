@@ -24,7 +24,6 @@ export class StartSceneGenerationUseCase {
   ): Promise<SceneGenerationRenderStatusVO> {
     const snapshot = structuredClone(request)
     requireLaunchIdentity(snapshot)
-    // 仓储按场景返回全部记录，limit 只用于满足查询契约。
     const sceneExecutions = await this.context.deps.executions.listSceneExecutions({
       projectId: snapshot.projectId,
       sceneId: snapshot.sceneId,
@@ -69,6 +68,6 @@ export class StartSceneGenerationUseCase {
         msg: '生成没有绑定已保存编排版本'
       })
     }
-    return toRenderStatusVO(execution)
+    return toRenderStatusVO(execution, false, this.context.deps.workflow.capabilities(), true)
   }
 }

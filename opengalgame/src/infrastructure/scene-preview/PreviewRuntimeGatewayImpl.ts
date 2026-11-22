@@ -17,7 +17,6 @@ import type {
   PreviewStageResultVO
 } from '@application/scene-preview/vo/PreviewRuntimeVO'
 import type { WebgalRuntimeHost } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
-import type { CandidateTrustedInputSource } from '@infrastructure/webgal/compatibility/candidateGameStart'
 import type { WebgalPreviewControlBridge } from '@infrastructure/webgal/preview/WebgalPreviewControlBridge'
 
 import { runtimeFailure } from './previewRuntimeErrors'
@@ -33,8 +32,6 @@ export type PreviewRuntimeGatewayOptions = {
   readonly host: WebgalRuntimeHost
   readonly bridge: WebgalPreviewControlBridge
   readonly timeoutMs?: number
-  /** 版本化宿主兼容输入；提供时先把语言和标题层处理成真实游戏，再允许定位。 */
-  readonly trustedInput?: CandidateTrustedInputSource
   readonly startupTimeoutMs?: number
 }
 
@@ -45,11 +42,6 @@ export type CandidateRuntimeRequest = {
   readonly entryFile: string
 }
 
-/**
- * 当前场景预览运行时。
- * 准备只返回宿主给出的可嵌入地址；真实注册、就绪和舞台快照由引擎消息确认。
- * sync-scene 只证明台词已定位，舞台快照没有播放阶段，不能报暂停或播放。
- */
 export class PreviewRuntimeGatewayImpl implements PreviewRuntimeGateway {
   private readonly registry: PreviewRuntimeSessionRegistry
   private readonly startup: PreviewRuntimeStartup
@@ -60,7 +52,6 @@ export class PreviewRuntimeGatewayImpl implements PreviewRuntimeGateway {
     const startupTimeoutMs = options.startupTimeoutMs ?? 20_000
     const stage = new PreviewRuntimeStageCommands(options.host, timeoutMs)
     const startup = new PreviewRuntimeStartup({
-      trustedInput: options.trustedInput,
       timeoutMs,
       startupTimeoutMs
     })
@@ -74,6 +65,11 @@ export class PreviewRuntimeGatewayImpl implements PreviewRuntimeGateway {
     })
   }
 
+  /**
+   * 只准备宿主、工程绑定和舞台地址，不等待真实游戏就绪。
+   * 真实就绪在 iframe 装载后的定位调用里观察；若在这里等待快照，
+   * 页面尚未创建会形成死锁。
+   */
   async prepare(request: PreparePreviewRuntimeRequest): Promise<PreviewStageResultVO> {
     if (!dialogueSentence(request.scene, request.dialogueId)) {
       return { status: 'failed', failure: runtimeFailure('prepareFailed') }
@@ -107,7 +103,7 @@ export class PreviewRuntimeGatewayImpl implements PreviewRuntimeGateway {
     this.startup.reset(session, handle)
     return {
       status: 'ready',
-      stageUrl: session.stagePageUrl ?? `${handle.baseUrl}/index.html`,
+      stageUrl: `${handle.baseUrl}/index.html`,
       stage
     }
   }
@@ -164,10 +160,7 @@ export class PreviewRuntimeGatewayImpl implements PreviewRuntimeGateway {
     }
     this.registry.activate(session.previewSessionId)
     this.registry.updateScene(session, request.scene, sceneLabel(request.scene))
-    const startupFailure =
-      session.trustedInput === undefined
-        ? null
-        : await this.startup.ensureStarted(session, connection)
+    const startupFailure = await this.startup.ensureStarted(session, connection)
     if (startupFailure !== null) {
       return { status: 'failed', failure: startupFailure }
     }
@@ -243,7 +236,6 @@ export class PreviewRuntimeGatewayImpl implements PreviewRuntimeGateway {
     this.registry.notifyReadyWaiters()
   }
 
-  /** 释放监听并关闭宿主；生产进程结束时调用。 */
   async dispose(): Promise<void> {
     this.registry.detachHost()
     for (const session of this.registry.allSessions()) {

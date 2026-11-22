@@ -11,10 +11,6 @@ import type { SceneGenerationServiceContext } from './SceneGenerationServiceCont
 export class ReplySceneGenerationInteractionUseCase {
   constructor(private readonly context: SceneGenerationServiceContext) {}
 
-  /**
-   * 持久接受当前人工回复，重复接受返回原凭证。
-   * @throws {AppException} 回复过期、内容冲突或基线核对失败。
-   */
   async replySceneGenerationInteraction(
     request: ReplySceneGenerationInteractionDTO
   ): Promise<SceneGenerationReplyReceiptVO> {
@@ -35,6 +31,16 @@ export class ReplySceneGenerationInteractionUseCase {
         }
         return toReplyReceipt(current, accepted)
       }
+      // 未实现的继续动作必须在写入 pendingReply 之前拒绝；失败不能把 waiting 变成 failed。
+      if (
+        snapshot.reply.kind !== 'discard' &&
+        !this.context.deps.workflow.capabilities().continueInteraction
+      ) {
+        throw new AppException({
+          code: ErrorCodes.invalidRequest,
+          msg: '当前构建尚未启用此交互动作，等待保持不变'
+        })
+      }
       const checkpoint = current.checkpointId
         ? await this.context.deps.history.readCheckpoint({
             ...current,
@@ -49,7 +55,11 @@ export class ReplySceneGenerationInteractionUseCase {
           ? { ...checkpoint.view, candidateSnapshotId: checkpoint.candidateSnapshotId }
           : undefined
       )
-      const inspected = await this.context.coordinator.requireCurrentBaseline(current)
+      const inspected =
+        snapshot.reply.kind === 'discard'
+          ?
+            current
+          : await this.context.coordinator.requireCurrentBaseline(current)
       const acceptedReply: ReplySceneGenerationInteractionDTO = isAnswerGroup(confirmed)
         ? { ...snapshot, selections: confirmed }
         : confirmed

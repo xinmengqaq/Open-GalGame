@@ -1,8 +1,5 @@
-/** 场景画布归属不匹配错误码。表现层只按结构化码判断，不读消息文本。 */
 export const SCENE_CANVAS_OWNERSHIP_MISMATCH_CODE = 4418
-/** 工程工作区未就绪。表现层只按结构化码替换安全文案。 */
 export const PROJECT_WORKSPACE_NOT_READY_CODE = 1309
-/** 文档正文已在别处变化。表现层只按结构化码替换安全文案。 */
 export const DOCUMENT_BODY_CHANGED_CODE = 4338
 
 export const workbenchFeedback = {

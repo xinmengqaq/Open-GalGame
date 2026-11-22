@@ -25,9 +25,6 @@ interface GenerationQuestionGroupProps {
   onSubmitPrimary: () => void
 }
 
-/**
- * 一组 1～4 题只显示当前题。分页留在组件内，各题答案留在页面草稿。
- */
 export function GenerationQuestionGroup({
   interaction,
   draft,

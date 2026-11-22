@@ -10,10 +10,6 @@ type GenerationMotionOptions = {
   interactionId: string | null
 }
 
-/**
- * 生成面板的入场编排：空态构图层叠淡入、消息按序入场、新交互换页。
- * 只做一次性位移和淡入，没有循环补间；减少动态效果时收敛为短淡入。
- */
 export function useGenerationMotion(
   root: RefObject<HTMLElement | null>,
   { phase, view, interactionId }: GenerationMotionOptions

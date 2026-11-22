@@ -26,7 +26,6 @@ export interface AppUpdateApplicationDependencies {
   readonly installAttempts: UpdateInstallAttemptGateway
   readonly logger: LoggerGateway
   readonly now: () => number
-  /** 上次安装记录经启动核对后得出的失败结论。 */
   readonly previousInstallFailed?: boolean
 }
 
@@ -69,10 +68,6 @@ const initialProgress: DownloadProgress = {
 
 type UpdateOperation = 'check' | 'download' | 'install'
 
-/**
- * 单状态源的更新编排。
- * 检查、下载、安装互斥；下载在后台结算，安装先记录跨启动标记再退出。
- */
 export class ManageAppUpdate implements AppUpdateApplicationService {
   private readonly currentVersion: string
   private readonly supported: boolean

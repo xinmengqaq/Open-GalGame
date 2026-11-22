@@ -18,16 +18,10 @@ import type {
   ConnectionSettingsInfo
 } from '@domain/connections/models/ConnectionSettings'
 
-/** 上游重定向会绕过地址与凭据校验，统一禁止跟随。 */
 function disallowRedirects(fetcher: typeof fetch): typeof fetch {
   return (input, init) => fetcher(input, { ...init, redirect: 'error' })
 }
 
-/**
- * 只读自有字段，兼容 SDK 错误与 LangChain 包装后的错误。
- * @param error - 上游抛出的原始失败。
- * @returns 错误自带的状态码；没有时为 undefined。
- */
 function upstreamStatus(error: unknown): unknown {
   if (error === null || typeof error !== 'object' || !Object.hasOwn(error, 'status'))
     return undefined
@@ -35,15 +29,11 @@ function upstreamStatus(error: unknown): unknown {
 }
 
 export class LangChainModelConnectionGatewayImpl implements ModelConnectionGateway {
-  /**
-   * @param fetcher - 测试替身；不传时使用全局 fetch。
-   */
   constructor(
     private readonly timeoutMs: number,
     private readonly fetcher: typeof fetch = fetch
   ) {}
 
-  /** 保存、测试和建模型共用这一套供应商键校验。 */
   validateProviderOptions(
     providerId: ConnectionAccess['providerId'],
     extension: ConnectionExtension
@@ -94,10 +84,6 @@ export class LangChainModelConnectionGatewayImpl implements ModelConnectionGatew
     }
   }
 
-  /**
-   * 按协议请求上游模型目录，鉴权头与响应解析交给官方 SDK。
-   * 实现思路：显式置空 SDK 的凭据来源，避免其从进程环境补入凭据后随请求发给用户配置的上游。
-   */
   async listModels(access: ConnectionAccess): Promise<ModelListVO> {
     const safeFetch = disallowRedirects(this.fetcher)
     if (access.extension) this.validateProviderOptions(access.providerId, access.extension)
@@ -128,11 +114,6 @@ export class LangChainModelConnectionGatewayImpl implements ModelConnectionGatew
     }
   }
 
-  /**
-   * 把上游失败映射为业务错误码并抛出。已识别的业务异常原样透传。
-   * @param error - 上游或 SDK 抛出的原始失败。
-   * @throws {AppException} 带业务错误码的异常，永不正常返回。
-   */
   private throwUpstreamFailure(error: unknown, timeoutMsg: string): never {
     if (error instanceof AppException) throw error
     const status = upstreamStatus(error)

@@ -90,21 +90,25 @@ import type {
 } from '@application/project-versioning/vo/VersionHistoryVO'
 import type {
   CloseSceneGenerationCandidatePreviewDTO,
+  ForkSceneGenerationFromHistoryDTO,
   ListSceneGenerationHistoryForSceneDTO,
   OpenSceneGenerationCandidatePreviewDTO,
   ReadSceneGenerationCheckpointDTO,
   ReplySceneGenerationInteractionDTO,
-  ResumeSceneGenerationDTO,
   RetrySceneGenerationRepairDTO,
+  SceneGenerationResumeRequestDTO,
   SceneGenerationScopeDTO,
   StartSceneGenerationDTO
 } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type {
   SceneGenerationCandidatePreviewEventVO,
   SceneGenerationCandidatePreviewVO,
-  SceneGenerationHistorySummaryVO,
+  SceneGenerationForkVO,
+  SceneGenerationHistoryDetailVO,
+  SceneGenerationHistoryPageVO,
   SceneGenerationRenderProgressEventVO,
-  SceneGenerationRenderStatusVO
+  SceneGenerationRenderStatusVO,
+  SceneGenerationVerificationResultVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type {
   ProjectListPageVO,
@@ -149,22 +153,15 @@ import type {
 } from '@application/scene-preview/vo/PreviewRuntimeVO'
 import type { ScenePreviewAvailabilityVO } from '@application/scene-preview/vo/ScenePreviewAvailabilityVO'
 import type { ScenePreviewSessionVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
+import type { ChooseSceneExportDirectoryDTO } from '@application/scene-export/dto/ChooseSceneExportDirectoryDTO'
 import type { ExportSavedSceneDTO } from '@application/scene-export/dto/ExportSavedSceneDTO'
-import type { ReadLatestPreviewSaveDTO } from '@application/scene-export/dto/ReadLatestPreviewSaveDTO'
-import type { PreviewSaveVersionVO } from '@application/scene-export/vo/PreviewSaveVersionVO'
+import type { ReadLatestSavedSceneVersionDTO } from '@application/scene-export/dto/ReadLatestSavedSceneVersionDTO'
+import type { SceneExportDirectoryChoiceVO } from '@application/scene-export/vo/SceneExportDestinationVO'
+import type { SavedSceneVersionVO } from '@application/scene-export/vo/SavedSceneVersionVO'
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
 import type { OpenDirectoryDTO } from '@application/system-path/dto/OpenDirectoryDTO'
 
-/**
- * 渲染进程可用的桌面能力契约：方法名与签名的唯一权威。
- *
- * preload 与浏览器桥都实现本接口；通道字符串只由
- * `interfaces/contracts/desktopBridgeChannels.ts` 持有。
- */
 export interface DesktopBridge {
-  /**
-   * @returns 选中目录或取消。
-   */
   chooseSaveLocation(): Promise<AjaxResult<ProjectSaveLocationVO | null>>
   clearSaveLocation(): Promise<AjaxResult<null>>
   createProject(request: CreateProjectDTO): Promise<AjaxResult<ProjectOperationVO>>
@@ -173,11 +170,9 @@ export interface DesktopBridge {
   openProject(request: OpenProjectDTO): Promise<AjaxResult<ProjectSummaryVO>>
   renameProject(request: RenameProjectDTO): Promise<AjaxResult<ProjectSummaryVO>>
   unregisterProject(request: UnregisterProjectDTO): Promise<AjaxResult<UnregisterProjectVO>>
-  /** 核对已登记工程的默认场景和作品基线。 */
   ensureProjectWorkspace(
     request: EnsureProjectWorkspaceDTO
   ): Promise<AjaxResult<ProjectWorkspaceVO>>
-  /** 只读检查已登记工程的工作区，不补建。 */
   inspectProjectWorkspace(
     request: EnsureProjectWorkspaceDTO
   ): Promise<AjaxResult<ProjectWorkspaceInspectionVO>>
@@ -190,11 +185,7 @@ export interface DesktopBridge {
   readProjectInputSources(
     request: ReadProjectInputSourcesDTO
   ): Promise<AjaxResult<ProjectInputSourcesSnapshotVO>>
-  /** 按来源身份读取工程内媒体字节。 */
   readProjectMedia(request: ReadProjectMediaDTO): Promise<AjaxResult<ProjectMediaVO>>
-  /**
-   * @returns 已保存编排；没有已保存编排时 data 为 null。
-   */
   readSceneCanvasArrangement(
     request: ReadCanvasArrangementDTO
   ): Promise<AjaxResult<SceneCanvasArrangementVO | null>>
@@ -240,19 +231,15 @@ export interface DesktopBridge {
   detachSceneCanvasRelationRecord(
     request: DetachSceneCanvasRelationRecordDTO
   ): Promise<AjaxResult<SceneCanvasArrangementVO>>
-  /** 保存场景编排。成功 data 为 null。 */
   saveSceneCanvasArrangement(request: SaveSceneCanvasArrangementDTO): Promise<AjaxResult<null>>
-  /** 选择待导入文件。取消时 data 为 null。 */
   chooseProjectFiles(): Promise<AjaxResult<readonly string[] | null>>
   importProjectFiles(request: ImportProjectFilesDTO): Promise<AjaxResult<ImportProjectFilesVO>>
-  /** 用系统默认程序打开工程文件。 */
   openProjectFile(request: ProjectFileScopeDTO): Promise<AjaxResult<null>>
   renameProjectFile(request: RenameProjectFileDTO): Promise<AjaxResult<ProjectInputSourceSummaryVO>>
   deleteProjectFile(request: DeleteProjectFileDTO): Promise<AjaxResult<null>>
   createProjectTextFile(
     request: CreateProjectTextFileDTO
   ): Promise<AjaxResult<ProjectInputSourceSummaryVO>>
-  /** 覆盖已导入文档的正文。 */
   updateProjectTextFileBody(
     request: UpdateProjectTextFileBodyDTO
   ): Promise<AjaxResult<ProjectInputSourceVO>>
@@ -272,34 +259,23 @@ export interface DesktopBridge {
     request: RecoverProjectFileOperationsDTO
   ): Promise<AjaxResult<readonly ProjectFileOperationRecoveryVO[]>>
   pathForDroppedFile(file: File): Promise<AjaxResult<string>>
-  /**
-   * @returns 不含凭据的配置。
-   */
   getSettingsSummary(): Promise<AjaxResult<ConnectionSettingsVO | null>>
   testConnection(request: ConnectionSettingsDTO): Promise<AjaxResult<ConnectionTestVO>>
   saveSettings(request: ConnectionSettingsDTO): Promise<AjaxResult<ConnectionSettingsVO>>
-  /**
-   * @param request - 协议、地址、密钥与扩展使用方式。
-   */
   listModels(request: ListModelsDTO): Promise<AjaxResult<ModelListVO>>
-  /** 读取工程级用户历史。 */
   listVersionHistory(request: ListVersionHistoryDTO): Promise<AjaxResult<VersionHistoryPageVO>>
-  /** 撤销一条用户历史对应的操作。 */
   undoVersionHistoryEntry(request: UndoVersionHistoryDTO): Promise<AjaxResult<VersionHistoryUndoVO>>
-  /** 清理单条或确认边界内的用户历史。 */
   clearVersionHistory(request: ClearVersionHistoryDTO): Promise<AjaxResult<VersionHistoryClearVO>>
   onProjectProgress(listener: (progress: ProjectProgressVO) => void): () => void
   startSceneGeneration(
     request: StartSceneGenerationDTO
   ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
-  /** 修复重跑只带来源身份、画布身份和确认正文。 */
   retrySceneGenerationRepair(
     request: RetrySceneGenerationRepairDTO
   ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
   getSceneGenerationStatus(
     request: SceneGenerationScopeDTO
   ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
-  /** 最近一次生成的只读状态；运行中的操作可能还没有检查点，没有记录时 data 为 null。 */
   getLatestSceneGeneration(request: {
     projectId: string
     sceneId: string
@@ -310,18 +286,28 @@ export interface DesktopBridge {
   pauseSceneGeneration(
     request: SceneGenerationScopeDTO
   ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
+  /**
+   * 共享既有恢复通道：普通检查点、无检查点继续、提交后清理和待核对结果核对
+   * 都走这里，不新增 preload 方法或通道。`recovery: 'verify'` 返回核对信封。
+   */
   resumeSceneGeneration(
-    request: ResumeSceneGenerationDTO
-  ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
+    request: SceneGenerationResumeRequestDTO
+  ): Promise<
+    AjaxResult<SceneGenerationRenderStatusVO | SceneGenerationVerificationResultVO>
+  >
   cancelSceneGeneration(
     request: SceneGenerationScopeDTO
   ): Promise<AjaxResult<SceneGenerationRenderStatusVO>>
   listSceneGenerationHistory(
     request: ListSceneGenerationHistoryForSceneDTO
-  ): Promise<AjaxResult<readonly SceneGenerationHistorySummaryVO[]>>
+  ): Promise<AjaxResult<SceneGenerationHistoryPageVO>>
   readSceneGenerationCheckpoint(
     request: ReadSceneGenerationCheckpointDTO
-  ): Promise<AjaxResult<SceneGenerationHistorySummaryVO>>
+  ): Promise<AjaxResult<SceneGenerationHistoryDetailVO>>
+  /** 从 AI 历史创建新分支；只交来源身份和已批准策略。 */
+  forkSceneGeneration(
+    request: ForkSceneGenerationFromHistoryDTO
+  ): Promise<AjaxResult<SceneGenerationForkVO>>
   openSceneGenerationPreview(
     request: OpenSceneGenerationCandidatePreviewDTO
   ): Promise<AjaxResult<SceneGenerationCandidatePreviewVO>>
@@ -362,9 +348,12 @@ export interface DesktopBridge {
   onCandidatePreviewStageFailed(listener: (event: unknown) => void): () => void
   onCandidatePreviewInvalidated(listener: (event: unknown) => void): () => void
   exportSavedScene(request: ExportSavedSceneDTO): Promise<AjaxResult<SceneExportResultVO>>
-  readLatestPreviewSave(
-    request: ReadLatestPreviewSaveDTO
-  ): Promise<AjaxResult<PreviewSaveVersionVO | null>>
+  readLatestSavedSceneVersion(
+    request: ReadLatestSavedSceneVersionDTO
+  ): Promise<AjaxResult<SavedSceneVersionVO | null>>
+  chooseSceneExportDirectory(
+    request: ChooseSceneExportDirectoryDTO
+  ): Promise<AjaxResult<SceneExportDirectoryChoiceVO>>
   checkForUpdate(request: CheckForUpdateDTO): Promise<AjaxResult<UpdateCheckVO>>
   downloadUpdate(request: DownloadUpdateDTO): Promise<AjaxResult<UpdateStatusVO>>
   installUpdate(request: InstallUpdateDTO): Promise<AjaxResult<null>>

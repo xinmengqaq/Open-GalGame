@@ -1,5 +1,3 @@
-import { AppException } from '@common/errors/AppException'
-import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { SceneGenerationCandidatePreviewService } from '@application/scene-generation/services/SceneGenerationCandidatePreviewService'
 import type { SceneGenerationApplicationService } from '@application/scene-generation/services/SceneGenerationApplicationService'
 import type { SceneGenerationControlService } from '@application/scene-generation/services/SceneGenerationControlService'
@@ -8,9 +6,12 @@ import type { SceneGenerationLaunchService } from '@application/scene-generation
 import type { SceneGenerationRenderQueryService } from '@application/scene-generation/services/SceneGenerationRenderQueryService'
 import type {
   SceneGenerationCandidatePreviewVO,
-  SceneGenerationHistorySummaryVO,
+  SceneGenerationForkVO,
+  SceneGenerationHistoryDetailVO,
+  SceneGenerationHistoryPageVO,
   SceneGenerationRenderProgressEventVO,
-  SceneGenerationRenderStatusVO
+  SceneGenerationRenderStatusVO,
+  SceneGenerationVerificationResultVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { IpcExceptionHandler } from '../../ipc/errors/IpcExceptionHandler'
@@ -18,6 +19,7 @@ import { createRequestHandler, type IpcRequestHandler } from '../../ipc/requestH
 import type { IpcRequestAccess } from '../../ipc/RequestSchema'
 import {
   closeSceneGenerationPreviewSchema,
+  forkSceneGenerationSchema,
   latestSceneGenerationSchema,
   listSceneGenerationHistorySchema,
   openSceneGenerationPreviewSchema,
@@ -27,7 +29,8 @@ import {
   retrySceneGenerationRepairSchema,
   sceneGenerationProgressSchema,
   sceneGenerationScopeSchema,
-  startSceneGenerationSchema
+  startSceneGenerationSchema,
+  verifySceneGenerationUnknownSchema
 } from './SceneGenerationRequestSchema'
 
 export interface SceneGenerationApplicationGateway {
@@ -39,14 +42,9 @@ export interface SceneGenerationApplicationGateway {
   readonly generation: SceneGenerationApplicationService
 }
 
-/** 只调用四个渲染服务和场景历史，不读取文件、路径或内部检查点。 */
 export class SceneGenerationController {
   private readonly handle: IpcRequestHandler
 
-  /**
-   * @param services - 已装配的生成应用服务。
-   * @param exceptions - 统一失败出口。
-   */
   constructor(
     private readonly services: SceneGenerationApplicationGateway,
     exceptions: IpcExceptionHandler
@@ -72,7 +70,6 @@ export class SceneGenerationController {
     )
   }
 
-  /** 最近一次操作可能仍在运行且没有检查点，读取安全状态供刷新后恢复。 */
   latest(
     input: unknown,
     access: IpcRequestAccess
@@ -86,7 +83,6 @@ export class SceneGenerationController {
     return this.handle(sceneGenerationProgressSchema, input, access, '生成进度已订阅', () => null)
   }
 
-  /** 订阅应用层进度。调用方负责在窗口销毁或重新订阅时退订。 */
   watchProgress(
     request: {
       projectId: string
@@ -100,7 +96,6 @@ export class SceneGenerationController {
     return this.services.renderQuery.subscribeSceneGenerationProgress(request, publish)
   }
 
-  /** 只把严格校验后的来源身份和确认正文交给启动服务，响应仍是安全渲染状态。 */
   retryRepair(
     input: unknown,
     access: IpcRequestAccess
@@ -133,16 +128,44 @@ export class SceneGenerationController {
     )
   }
 
-  resume(
+  /**
+   * 既有检查点恢复保持原请求与强校验；`recovery` 分支只走操作身份，
+   * 用于无检查点崩溃现场、提交后清理重试或待核对结果核对。
+   */
+  async resume(
     input: unknown,
     access: IpcRequestAccess
-  ): Promise<AjaxResult<SceneGenerationRenderStatusVO>> {
+  ): Promise<
+    AjaxResult<SceneGenerationRenderStatusVO | SceneGenerationVerificationResultVO>
+  > {
+    // 冻结的 preload 清单不允许新增通道，核对复用同一恢复通道和请求身份。
+    if (
+      typeof input === 'object' &&
+      input !== null &&
+      'recovery' in input &&
+      input.recovery === 'verify'
+    ) {
+      const { recovery: _recovery, ...scope } = input
+      return this.verifyUnknownResult(scope, access)
+    }
     return this.handle(
       resumeSceneGenerationSchema,
       input,
       access,
-      '已从安全检查点恢复',
-      (request) => this.services.control.resumeSceneGeneration(request)
+      (status: SceneGenerationRenderStatusVO) =>
+        status.state === 'succeeded'
+          ? '提交后清理已重试'
+          : status.checkpointId === undefined
+            ? '已继续未完成的生成'
+            : '已从安全检查点恢复',
+      (request) => {
+        if (!('recovery' in request))
+          return this.services.control.resumeSceneGeneration(request)
+        const { recovery, ...scope } = request
+        return recovery === 'unfinished'
+          ? this.services.control.resumeUnfinishedSceneGeneration(scope)
+          : this.services.control.retrySceneGenerationCleanup(scope)
+      }
     )
   }
 
@@ -150,50 +173,92 @@ export class SceneGenerationController {
     input: unknown,
     access: IpcRequestAccess
   ): Promise<AjaxResult<SceneGenerationRenderStatusVO>> {
-    return this.handle(sceneGenerationScopeSchema, input, access, '场景生成已取消', (request) =>
-      this.services.control.cancelSceneGeneration(request)
+    return this.handle(
+      sceneGenerationScopeSchema,
+      input,
+      access,
+      (status: SceneGenerationRenderStatusVO) =>
+        status.state === 'cancelled' ? '场景生成已取消' : '取消已受理，正在结束本次生成',
+      (request) => this.services.control.cancelSceneGeneration(request)
     )
   }
 
-  listHistory(
+  /**
+   * 待核对结果只按操作身份重新读取真实写入/提交事实。证据仍不足时保持待核对；
+   * 成功也只返回核对事实和当前安全状态，由页面如实展示，不在这里新增提交。
+   */
+  verifyUnknownResult(
     input: unknown,
     access: IpcRequestAccess
-  ): Promise<AjaxResult<readonly SceneGenerationHistorySummaryVO[]>> {
+  ): Promise<AjaxResult<SceneGenerationVerificationResultVO>> {
+    return this.handle(
+      verifySceneGenerationUnknownSchema,
+      input,
+      access,
+      '核对完成',
+      (request) => this.services.control.verifyUnknownResult(request)
+    )
+  }
+
+  async listHistory(
+    input: unknown,
+    access: IpcRequestAccess
+  ): Promise<AjaxResult<SceneGenerationHistoryPageVO>> {
     return this.handle(
       listSceneGenerationHistorySchema,
       input,
       access,
       '场景生成历史已读取',
-      (request) => this.services.history.listSceneGenerationHistoryForScene(request)
+      async (request) => {
+        // 两类分页各有独立游标，同一请求只推进其中一种；schema 已拒绝混用。
+        if (request.unfinishedCursor !== undefined) {
+          const page = await this.services.renderQuery.listUnfinishedSceneGenerations({
+            projectId: request.projectId,
+            sceneId: request.sceneId,
+            cursor: request.unfinishedCursor,
+            limit: request.unfinishedLimit ?? 100
+          })
+          return withUnfinishedCursor({ items: [], unfinished: page.items }, page.nextCursor)
+        }
+        const items = await this.services.history.listSceneGenerationHistoryForScene(request)
+        if (request.cursor !== undefined) return { items, unfinished: [] }
+        const page = await this.services.renderQuery.listUnfinishedSceneGenerations({
+          projectId: request.projectId,
+          sceneId: request.sceneId,
+          limit: request.unfinishedLimit ?? 100
+        })
+        return withUnfinishedCursor({ items, unfinished: page.items }, page.nextCursor)
+      }
     )
   }
 
   readCheckpoint(
     input: unknown,
     access: IpcRequestAccess
-  ): Promise<AjaxResult<SceneGenerationHistorySummaryVO>> {
+  ): Promise<AjaxResult<SceneGenerationHistoryDetailVO>> {
     return this.handle(
       readSceneGenerationCheckpointSchema,
       input,
       access,
       '检查点已读取',
-      async (request) => {
-        const history = await this.services.history.listSceneGenerationHistoryForScene({
-          projectId: request.projectId,
-          sceneId: request.sceneId,
-          limit: 100
-        })
-        const summary = history.find(
-          (item) =>
-            item.threadId === request.threadId &&
-            item.branchId === request.branchId &&
-            item.checkpointId === request.checkpointId
-        )
-        if (!summary) {
-          throw new AppException({ code: ErrorCodes.invalidRequest, msg: '该检查点不存在' })
-        }
-        return summary
-      }
+      (request) => this.services.history.readSceneGenerationHistoryDetail(request)
+    )
+  }
+
+  /**
+   * 从 AI 历史创建分支。只把严格校验后的来源身份和策略交给启动服务；
+   * 新操作身份、来源资格与失败原因均由应用层生成或重新证明。
+   */
+  fork(
+    input: unknown,
+    access: IpcRequestAccess
+  ): Promise<AjaxResult<SceneGenerationForkVO>> {
+    return this.handle(
+      forkSceneGenerationSchema,
+      input,
+      access,
+      '已从历史创建新分支',
+      (request) => this.services.launch.forkSceneGeneration(request)
     )
   }
 
@@ -222,4 +287,12 @@ export class SceneGenerationController {
       }
     )
   }
+}
+
+/** 只在确有更早条目时携带游标，避免页面多请求一轮空页。 */
+function withUnfinishedCursor(
+  page: Pick<SceneGenerationHistoryPageVO, 'items' | 'unfinished'>,
+  nextCursor: string | undefined
+): SceneGenerationHistoryPageVO {
+  return nextCursor === undefined ? page : { ...page, unfinishedNextCursor: nextCursor }
 }

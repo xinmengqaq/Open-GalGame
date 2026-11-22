@@ -1,19 +1,24 @@
 import type {
   CloseSceneGenerationCandidatePreviewDTO,
+  ForkSceneGenerationFromHistoryDTO,
   ListSceneGenerationHistoryForSceneDTO,
   OpenSceneGenerationCandidatePreviewDTO,
   ReadSceneGenerationCheckpointDTO,
   ReplySceneGenerationInteractionDTO,
   ResumeSceneGenerationDTO,
   RetrySceneGenerationRepairDTO,
+  SceneGenerationRecoveryScopeDTO,
   SceneGenerationScopeDTO,
   StartSceneGenerationDTO
 } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type {
   SceneGenerationCandidatePreviewVO,
-  SceneGenerationHistorySummaryVO,
+  SceneGenerationForkVO,
+  SceneGenerationHistoryDetailVO,
+  SceneGenerationHistoryPageVO,
   SceneGenerationRenderProgressEventVO,
-  SceneGenerationRenderStatusVO
+  SceneGenerationRenderStatusVO,
+  SceneGenerationVerificationResultVO
 } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
@@ -21,19 +26,17 @@ import { communicationFailureResult } from '../../client/communicationFailure'
 import type { DesktopBridge } from '../../client/DesktopBridge'
 import {
   parseSceneGenerationCheckpointResult,
+  parseSceneGenerationForkResult,
   parseSceneGenerationHistoryResult,
   parseSceneGenerationNullResult,
   parseSceneGenerationPreviewResult,
-  parseSceneGenerationStatusResult
+  parseSceneGenerationStatusResult,
+  parseSceneGenerationVerificationResult
 } from '../contracts/SceneGenerationResponseSchema'
 import type { SceneGenerationClient, SceneGenerationProgressScope } from './SceneGenerationClient'
 
 const progressSubscriptionFailureMessage = '进度订阅未建立，正在用状态刷新。'
 
-/**
- * 最近一次操作可能不存在：先按 null 结果解析，再按完整渲染状态校验；
- * 两种成功响应互斥，失败响应由 null 解析统一接住。
- */
 function parseLatestSceneGenerationResult(
   value: unknown
 ): AjaxResult<SceneGenerationRenderStatusVO | null> | null {
@@ -54,9 +57,6 @@ async function readGenerationResult<T>(
 }
 
 export class SceneGenerationClientImpl implements SceneGenerationClient {
-  /**
-   * @param bridge - 与主进程通信的固定桥接。
-   */
   constructor(private readonly bridge: DesktopBridge) {}
 
   start(request: StartSceneGenerationDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>> {
@@ -115,6 +115,24 @@ export class SceneGenerationClientImpl implements SceneGenerationClient {
     )
   }
 
+  resumeUnfinished(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<AjaxResult<SceneGenerationRenderStatusVO>> {
+    return readGenerationResult(
+      () => this.bridge.resumeSceneGeneration({ ...request, recovery: 'unfinished' }),
+      parseSceneGenerationStatusResult
+    )
+  }
+
+  retryCleanup(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<AjaxResult<SceneGenerationRenderStatusVO>> {
+    return readGenerationResult(
+      () => this.bridge.resumeSceneGeneration({ ...request, recovery: 'cleanup' }),
+      parseSceneGenerationStatusResult
+    )
+  }
+
   cancel(request: SceneGenerationScopeDTO): Promise<AjaxResult<SceneGenerationRenderStatusVO>> {
     return readGenerationResult(
       () => this.bridge.cancelSceneGeneration(request),
@@ -122,9 +140,18 @@ export class SceneGenerationClientImpl implements SceneGenerationClient {
     )
   }
 
+  verifyUnknownResult(
+    request: SceneGenerationRecoveryScopeDTO
+  ): Promise<AjaxResult<SceneGenerationVerificationResultVO>> {
+    return readGenerationResult(
+      () => this.bridge.resumeSceneGeneration({ ...request, recovery: 'verify' }),
+      parseSceneGenerationVerificationResult
+    )
+  }
+
   listHistory(
     request: ListSceneGenerationHistoryForSceneDTO
-  ): Promise<AjaxResult<readonly SceneGenerationHistorySummaryVO[]>> {
+  ): Promise<AjaxResult<SceneGenerationHistoryPageVO>> {
     return readGenerationResult(
       () => this.bridge.listSceneGenerationHistory(request),
       parseSceneGenerationHistoryResult
@@ -133,10 +160,19 @@ export class SceneGenerationClientImpl implements SceneGenerationClient {
 
   readCheckpoint(
     request: ReadSceneGenerationCheckpointDTO
-  ): Promise<AjaxResult<SceneGenerationHistorySummaryVO>> {
+  ): Promise<AjaxResult<SceneGenerationHistoryDetailVO>> {
     return readGenerationResult(
       () => this.bridge.readSceneGenerationCheckpoint(request),
       parseSceneGenerationCheckpointResult
+    )
+  }
+
+  fork(
+    request: ForkSceneGenerationFromHistoryDTO
+  ): Promise<AjaxResult<SceneGenerationForkVO>> {
+    return readGenerationResult(
+      () => this.bridge.forkSceneGeneration(request),
+      parseSceneGenerationForkResult
     )
   }
 

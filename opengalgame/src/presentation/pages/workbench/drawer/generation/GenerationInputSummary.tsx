@@ -11,7 +11,6 @@ import {
   type InputSummaryEntry
 } from './generationPresentation'
 
-/* 既有甜甜圈的七级分类色，只引用 tokens.css 里的调色板，不新增主题变量。 */
 const SEGMENT_COLORS = [
   'var(--type-document)',
   'var(--type-image)',
@@ -24,12 +23,10 @@ const SEGMENT_COLORS = [
 const DONUT_RADIUS = 62
 const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS
 
-/** 动画、特效是字段卡片，不在本轮生成的已读输入里。 */
 function isFieldKind(key: string): boolean {
   return key === 'animation' || key === 'effect'
 }
 
-/** 启动后的快照把动画、特效合并成一个字段绑定计数。 */
 function isFieldBindingKey(key: string): boolean {
   return key === 'fieldBindingCount'
 }
@@ -51,7 +48,6 @@ type CardRowView = {
   command: string | null
 }
 
-/** 按真实卡片字段取标题、用途说明和字段卡片的命令引用，不从用途角色推导文案。 */
 function cardRowViewOf(card: SessionCard): CardRowView {
   if (card.kind === 'prompt') {
     const body = card.body.trim()
@@ -66,7 +62,6 @@ function cardRowViewOf(card: SessionCard): CardRowView {
     }
     const firstLine = body.split(/\r?\n/).find((line) => line.trim().length > 0) ?? body
     const rest = body.slice(body.indexOf(firstLine) + firstLine.length).trim()
-    // 标题已经展示首行；正文从首行之后接续，避免长提示词首行重复两遍。
     const afterTitle = firstLine.length > 40 ? firstLine.slice(40) : ''
     const continuation = [afterTitle, rest].filter((part) => part !== '').join('\n')
     return {
@@ -267,7 +262,6 @@ function SummaryDonut({
   )
 }
 
-/** 启动前的真实画布卡片：分类只展示已读输入，字段绑定单独说明未用于本轮生成。 */
 function CardGroups({ cards }: { cards: readonly SessionCard[] }): ReactElement {
   const entries = countCanvasCards(cards).filter((entry) => entry.count > 0)
   const inputs = entries.filter((entry) => !isFieldKind(entry.key))
@@ -308,10 +302,6 @@ function CardGroups({ cards }: { cards: readonly SessionCard[] }): ReactElement 
   )
 }
 
-/**
- * 本轮快照的安全明细：只展示后端已给的标题、名称和范围，
- * 不展开正文、路径或内部身份；没有明细时不占位。
- */
 function SnapshotDetails({
   entries
 }: {
@@ -335,7 +325,6 @@ function SnapshotDetails({
   )
 }
 
-/** 启动后只读本轮快照：计数由甜甜圈图例承担，这里保留固定说明、字段绑定和明细。 */
 function SnapshotNotice({
   field,
   entries
@@ -364,13 +353,10 @@ function SnapshotNotice({
 export interface GenerationInputSummaryViewProps {
   status: SceneGenerationRenderStatusVO | null
   cards: readonly SessionCard[]
-  /** 画布输入仍在读取；有快照时以快照为准。 */
   loading?: boolean
-  /** 画布输入读取失败的安全文案；不显示路径或内部错误。 */
   loadError?: string | null
 }
 
-/** 输入摘要独立视图：启动前按真实卡片核对，启动后只读本轮快照计数。 */
 export function GenerationInputSummaryView({
   status,
   cards,
@@ -437,7 +423,6 @@ export function GenerationInputSummaryView({
 }
 
 export type GenerationInputSummaryCount = InputSummaryEntry & {
-  /** 该分类只作字段绑定，不进入本轮生成。 */
   unconsumed: boolean
 }
 
@@ -465,11 +450,9 @@ function metaTextOf(entries: readonly InputSummaryEntry[], empty: string): strin
 
 export interface GenerationInputSummaryPopoverProps {
   entries: readonly GenerationInputSummaryCount[]
-  /** 提供时才显示“查看完整摘要”；旧调用没有完整视图可切，不造假动作。 */
   onViewFullSummary?: () => void
 }
 
-/** 轻量浮层只放分类计数和“查看完整摘要”，不重复渲染分组列表。 */
 export function GenerationInputSummaryPopover({
   entries,
   onViewFullSummary
@@ -506,11 +489,9 @@ export interface GenerationInputSummaryBarProps {
   cards: readonly SessionCard[]
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** P4-2b 切到输入摘要标签；不传时浮层只显示计数。 */
   onOpenFullSummary?: () => void
 }
 
-/** 对话流底部的单行摘要入口：轻量浮层放分类计数，不再原位展开分组。 */
 export function GenerationInputSummaryBar({
   status,
   cards,

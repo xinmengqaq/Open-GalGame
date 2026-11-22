@@ -17,16 +17,10 @@ import styles from './workbenchShell.module.css'
 interface FeedbackLayerProps {
   children?: ReactNode
   active?: boolean
-  /** 顶栏实际高度：无弹窗时反馈固定在它下方；弹窗内改用流内位置。 */
   topOffset?: number
   onNoticeSlotChange?: (node: HTMLElement | null) => void
 }
 
-/**
- * 唯一反馈浮层。没有弹窗时固定在工作台顶栏下方的中央安全位，位置不随遮挡重算；
- * 打开原生居中弹窗时迁入最上层 dialog 操作栏之前的流内位置，浮在遮罩之上且不盖输入。
- * 不抢焦点。
- */
 export function FeedbackLayer({
   children,
   active = false,
@@ -70,15 +64,11 @@ export function FeedbackLayer({
     let parentFrame = 0
     function syncParent(): void {
       parentFrame = 0
-      // 只迁入普通对话框/抽屉；确认框里不承载 Toast，避免结果条叠进确认内容。
       const dialogs = Array.from(
         document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"][data-state="open"]')
       )
       const parent = dialogs.at(-1) ?? document.body
       if (host.parentElement !== parent) {
-        // 原生居中弹窗会成为 fixed 子元素的包含块（弹窗自身有 backdrop-filter），
-        // 固定浮层会落回弹窗内部盖住标题和输入。这里改为插到操作栏之前的流内一条，
-        // 不遮内容也不改 Dialog 的居中方式；右侧抽屉等其他弹层保持固定浮层。
         const footer = parent.tagName === 'DIALOG' ? parent.querySelector('footer') : null
         if (footer?.parentElement) footer.parentElement.insertBefore(host, footer)
         else parent.appendChild(host)

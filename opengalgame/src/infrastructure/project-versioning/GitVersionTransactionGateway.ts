@@ -14,6 +14,7 @@ import type {
   VersionLimitedChange,
   VersionRollbackExecution,
   VersionRollbackRequest,
+  VersionScopeBaseline,
   VersionTransactionGateway,
   VersionTransactionView
 } from '@application/project-versioning/ports/VersionTransactionGateway'
@@ -30,7 +31,12 @@ import { assertRelativePath, resolveContained } from '@infrastructure/git/contai
 import { realGitEffects, type GitEffects } from '@infrastructure/git/gitEffects'
 import { asGitException } from '@infrastructure/git/gitErrors'
 import { bytesEqual, digestBytes } from '@infrastructure/git/objects/gitContent'
-import { applyTreeEdits, readCommitFile, type TreeEdit } from '@infrastructure/git/objects/gitTree'
+import {
+  applyTreeEdits,
+  isReachableFromHead,
+  readCommitFile,
+  type TreeEdit
+} from '@infrastructure/git/objects/gitTree'
 import { writeCandidateRevision } from '@infrastructure/git/objects/writeCandidateRevision'
 import { readWorkBaseline } from '@infrastructure/git/repository/WorkBaseline'
 import {
@@ -38,7 +44,11 @@ import {
   readBranchRef,
   readHead
 } from '@infrastructure/git/repository/repositoryGuard'
-import type { ContentPresence, OperationCommitState } from '@infrastructure/git/GitRepository'
+import type {
+  ContentPresence,
+  OperationCommitState,
+  WorkBaseline
+} from '@infrastructure/git/GitRepository'
 import {
   restoreRecordedFiles,
   verifyCompensationBackup
@@ -61,6 +71,7 @@ import { rollbackLimited } from '@infrastructure/git/transaction/OperationRollba
 import { enqueueWorkWrite } from '@infrastructure/git/transaction/workWriteBoundary'
 
 import { readRetainedBlob } from './FileVersionContentGateway'
+import { assertScopeBaselineInput, observeCommitScope } from './CommitScopeObservation'
 import {
   listCallerIntentsAt,
   listVersionOperationsAt,
@@ -109,10 +120,6 @@ const settlementSchema = z.strictObject({
 type VersionSettlement = z.infer<typeof settlementSchema>
 type SettlementWriter = (root: string, settlement: VersionSettlement) => Promise<void>
 
-/**
- * 把共享 Git 事务映射为版本事实。
- * 不重置分支，不改写已有提交，也不覆盖声明内容之外的偏离。
- */
 export class GitVersionTransactionGateway implements VersionTransactionGateway {
   constructor(
     private readonly userDirectory: string,
@@ -202,6 +209,7 @@ export class GitVersionTransactionGateway implements VersionTransactionGateway {
     if (input.changes.length === 0) {
       throw new AppException({ code: ErrorCodes.invalidRequest, msg: '没有可提交的路径' })
     }
+    assertScopeBaselineInput(input)
     const root = await resolveProjectWorkRoot(this.userDirectory, input.projectId)
     return enqueueWorkWrite(root, async () => {
       if (input.sourceModule === 'project-files') {
@@ -650,17 +658,36 @@ async function publishInside(
   const paths = uniquePaths(input.changes.map((change) => assertRelativePath(change.relativePath)))
   const record = await readVersionOperation(root, input.operationId)
   const scope = uniquePaths([...paths, ...(record?.watchedPaths ?? [])])
-  const observation = await observeCommit(root, input.operationId, scope, input.changes)
+  const observation = await observeCommit(
+    root,
+    input.operationId,
+    scope,
+    input.changes,
+    input.scopeBaseline
+  )
+  if (
+    input.scopeBaseline !== undefined &&
+    !(await isReachableFromHead(root, input.scopeBaseline.revisionRef))
+  ) {
+    throw baselineConflict()
+  }
   const decision = await input.verify(observation)
   if (decision.action === 'reuse') return reuseCommit(root, input.operationId)
-  const fresh = await observeCommit(root, input.operationId, scope, input.changes)
-  if (fresh.baseline.revisionRef !== input.baselineRef || fresh.subsequentPaths.length > 0) {
+  const fresh = await observeCommit(
+    root,
+    input.operationId,
+    scope,
+    input.changes,
+    input.scopeBaseline
+  )
+  if (fresh.subsequentPaths.length > 0) throw baselineConflict()
+  if (input.scopeBaseline === undefined && fresh.baseline.revisionRef !== input.baselineRef) {
     throw baselineConflict()
   }
   const loaded = await loadChanges(root, fresh.baseline.revisionRef, input.changes)
-  if (loaded.length === 0) return persistNoChange(root, input)
+  if (loaded.length === 0) return persistNoChange(root, input, fresh.baseline.revisionRef)
   try {
-    return await publishChanges(root, input, loaded, effects, settlementWriter)
+    return await publishChanges(root, input, loaded, effects, settlementWriter, fresh.work)
   } catch (error) {
     return classifyCommitFailure(root, input, error, effects, settlementWriter)
   }
@@ -705,7 +732,8 @@ async function publishChanges(
   input: VersionCommitRequest,
   changes: readonly LoadedChange[],
   effects: GitEffects,
-  settlementWriter: SettlementWriter
+  settlementWriter: SettlementWriter,
+  observed: WorkBaseline
 ): Promise<VersionCommitExecution> {
   const parent = await mkdtemp(join(tmpdir(), 'opengalgame-version-'))
   const gitDir = join(parent, 'candidate')
@@ -720,20 +748,29 @@ async function publishChanges(
           bytes: change.bytes
         }))
     )
-    const publishPaths = changes.map((change) => change.relativePath)
-    const baseline = await readWorkBaseline(root, publishPaths)
-    if (baseline.headCommitId !== input.baselineRef) throw baselineConflict()
+    const expectedBaseline: WorkBaseline = {
+      headCommitId: observed.headCommitId,
+      branch: observed.branch,
+      paths: observed.paths
+    }
+    if (input.scopeBaseline === undefined && expectedBaseline.headCommitId !== input.baselineRef) {
+      throw baselineConflict()
+    }
     const published = await commitLimited(
       {
         projectRoot: root,
         operationId: input.operationId,
         sourceModule: input.sourceModule,
-        expectedBaseline: baseline,
+        expectedBaseline,
         changes: changes.map(({ relativePath, action }) => ({ relativePath, action })),
         candidate: { gitDir, revisionId: revision.revisionId },
+        advanceBaseline: input.scopeBaseline !== undefined,
         backupBeforeRestore: input.backupBeforeRestore === true,
         recheck: async (fresh) => {
-          if (fresh.headCommitId !== baseline.headCommitId || fresh.branch !== baseline.branch) {
+          if (
+            fresh.headCommitId !== expectedBaseline.headCommitId ||
+            fresh.branch !== expectedBaseline.branch
+          ) {
             throw baselineConflict()
           }
         }
@@ -798,14 +835,14 @@ async function rememberCommit(
       outcome: { state: '已提交', revisionRef, changedAt }
     })
   } catch {
-    // 提交已由记录、引用和历史证明；结算缺失由后续读取或工程恢复补齐。
   }
   return { state: '已提交', revisionRef, changedAt }
 }
 
 async function persistNoChange(
   root: string,
-  input: VersionCommitRequest
+  input: VersionCommitRequest,
+  observedRevisionRef: string
 ): Promise<VersionCommitExecution> {
   const existing = await readSettlement(root, input.operationId)
   if (
@@ -824,14 +861,14 @@ async function persistNoChange(
       msg: '同一操作不能更换内容'
     })
   }
-  const changedAt = await changedAtOf(root, input.baselineRef)
+  const changedAt = await changedAtOf(root, observedRevisionRef)
   await writeSettlement(root, {
     formatVersion: 1,
     operationId: input.operationId,
     contentFingerprint: input.contentFingerprint,
-    outcome: { state: '无变更', revisionRef: input.baselineRef, changedAt }
+    outcome: { state: '无变更', revisionRef: observedRevisionRef, changedAt }
   })
-  return { state: '无变更', revisionRef: input.baselineRef, changedAt }
+  return { state: '无变更', revisionRef: observedRevisionRef, changedAt }
 }
 
 async function rememberRollback(
@@ -998,23 +1035,29 @@ async function pendingView(
   return { operationId, contentFingerprint: fingerprint, outcome: { state: '待核对' } }
 }
 
+type CommitObservation = {
+  readonly baseline: VersionBaselineFact
+  readonly subsequentPaths: readonly string[]
+  readonly transaction: VersionTransactionView | null
+  readonly work: WorkBaseline
+}
+
 async function observeCommit(
   root: string,
   operationId: string,
   scope: readonly string[],
-  changes: readonly VersionLimitedChange[]
-): Promise<{
-  baseline: VersionBaselineFact
-  subsequentPaths: readonly string[]
-  transaction: VersionTransactionView | null
-}> {
-  const head = await readHead(root)
-  const subsequentPaths =
-    scope.length === 0 ? [] : await pathsDriftedFromDeclaration(root, scope, changes)
+  changes: readonly VersionLimitedChange[],
+  scopeBaseline: VersionScopeBaseline | undefined
+): Promise<CommitObservation> {
+  const observed = await observeCommitScope(root, scope, changes, scopeBaseline)
   return {
-    baseline: factOf(head),
-    subsequentPaths,
-    transaction: await readTransactionAt(root, operationId)
+    baseline: {
+      baselineRef: observed.work.headCommitId,
+      revisionRef: observed.work.headCommitId
+    },
+    subsequentPaths: observed.subsequentPaths,
+    transaction: await readTransactionAt(root, operationId),
+    work: observed.work
   }
 }
 
@@ -1032,51 +1075,6 @@ async function observeRollback(
         : null
   const subsequentPaths = forward ? await driftedPaths(root, ownedPaths, forward) : []
   return { subsequentPaths, transaction }
-}
-
-/**
- * 相对当前修订有差异，且不是本次声明内容的路径。
- * 声明路径会按保留字节重新读取；一致时允许发布，提交期间被换成别的字节则拒绝。
- */
-async function pathsDriftedFromDeclaration(
-  root: string,
-  scope: readonly string[],
-  changes: readonly VersionLimitedChange[]
-): Promise<string[]> {
-  const baseline = await readWorkBaseline(root, scope)
-  const declared: Record<string, VersionLimitedChange> = {}
-  for (const change of changes) declared[assertRelativePath(change.relativePath)] = change
-  const drifted: string[] = []
-  for (const path of baseline.paths) {
-    if (!presenceChanged(path.head, path.stage) && !presenceChanged(path.head, path.worktree)) {
-      continue
-    }
-    const change = declared[path.relativePath]
-    if (change && (await matchesDeclaredContent(root, path, change))) continue
-    drifted.push(path.relativePath)
-  }
-  return drifted
-}
-
-async function matchesDeclaredContent(
-  root: string,
-  path: {
-    readonly head: ContentPresence
-    readonly stage: ContentPresence
-    readonly worktree: ContentPresence
-  },
-  change: VersionLimitedChange
-): Promise<boolean> {
-  if (change.action === 'delete') {
-    if (change.retentionRef !== null) throw identityUnfixed()
-    const stageSafe = !presenceChanged(path.head, path.stage) || !path.stage.exists
-    return !path.worktree.exists && stageSafe
-  }
-  if (!change.retentionRef) throw identityUnfixed()
-  const bytes = await readRetainedBlob(root, change.retentionRef)
-  const expected = { exists: true, digest: digestBytes(bytes) }
-  if (presenceChanged(expected, path.worktree)) return false
-  return !presenceChanged(path.head, path.stage) || !presenceChanged(expected, path.stage)
 }
 
 async function driftedPaths(
@@ -1125,7 +1123,6 @@ async function loadChanges(
     if (!change.retentionRef) throw identityUnfixed()
     const bytes = await readRetainedBlob(root, change.retentionRef)
     if (!current || !bytesEqual(current, bytes)) {
-      // 当前修订没有此路径时按新增发布，已落盘的新文件不因修改动作被拒绝。
       loaded.push({
         relativePath: change.relativePath,
         action: current ? change.action : 'add',
@@ -1154,7 +1151,6 @@ async function commitMatchesIntent(
   if (technical.record.paths.length !== retentions.length) return false
   for (const path of technical.record.paths) {
     const retention = retentions.find((item) => item.relativePath === path.relativePath)
-    // 基线没有路径时，修改意图会按新增发布。只认这一种动作改写。
     const actionMatches =
       retention?.action === path.action || (retention?.action === 'modify' && path.action === 'add')
     if (!retention || !actionMatches) return false
@@ -1162,7 +1158,6 @@ async function commitMatchesIntent(
       if (retention.retentionRef !== path.intendedDigest) return false
       continue
     }
-    // 可靠结算后凭据会释放。此时仍须核对已发布内容，不能把空引用当成一致。
     if (path.action === 'delete') {
       if (path.intendedDigest !== null) return false
       continue

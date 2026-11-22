@@ -17,7 +17,7 @@ import {
 } from '@application/scene-generation/policies/SceneGenerationStartConflict'
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
-import { withFileTurn } from '@infrastructure/ai/tools/WorkspaceFileTools'
+import { withFileTurn } from '@infrastructure/storage/fileTurn'
 import { assertWorkflowSegment } from '@infrastructure/workflow/WorkflowIdentity'
 import { writeJsonDocument } from '@infrastructure/storage/jsonDocument'
 import {
@@ -33,7 +33,6 @@ export class FileSceneGenerationExecutionRepositoryImpl
 {
   constructor(private readonly stateRoot: string) {}
 
-  /** 按工程与操作读取，拒绝跨场景归属。 */
   async readExecution(scope: SceneGenerationScopeDTO): Promise<SceneGenerationExecution | null> {
     assertWorkflowSegment(scope.operationId, 'operationId')
     const result = (await this.readStored(scope.projectId)).find(
@@ -55,16 +54,44 @@ export class FileSceneGenerationExecutionRepositoryImpl
     return operations.find((item) => !isTerminal(item)) ?? null
   }
 
-  /** 单次原子替换同时建立操作和线程登记，多实例共用文件串行边界。 */
   async createExecution(execution: SceneGenerationExecution): Promise<SceneGenerationExecution> {
     const path = await this.projectPath(execution.projectId)
     return withFileTurn(path, async () => {
       const operations = await this.readStoredUnlocked(execution.projectId, path)
+      // 分叉的来源可以停在等待/暂停位置；只允许这一种同线程未结束来源，
+      // 其它运行中或额外未结束操作仍按单线程单活操作拒绝。
+      const sourceOperationId = execution.fork?.sourceOperationId
+      const activeInThread = operations.filter(
+        (item) => item.threadId === execution.threadId && !isTerminal(item)
+      )
+      const forkFromWaitingSource =
+        execution.forkRequest !== undefined &&
+        sourceOperationId !== undefined &&
+        activeInThread.length === 1 &&
+        activeInThread[0].operationId === sourceOperationId &&
+        (activeInThread[0].state === 'waiting' ||
+          (activeInThread[0].state === 'interrupted' &&
+            activeInThread[0].interruptReason === 'paused'))
+      if (forkFromWaitingSource) {
+        const source = activeInThread[0]
+        if (
+          execution.fork === undefined ||
+          source.pendingReply !== undefined ||
+          source.checkpointId !== execution.fork.checkpointId ||
+          source.candidateSnapshotId !== execution.fork.candidateSnapshotId
+        )
+          throw new AppException({
+            code: ErrorCodes.operationConflict,
+            msg: '来源历史已变化，不能分叉'
+          })
+      }
       if (
         operations.some(
           (item) =>
             item.operationId === execution.operationId ||
-            (item.threadId === execution.threadId && !isTerminal(item))
+            (item.threadId === execution.threadId &&
+              !isTerminal(item) &&
+              !forkFromWaitingSource)
         )
       )
         throw new AppException({
@@ -79,8 +106,6 @@ export class FileSceneGenerationExecutionRepositoryImpl
         )
       )
         throw new AppException({ code: ErrorCodes.forbidden, msg: '线程或分支归属不匹配' })
-      // 并发启动以仓储原子块为准：同场景已存在进行中的生成时，新的生成一律拒绝。
-      // 分叉、修复等模式没有 generate 标记，不占用场景生成位置；当前记录可缺省 mode。
       if (
         execution.mode === 'generate' &&
         operations.some(
@@ -104,7 +129,6 @@ export class FileSceneGenerationExecutionRepositoryImpl
     })
   }
 
-  /** 保存已接受回复及执行事实，不改变操作身份。 */
   async writeExecution(execution: SceneGenerationExecution): Promise<SceneGenerationExecution> {
     const path = await this.projectPath(execution.projectId)
     return withFileTurn(path, async () => {
@@ -133,7 +157,6 @@ export class FileSceneGenerationExecutionRepositoryImpl
     })
   }
 
-  /** 基础设施内历史与清理取得同线程归属，不暴露额外应用端口。 */
   async listThread(scope: SceneGenerationThreadDTO): Promise<SceneGenerationExecution[]> {
     assertWorkflowSegment(scope.threadId, 'threadId')
     const operations = (await this.readStored(scope.projectId)).filter(
@@ -149,10 +172,12 @@ export class FileSceneGenerationExecutionRepositoryImpl
     return this.readSceneExecutions(request.projectId, request.sceneId)
   }
 
-  /**
-   * 复用场景内的历史读取范围，不按历史页大小截断，避免最新操作因分页丢失。
-   * updatedAt 并列时用 createdAt 和存储顺序兜底，保证同一份文件每次选出同一条。
-   */
+  /** 工程打开时按本工程记录清理已受理取消；不读取其它工程目录。 */
+  async listProjectExecutions(projectId: string): Promise<SceneGenerationExecution[]> {
+    assertWorkflowSegment(projectId, 'projectId')
+    return [...(await this.readStored(projectId))]
+  }
+
   async findLatestSceneExecution(
     projectId: string,
     sceneId: string
@@ -190,16 +215,11 @@ export class FileSceneGenerationExecutionRepositoryImpl
     )
   }
 
-  /**
-   * 读取在文件串行边界内完成：首访旧格式先备份原始字节、当前化可迁移记录、
-   * 把只能归档的旧记录移出产品文件，再返回当前记录；迁移未完成则明确拒绝。
-   */
   private async readStored(projectId: string): Promise<readonly SceneGenerationExecution[]> {
     const path = await this.projectPath(projectId)
     return withFileTurn(path, () => this.readStoredUnlocked(projectId, path))
   }
 
-  /** 假定调用方已持有同一文件的串行边界，禁止在这里再次进入 withFileTurn。 */
   private async readStoredUnlocked(
     projectId: string,
     path: string
@@ -212,7 +232,6 @@ export class FileSceneGenerationExecutionRepositoryImpl
     })
   }
 
-  /** 写回当前版本；调用前已在同一串行边界内确认记录全部当前化。 */
   private async writeStored(
     projectId: string,
     operations: readonly SceneGenerationExecution[]
@@ -235,7 +254,6 @@ export class FileSceneGenerationExecutionRepositoryImpl
       throw new AppException({ code: ErrorCodes.forbidden, msg: '线程不属于当前场景' })
   }
 
-  /** 校验身份后推导固定本机位置。 */
   private async projectPath(projectId: string): Promise<string> {
     return resolveStatePath(await ensureStateRoot(this.stateRoot), this.relativePath(projectId))
   }

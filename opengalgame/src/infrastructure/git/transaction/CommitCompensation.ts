@@ -12,13 +12,6 @@ import { readStageOids, readWorktreeBytes } from '../repository/WorkBaseline'
 import { AppException } from '@common/errors/AppException'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 
-/**
- * 只恢复本操作改过、且当前内容仍属于本操作的文件和索引项。
- * @param record - 含原始字节和暂存 OID 的记录。
- * @param appliedStageOids - 本操作已经写入索引的路径及其 OID。尚未写入的路径不在其中。
- * @param options.backupBeforeRestore - project-files：先完整备份并校验当前工作区/暂存字节，再按快照恢复；其他模块缺省保持原拒绝语义。
- * @throws {AppException} 当前内容已不属于本操作、备份/校验失败或恢复失败。
- */
 export async function restoreRecordedFiles(
   projectRoot: string,
   record: OperationRecord,
@@ -84,11 +77,6 @@ type CompensationBackup = {
   readonly paths: ReadonlyMap<string, BackupPath>
 }
 
-/**
- * project-files 专用：恢复前完整备份当前工作区/暂存字节并校验，再按快照恢复操作前内容。
- * 补偿模式写 restoring/compensated；显式回退模式只写 rollback-required 和备份关联，
- * 由回退调用方完成提交与 rolled-back，确保只保留一套备份实现。
- */
 export async function restoreRecordedFilesWithBackup(
   projectRoot: string,
   record: OperationRecord,
@@ -163,10 +151,6 @@ export async function restoreRecordedFilesWithBackup(
   return { attemptId: backup.attemptId }
 }
 
-/**
- * 读取并校验指定 compensation attempt 的 manifest、全部备份字节和本次操作记录证据。
- * @throws {AppException} manifest 缺失/损坏、路径/记录证据不一致或备份字节不可读。
- */
 export async function verifyCompensationBackup(
   projectRoot: string,
   record: OperationRecord,
@@ -489,14 +473,6 @@ function backupChanged(): AppException {
   })
 }
 
-/**
- * 回退发布前失败时，只把本操作路径恢复到回退开始时的文件和索引项。
- * @param record - 回退记录。
- * @param forwardFiles - 回退开始时这些路径的字节。
- * @param stageBefore - 回退开始时这些路径的暂存 OID。
- * @param appliedStageOids - 回退已经写入索引的路径及其 OID。
- * @throws {AppException} 当前内容已不属于本操作，或恢复失败。
- */
 export async function restoreForwardFiles(
   projectRoot: string,
   record: OperationRecord,

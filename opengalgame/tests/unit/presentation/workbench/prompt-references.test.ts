@@ -235,7 +235,6 @@ describe('提示词 @ 卡片引用', () => {
     })
 
     it('取消浮层只移除本次触发文本并把光标复位到移除点，不插入引用', () => {
-      // 取消路径与选中候选共用同一套文本语义：先按当前光标重算 mention，再只移除触发文本。
       const cancelAt = (body: string, caret: number): { value: string; caret: number } | null => {
         const mention = promptMentionAt(body, caret)
         return mention ? removePromptMentionText(body, mention) : null

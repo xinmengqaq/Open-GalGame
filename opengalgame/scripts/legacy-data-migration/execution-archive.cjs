@@ -34,6 +34,14 @@ const REASONS = new Set([
   'unsupported-envelope-version',
   'unreadable-record'
 ])
+const UNFINISHED_STATES = {
+  pending: true,
+  running: true,
+  waiting: true,
+  committing: true,
+  interrupted: true,
+  cancelling: true
+}
 const LEGACY_RECORD_KEYS = [
   'projectId',
   'sceneId',
@@ -390,6 +398,10 @@ async function verifyArchive(directory, stateRoot) {
     targetSha256: manifest.targetSha256,
     counts: manifest.counts,
     legacyRecords: manifest.legacyRecords.length,
+    unfinishedRecords: manifest.legacyRecords
+      .filter((record) => UNFINISHED_STATES[record.state] === true)
+      .map((record) => ({ operationId: record.operationId, state: record.state })),
+    continuable: false,
     legacyReasons: manifest.legacyRecords.reduce((counts, record) => {
       counts[record.reason] = (counts[record.reason] ?? 0) + 1
       return counts

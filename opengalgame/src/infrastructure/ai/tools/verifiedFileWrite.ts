@@ -7,12 +7,6 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 
 import { throwIfStopped } from '../execution/executionErrors'
 
-/**
- * 把字节写入目标文件。临时文件与目标位于同一目录，写入后回读核对再改名。
- * 取消和失败都以目标文件的实际结果为准，不自动重试。
- * @param signal - 取消信号。改名之前中止则保留原目标。
- * @throws {AppException} 写入、核对、取消或临时文件清理失败。
- */
 export async function writeVerifiedBytes(
   absolutePath: string,
   bytes: Uint8Array,
@@ -47,12 +41,6 @@ export async function writeVerifiedBytes(
   }
 }
 
-/**
- * 关闭句柄并清理尚未改名的临时文件。清理失败不吞掉。
- * @param handle - 仍打开的临时文件句柄。
- * @param failed - 写入过程中的原始失败。
- * @throws {AppException} 句柄关闭或临时文件清理失败，或原样抛出写入失败。
- */
 async function releaseWrite(
   handle: fs.FileHandle | undefined,
   temporary: string,
@@ -89,11 +77,6 @@ function asFileFailure(error: unknown): AppException {
   return new AppException({ code: ErrorCodes.internalError, msg: '文件写入失败', cause: error })
 }
 
-/**
- * 取清理失败列表中的第一个原因。
- * @param errors - 关闭或删除失败。
- * @returns 第一个失败。
- */
 function firstCause(errors: unknown[]): unknown {
   return errors.length === 1 ? errors[0] : new AggregateError(errors)
 }

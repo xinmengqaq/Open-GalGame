@@ -48,7 +48,6 @@ function clearMotion(targets: Array<Element | null>, properties: string): void {
   if (nodes.length > 0) gsap.set(nodes, { clearProps: properties })
 }
 
-/** 关系标签：状态签名变化时短促出现；选中短强调；拒绝时回弹。 */
 export function useRelationLabelMotion({
   root,
   signature,
@@ -157,7 +156,6 @@ export function useRelationLabelMotion({
   )
 }
 
-/** 关系线：首次进入绘制感一次；选中短亮；拒绝时红色轮廓快速回弹。 */
 export function useRelationEdgeMotion({
   root,
   pending,
@@ -256,7 +254,6 @@ export function useRelationEdgeMotion({
   )
 }
 
-/** 绘制中：停掉常驻奔跑虚线，改为一次更强的线宽与端点强调。 */
 export function useConnectionPreviewMotion(
   root: RefObject<HTMLDivElement | null>,
   connecting: boolean
@@ -338,7 +335,6 @@ export function useConnectionPreviewMotion(
   )
 }
 
-/** 关系弹窗：打开时强调条展开、端点卡片错峰出现；记录变化时短促回落。 */
 export function useRelationDialogMotion({
   root,
   relationId,

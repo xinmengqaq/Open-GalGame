@@ -47,19 +47,19 @@ export interface SceneGenerationWorkspace {
   readonly sceneDirectory: string
 }
 
-export type SceneGenerationInterruptReason = 'paused' | 'candidateConflict' | 'commitUnknown'
+export type SceneGenerationInterruptReason =
+  | 'paused'
+  | 'candidateConflict'
+  | 'commitUnknown'
+  | 'writeUnknown'
+  | 'readInterrupted'
 
-/**
- * 修复重跑可用的来源上下文。只保存受控读取坐标和源事实，不保存候选正文。
- * 旧记录没有该事实时保持缺失，不补造。
- */
 export interface SceneGenerationRepairContext {
   readonly sourceOperationId: string
   readonly sourceThreadId: string
   readonly sourceBranchId: string
   readonly sourceCheckpointId: string
   readonly sourceCandidateSnapshotId: string
-  /** 源候选在候选工作区内的入口路径；只作受控读取坐标。 */
   readonly candidatePath: string
   readonly instruction: string
   readonly summary: string
@@ -79,20 +79,27 @@ export interface SceneGenerationBudget {
   readonly modelCallsUsed: number
   readonly toolCallsUsed: number
   readonly activeElapsedMs: number
-  /** 当前操作累计 Token。旧记录缺失时保持未记录，不估算。 */
   readonly inputTokens?: number
   readonly outputTokens?: number
   readonly totalTokens?: number
-  /** 空值表示累计预算没有上限，不能用上下文窗口代替。 */
   readonly tokenLimit?: number | null
 }
 
-/** 生成进行中的最近活动。旧记录没有该事实时保持缺失。 */
 export interface SceneGenerationLiveProgress {
   readonly activity: 'model' | 'tool' | 'waitingModel'
   readonly lastActivityAt: string
   readonly lastToolName?: string
   readonly noNewInformationStreak?: number
+}
+
+/**
+ * 本操作内已通过生成侧校验并发布的候选修订。
+ * 只由宿主在执行记录中追加，用来授权按原检查点/修订打开的只读预览；不是任意 Git 对象目录。
+ */
+export interface SceneGenerationPublishedCandidate {
+  readonly candidateSnapshotId: string
+  readonly checkpointId: string
+  readonly artifactValidation: SceneValidationReport
 }
 
 export interface SceneGenerationExecution extends SceneGenerationOperationVO {
@@ -103,27 +110,16 @@ export interface SceneGenerationExecution extends SceneGenerationOperationVO {
   readonly reviewCandidate: boolean
   readonly baseline: SceneGenerationBaseline
   readonly state: SceneGenerationStateVO
-  /**
-   * 当前非终态业务步骤。state 是唯一权威状态；phase 由 state + step 派生。
-   * 终态与旧记录可以没有 step。
-   */
   readonly step?: SceneGenerationStepVO
   readonly attempt: number
   readonly sequence: number
   readonly budget: SceneGenerationBudget
-  /** 生成进行中的最近活动。终态和旧记录保持缺失。 */
   readonly live?: SceneGenerationLiveProgress
-  /** 操作首次持久化时间。旧记录没有该事实时保持缺失，不估算。 */
   readonly createdAt?: string
-  /** 最近一次持久化时间。旧记录没有该事实时保持缺失，不估算。 */
   readonly updatedAt?: string
-  /** 显式运行模式。旧记录缺失时不能从候选存在推断。 */
   readonly mode?: SceneGenerationRunMode
-  /** 修复重跑的来源身份。旧记录和普通生成保持缺失。 */
   readonly repairSource?: SceneGenerationRepairSource
-  /** 修复重跑的来源上下文。旧记录保持缺失，不补造。 */
   readonly repairContext?: SceneGenerationRepairContext
-  /** 已物化到本线程的修复输入修订。不是来源候选，也不能直接送审。 */
   readonly repairInputSnapshotId?: string
   readonly workspace?: SceneGenerationWorkspace
   readonly checkpointId?: string
@@ -131,18 +127,32 @@ export interface SceneGenerationExecution extends SceneGenerationOperationVO {
   readonly interaction?: SceneGenerationInteractionVO
   readonly replies: readonly ReplySceneGenerationInteractionDTO[]
   readonly pendingReply?: ReplySceneGenerationInteractionDTO
-  readonly fork?: ReadSceneGenerationCheckpointDTO
+  /** 分叉来源身份；同时记录来源操作和复制到新分支的不可变修订。 */
+  readonly fork?: ReadSceneGenerationCheckpointDTO & {
+    readonly sourceOperationId?: string
+    readonly candidateSnapshotId?: string
+  }
   readonly forkRequest?: ForkSceneGenerationDTO
   readonly result?: SceneGenerationResultVO
   readonly preview?: SceneGenerationPreviewVO
   readonly failure?: SceneGenerationFailureFact
   readonly rollbackCommitId?: string
   readonly workspaceCleanupPending?: boolean
+  /**
+   * 正式作品已提交，但可提交结果的暂停/恢复边界清理尚未完成。
+   * 只用于重试清理，不代表提交失败或允许再次提交。
+   */
+  readonly pauseBoundaryCleanupPending?: boolean
   readonly requiresCleanup?: boolean
   readonly cancellationRequested?: boolean
   readonly interruptReason?: SceneGenerationInterruptReason
   readonly pauseRequested?: boolean
   readonly artifactValidation?: SceneValidationReport
+  /**
+   * 本操作按发布顺序记录的候选修订；旧记录缺字段时保持缺失。
+   * 当前候选的校验结论仍以 artifactValidation 为准，历史修订只用于只读预览授权。
+   */
+  readonly publishedCandidates?: readonly SceneGenerationPublishedCandidate[]
   readonly timeline?: readonly SceneGenerationTimelineEntryVO[]
   readonly resumeReason?: string
 }
@@ -158,28 +168,22 @@ export interface SceneGenerationCheckpoint {
   readonly view: SceneGenerationCheckpointVO
   readonly execution: SceneGenerationExecution
   readonly candidateSnapshotId?: string
-  /** 原始图状态摘要；旧检查点缺失时保持缺失，不用默认文案补。 */
   readonly summary?: string
-  /** 原始图状态未解决事项；旧检查点缺失时保持缺失，不补造。 */
   readonly unresolvedIssues?: readonly string[]
 }
 
 export interface SceneGenerationWorkflowProgress {
-  /**
-   * 当前业务步骤。缺省表示工作流已结算的终态进度事件；
-   * 终态本身以 state 为权威，进度事件不上报新的 state。
-   */
   readonly step?: SceneGenerationStepVO
+  /** 需作者决定的等待只能与完整交互一起发布；缺省表示这次进度不建立等待。 */
+  readonly interaction?: SceneGenerationInteractionVO
+  /** 等待进度与交互、检查点、候选写入同一条执行记录，避免重开后靠猜测补全。 */
+  readonly state?: 'waiting'
   readonly attempt: number
   readonly budget: SceneGenerationBudget
   readonly artifactValidation?: SceneValidationReport
   readonly live?: SceneGenerationLiveProgress
   readonly checkpointId?: string
   readonly candidateSnapshotId?: string
-  /**
-   * 本次操作已经自动重试的次数，只用于退避与观测。
-   * 旧进度或旧检查点没有该事实时保持缺失，不据此判定失败。
-   */
   readonly retryCount?: number
 }
 
@@ -199,30 +203,15 @@ export type SceneGenerationCandidateRevisionRecord = {
 
 export interface SceneGenerationRuntime {
   readonly execution: SceneGenerationExecution
-  /** 传给图和模型的合并停止信号，同时包含用户取消与活跃超时。 */
   readonly signal: AbortSignal
-  /** 只表示用户取消。不能用 signal.aborted 推断原因。 */
   readonly userAbortSignal: AbortSignal
-  /** 只表示活跃超时。不能用 signal.aborted 推断原因。 */
   readonly activeTimeoutSignal: AbortSignal
-  /**
-   * 持久保存进度并返回应用结算后的执行快照；失败和取消后的关联沿用已结算预算。
-   * @returns 已持久保存的执行事实，不改变入口快照。
-   */
   readonly publishProgress: (
     progress: SceneGenerationWorkflowProgress
   ) => Promise<SceneGenerationExecution>
-  /**
-   * 只持久化候选修订身份，不发布运行阶段；终态阶段由工作流统一结算发布。
-   * @returns 已持久保存的执行事实，不改变入口快照。
-   */
   readonly recordCandidateRevision: (
     revision: SceneGenerationCandidateRevisionRecord
   ) => Promise<SceneGenerationExecution>
-  /**
-   * 只持久化失败事实，不发布终态；终态阶段只在副作用结算完成后发布一次。
-   * @returns 已持久保存的执行事实，不改变入口快照。
-   */
   readonly recordFailure: (failure: SceneGenerationFailureFact) => Promise<SceneGenerationExecution>
 }
 

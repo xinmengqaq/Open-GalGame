@@ -27,10 +27,6 @@ import {
 } from '../contracts/SceneCanvasResponseSchema'
 import type { SceneCanvasClient } from './SceneCanvasClient'
 
-/**
- * 把未知桥接结果收成已校验响应。传输中断或结构不符时返回通信失败。
- * @returns 校验后的响应，或安全通信失败。
- */
 async function readSceneCanvasResult<T>(
   action: () => Promise<unknown>,
   parse: (value: unknown) => AjaxResult<T> | null
@@ -44,9 +40,6 @@ async function readSceneCanvasResult<T>(
 }
 
 export class SceneCanvasClientImpl implements SceneCanvasClient {
-  /**
-   * @param bridge - 与主进程通信的固定桥接。
-   */
   constructor(private readonly bridge: DesktopBridge) {}
 
   readSceneCanvasArrangement(

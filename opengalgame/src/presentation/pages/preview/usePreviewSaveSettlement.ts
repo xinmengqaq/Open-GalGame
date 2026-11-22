@@ -62,10 +62,6 @@ function createRequestId(): string {
   return uuid ?? `preview-save-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
-/**
- * 保存状态、待核对请求和保存提示的唯一所有者。
- * 只消费会话/草稿/舞台已暴露的事实；不创建第二套 session、draft 或舞台状态。
- */
 export function usePreviewSaveSettlement({
   client,
   projectId,
@@ -119,7 +115,6 @@ export function usePreviewSaveSettlement({
       try {
         onSavedVersion?.({ requestId, contentBasis: basis })
       } catch {
-        // 向工作台同步保存结果失败，不改变已持久保存的事实。
       }
       setSaveNotice((previous) => ({ revision: previous.revision + 1, message }))
     },

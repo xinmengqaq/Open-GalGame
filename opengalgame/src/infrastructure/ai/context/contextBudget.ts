@@ -24,11 +24,6 @@ export interface ContextBudgetDecision {
   messages: ContextBudgetMessage[]
 }
 
-/**
- * 保守估算文本占用的 token。
- * 非 ASCII 码位按 2 个 token 计算，ASCII 每 3 个字符计算 1 个 token。
- * @returns 不小于实际常见分词结果的估算值。空文本为 0。
- */
 export function estimateTokens(text: string): number {
   let ascii = 0
   let tokens = 0
@@ -39,11 +34,6 @@ export function estimateTokens(text: string): number {
   return tokens + Math.ceil(ascii / 3)
 }
 
-/**
- * 计算扣除输出预留、安全余量和调用方输入预算后的可用输入空间。
- * 较小的模型窗口不会被固定的 24000 token 预算撑大。
- * @returns 可用输入 token。窗口本身非法时为负数或 0，由核对函数拒绝。
- */
 export function allowedInputTokens(
   request: Pick<
     ContextBudgetRequest,
@@ -56,12 +46,6 @@ export function allowedInputTokens(
   return Math.min(room, request.inputBudgetTokens)
 }
 
-/**
- * 核对系统提示、工具定义、消息、输出预留和安全余量。
- * 必需内容超出可用空间时失败；裁剪时工具调用与结果一起保留或一起移除。
- * @returns 实际允许的输入 token、估算用量和保留的消息。
- * @throws {AppException} 窗口或预算无法容纳必需内容。
- */
 export function evaluateContextBudget(request: ContextBudgetRequest): ContextBudgetDecision {
   if (!Number.isSafeInteger(request.windowTokens) || request.windowTokens <= 0) {
     throw overflow('上下文窗口必须为正整数')
@@ -102,7 +86,6 @@ interface MessageUnit {
   required: boolean
 }
 
-/** 把工具调用和对应结果收成不可拆开的一组。 */
 function groupMessages(messages: readonly ContextBudgetMessage[]): MessageUnit[] {
   const claimed = new Set<number>()
   const units: MessageUnit[] = []
@@ -133,10 +116,6 @@ function groupMessages(messages: readonly ContextBudgetMessage[]): MessageUnit[]
   return units
 }
 
-/**
- * @param message - 不携带工具调用的消息。
- * @returns 只含这一条消息的组。
- */
 function singleUnit(message: ContextBudgetMessage): MessageUnit {
   return {
     messages: [message],
@@ -145,9 +124,6 @@ function singleUnit(message: ContextBudgetMessage): MessageUnit {
   }
 }
 
-/**
- * @returns 请求无法继续的异常。
- */
 function overflow(msg: string): AppException {
   return new AppException({ code: ErrorCodes.invalidRequest, msg, diagnosticCategory: 'context' })
 }

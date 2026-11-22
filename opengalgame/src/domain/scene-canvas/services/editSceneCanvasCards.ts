@@ -13,10 +13,6 @@ import type {
 } from '../models/SceneCanvasArrangement'
 import { validateSceneCanvasArrangement } from './validateSceneCanvasArrangement'
 
-/**
- * 插入一张来源卡片。身份由调用方提供。
- * @throws {AppException} 身份冲突或字段无效。
- */
 export function createSceneCanvasSourceCard(
   arrangement: SceneCanvasArrangement,
   card: SceneCanvasSourceCard
@@ -24,10 +20,6 @@ export function createSceneCanvasSourceCard(
   return withCard(arrangement, normalizeSourceCard(card))
 }
 
-/**
- * 插入一张空正文也可保存的提示词卡片。
- * @throws {AppException} 身份冲突或布局无效。
- */
 export function createSceneCanvasPromptCard(
   arrangement: SceneCanvasArrangement,
   card: SceneCanvasPromptCard
@@ -44,10 +36,6 @@ export function createSceneCanvasPromptCard(
   })
 }
 
-/**
- * 插入一张尚未绑定或已绑定字段的动画、特效卡片。
- * @throws {AppException} 身份冲突或绑定无效。
- */
 export function createSceneCanvasFieldCard(
   arrangement: SceneCanvasArrangement,
   card: SceneCanvasFieldCard
@@ -55,9 +43,6 @@ export function createSceneCanvasFieldCard(
   return withCard(arrangement, normalizeFieldCard(card))
 }
 
-/**
- * @throws {AppException} 目标缺失、字段不适用或标题为空。
- */
 export function editSceneCanvasCard(
   arrangement: SceneCanvasArrangement,
   cardId: string,
@@ -84,11 +69,6 @@ export function editSceneCanvasCard(
   return commit(next)
 }
 
-/**
- * 写入提示词正文。空正文可以保存。
- * @param body - 请求中的正文，不另作裁剪。
- * @throws {AppException} 目标不是提示词卡。
- */
 export function editSceneCanvasPromptBody(
   arrangement: SceneCanvasArrangement,
   cardId: string,
@@ -99,10 +79,6 @@ export function editSceneCanvasPromptBody(
   return commit(replaceCard(arrangement, { ...card, body }))
 }
 
-/**
- * @param preset - 命令和名称；null 表示清空。
- * @throws {AppException} 目标不是字段卡，或绑定字段为空。
- */
 export function bindSceneCanvasFieldPreset(
   arrangement: SceneCanvasArrangement,
   cardId: string,
@@ -113,10 +89,6 @@ export function bindSceneCanvasFieldPreset(
   return commit(replaceCard(arrangement, normalizeFieldCard({ ...card, webgalPreset: preset })))
 }
 
-/**
- * 改图片或音频卡的场景用途。不改变来源和卡片类别。
- * @throws {AppException} 目标不是对应媒体卡，或用途不属于该类别。
- */
 export function editSceneCanvasMediaRole(
   arrangement: SceneCanvasArrangement,
   cardId: string,
@@ -134,11 +106,6 @@ export function editSceneCanvasMediaRole(
   throw fieldNotApplicable()
 }
 
-/**
- * 复制卡片内容和字段绑定，不复制关联。
- * @param newCardId - 调用方生成的新身份。
- * @throws {AppException} 源卡片不存在或新身份冲突。
- */
 export function copySceneCanvasCard(
   arrangement: SceneCanvasArrangement,
   cardId: string,
@@ -149,10 +116,6 @@ export function copySceneCanvasCard(
   return withCard(arrangement, { ...card, cardId: newCardId, layout })
 }
 
-/**
- * 删除卡片。以它为端点的关联删除，其余记录引用卸下。
- * @throws {AppException} 卡片不存在。
- */
 export function deleteSceneCanvasCard(
   arrangement: SceneCanvasArrangement,
   cardId: string

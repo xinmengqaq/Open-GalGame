@@ -3,11 +3,6 @@ import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectFileErrorCodes } from '@domain/project-files/errors/ProjectFileErrorCodes'
 import { StableFileReadError } from '@infrastructure/storage/StableProjectFileReader'
 
-/**
- * 把工程文件读取的技术失败转换成已定义的安全错误。
- * 不根据错误消息猜测原因。
- * @param error - 路径、文件系统或解析失败。
- */
 export function projectFileReadException(error: unknown): AppException {
   if (error instanceof AppException) {
     if (error.code === ErrorCodes.forbidden) {

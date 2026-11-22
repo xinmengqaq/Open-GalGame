@@ -21,7 +21,6 @@
   clip: rect(0 0 0 0);
 }
 
-/* 整页只有一张连续柔光画布，左栏和顶栏浮在它上面。 */
 .wash {
   position: absolute;
   inset: 0;
@@ -56,7 +55,6 @@
   padding: 4px 20px 20px;
 }
 
-/* 左栏是半透明浮层，不是白卡：没有整圈边框，也不带纸面阴影。 */
 .catalog {
   display: flex;
   min-height: 0;
@@ -67,7 +65,6 @@
   box-shadow: var(--wb-shadow-float);
 }
 
-/* 画布区没有自己的底色和边框，直接并入页面洗光。 */
 .canvasArea {
   position: relative;
   display: grid;
@@ -103,7 +100,6 @@
   animation: spin 1.7s linear infinite;
 }
 
-/* 归属阻断：用柔光构图停住工作台，不做告警卡。 */
 .blocked {
   position: relative;
   z-index: 2;
@@ -191,7 +187,6 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--purple) 14%, transparent);
 }
 
-/* 视图过期是柔光状态轨：状态环 + 文案直接落在画布上，不套提示卡。 */
 .staleBar {
   display: flex;
   gap: 10px;
@@ -296,7 +291,6 @@
   }
 }
 
-/* 生成进行中的画布锁定层：抽屉关闭时也不能编辑画布。 */
 .generationLock {
   position: absolute;
   inset: 0;
@@ -382,7 +376,6 @@
   transform: translate(1px, 2px);
 }
 
-/* 预览层挂在 body 上，工作台整体 inert；层本身不参与工作台布局或滚动。 */
 .previewLayer {
   position: fixed;
   inset: 0;

@@ -10,7 +10,6 @@ import {
 
 export { FAILURE_CAUSE_NAME } from '../../models/SceneGenerationFailureFacts'
 
-/** 返回诊断编号的事实载荷。哈希由持有 node:crypto 的边界完成。 */
 export function diagnosticFactPayload(
   facts: ErrorFacts,
   category?: AppException['diagnosticCategory']
@@ -33,10 +32,6 @@ export function diagnosticFactPayload(
   })
 }
 
-/**
- * 诊断边界构建失败事实：一次分析后计算诊断编号，再交给纯事实组装。
- * hash/config 只存在于本模块；调用方不重复遍历异常链。
- */
 export function safeFailureWithDiagnosticRef(
   error: unknown,
   candidate?: SceneGenerationFailureCandidateFacts
@@ -47,7 +42,6 @@ export function safeFailureWithDiagnosticRef(
   return safeFailure(error, analysis, candidate, diagnosticRef)
 }
 
-/** 在包装异常里找到实际持久化的项目异常，保证日志编号与执行记录相同。 */
 export function recordedFailureOf(error: unknown): SceneGenerationFailureFact | undefined {
   const seen = new Set<unknown>()
   const queue: unknown[] = nestedFailureCauses(error)

@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Annotation, END, START, StateGraph } from '@langchain/langgraph'
 
 import { ExecutionBudget } from '@infrastructure/ai/execution/ExecutionBudget'
 import {
@@ -12,24 +11,8 @@ import {
   createWorkflowIdentity,
   type WorkflowIdentity
 } from '@infrastructure/workflow/WorkflowIdentity'
-import type { FileCheckpointSaver } from '@infrastructure/workflow/checkpoints/FileCheckpointSaver'
 
 const directories: string[] = []
-const State = Annotation.Root({
-  value: Annotation<string>({ reducer: (_left, right) => right, default: () => '' })
-})
-const counterGraph = new StateGraph(State)
-  .addNode('first', () => ({ value: 'one' }))
-  .addNode('second', (state) => ({ value: `${state.value}-two` }))
-  .addEdge(START, 'first')
-  .addEdge('first', 'second')
-  .addEdge('second', END)
-
-export function compileCounter(
-  checkpointer: FileCheckpointSaver
-): ReturnType<typeof counterGraph.compile> {
-  return counterGraph.compile({ checkpointer })
-}
 
 export async function temporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'opengalgame-workflow-'))

@@ -1,32 +1,33 @@
-import type { ExportSavedSceneDTO } from '@application/scene-export/dto/ExportSavedSceneDTO'
+import type {
+  ExportSavedSceneDTO,
+  SceneExportDestinationDTO
+} from '@application/scene-export/dto/ExportSavedSceneDTO'
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
 import type { SystemPathClient } from '@interfaces/system-path/client/SystemPathClient'
 
 import { requireSuccess } from '@presentation/feedback/failure'
-import type { SceneExportNotice } from './SceneExportStatus'
+import type { SceneExportNotice } from './SceneExportNotice'
 import type { SavedSceneVersionFact } from './WorkbenchPreviewLayer'
 
 /**
- * 导出只带工程/场景身份、保存成功的内容依据和预览保存引用。
- * 不携带路径、草稿、候选快照、命令或预览会话。
+ * 导出只带工程/场景身份、保存成功的内容依据、正式版本引用和目的地意向。
+ * 不携带路径、草稿、候选快照、命令或预览会话；显式目录只带 selectionId。
  */
 export function exportRequestOf(
   projectId: string,
   sceneId: string,
-  saved: SavedSceneVersionFact
+  saved: SavedSceneVersionFact,
+  destination?: SceneExportDestinationDTO
 ): ExportSavedSceneDTO {
   return {
     projectId,
     sceneId,
     contentBasis: saved.contentBasis,
-    versionReference: { kind: 'preview-save', requestId: saved.requestId }
+    versionReference: saved.versionReference,
+    ...(destination === undefined ? {} : { destination })
   }
 }
 
-/**
- * 读取保存成功的导出结果：产物绝对路径由后端校验后写入 `directoryPath`，
- * 这里只负责带出展示字段，不拼接、不裁剪路径。
- */
 export function exportNoticeOf(result: SceneExportResultVO): SceneExportNotice {
   if (result.status === 'succeeded') {
     return {
@@ -50,11 +51,6 @@ export function formatExportBytes(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
-/**
- * 把导出产物目录交给系统打开。
- * 成功只返回，失败抛出统一异常（由提示区转成用户语言），不吞掉失败。
- * @throws {AppException} 打开目录失败时抛出。
- */
 export async function openExportDirectory(
   client: Pick<SystemPathClient, 'openDirectory'>,
   directoryPath: string

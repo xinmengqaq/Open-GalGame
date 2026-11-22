@@ -5,37 +5,34 @@ import type {
 import type { SceneGenerationRepairSource } from '../vo/SceneGenerationVO'
 
 export interface SceneGenerationWorkspaceGateway {
-  /**
-   * 建立按操作隔离、具有真实 WebGAL 布局的可变候选工作区。
-   * @returns 受限候选工作区，不写正式工程。
-   * @throws {AppException} 工作区建立失败。
-   */
   createWorkspace(execution: SceneGenerationExecution): Promise<SceneGenerationWorkspace>
 
-  /**
-   * 核对快照完整性并恢复独立候选工作区；空快照只允许明确的准备阶段。
-   * @param execution - 要恢复或分叉的执行，不覆盖原分支。
-   * @param candidateSnapshotId - 检查点关联的不可变候选快照。
-   * @throws {AppException} 快照缺失、版本不符或恢复失败，不以当前文件冒充历史。
-   */
   restoreWorkspace(
     execution: SceneGenerationExecution,
     candidateSnapshotId?: string
   ): Promise<SceneGenerationWorkspace & { candidateSnapshotId?: string }>
 
   /**
+   * 只核对已物化的修复输入是否仍等于来源不可变草稿；不创建目录、不写文件。
+   * 用于写入恢复门之前把“已证明的修复输入”与“候选写入”分开。
+   * @returns 本操作可复用的输入修订与工作区；证据不足时为 undefined。
+   */
+  proveRepairInput(
+    execution: SceneGenerationExecution,
+    source: SceneGenerationRepairSource
+  ): Promise<(SceneGenerationWorkspace & { candidateSnapshotId: string }) | undefined>
+
+  /**
    * 把来源线程的不可变候选复制到本操作工作区，作为修复输入。
-   * 返回的修订属于本线程，不能把来源修订标识当作本工作区候选。
-   * @throws {AppException} 来源修订不可读、身份不匹配或复制失败。
+   * 来源草稿已存在且逐字节一致时复用本操作的可变工作区与已发布修订，
+   * 不重复建目录，也不清理无法证明的现场；返回的修订属于本线程。
+   * @throws {AppException | SceneGenerationWriteOutcomeUnknown} 来源修订不可读、身份不匹配、
+   * 既有现场与来源不一致或复制失败。
    */
   materializeRepairInput(
     execution: SceneGenerationExecution,
     source: SceneGenerationRepairSource
   ): Promise<SceneGenerationWorkspace & { candidateSnapshotId: string }>
 
-  /**
-   * 清理本操作的可变候选工作区，保留不可变历史快照及正式作品。
-   * @throws {AppException} 清理失败，调用方保留恢复记录。
-   */
   discardWorkspace(execution: SceneGenerationExecution): Promise<void>
 }

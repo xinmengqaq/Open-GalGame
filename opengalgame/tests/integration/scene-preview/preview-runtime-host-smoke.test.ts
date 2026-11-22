@@ -27,11 +27,6 @@ import {
 import { chromium, type Browser } from 'playwright'
 import { WebSocket } from 'ws'
 
-/**
- * 隔离运行要求：本文件需要真实 `webgal-engine@4.6.5` 与 Chromium。
- * 缺少夹具时会在启动阶段失败；历史上的夹具失败不代表产品行为回归，
- * 不得为确认它反复重跑，应在独立工作区、独立记录中执行。
- */
 const roots: string[] = []
 const dialogueText = '放学后的空地渐渐安静下来。澪一直没有把手里的画稿递出去。'
 
@@ -281,7 +276,6 @@ describe('隔离 WebGAL 运行时宿主', () => {
     })
     const untilMessage = (ready: (items: readonly ProtocolMessage[]) => boolean): Promise<void> => {
       const { promise, resolve, reject } = Promise.withResolvers<void>()
-      // 固定引擎跑在真实浏览器里，没有可推进的测试时钟。超时只宣告失败，成功由协议消息解除。
       const timer = setTimeout(() => {
         waiters.delete(notify)
         reject(new Error(`引擎协议没有出现预期消息：${JSON.stringify(messages)}`))
@@ -402,7 +396,6 @@ describe('隔离 WebGAL 运行时宿主', () => {
     })
     const untilMessage = (ready: (items: readonly ProtocolMessage[]) => boolean): Promise<void> => {
       const { promise, resolve, reject } = Promise.withResolvers<void>()
-      // 固定引擎跑在真实浏览器里，没有可推进的测试时钟。超时只宣告失败，成功由协议消息解除。
       const timer = setTimeout(() => {
         waiters.delete(notify)
         reject(new Error(`引擎协议没有出现预期消息：${JSON.stringify(messages)}`))
@@ -482,7 +475,7 @@ describe('隔离 WebGAL 运行时宿主', () => {
     }
   }, 30_000)
 
-  it('真实页面停在标题时不发布就绪，也不发送定位命令', async () => {
+  it('真实页面由宿主扩展直接进入剧情，不发送定位命令', async () => {
     const root = await mkdtemp(join(tmpdir(), 'opengalgame-candidate-stage-'))
     roots.push(root)
     const projectRoot = join(root, 'project')
@@ -554,12 +547,12 @@ describe('隔离 WebGAL 运行时宿主', () => {
       await opened.stage
       expect(events).toEqual([
         expect.objectContaining({
-          type: 'stageFailed',
+          type: 'ready',
           projectId: 'project-candidate',
           sceneId: 'scene-candidate',
           previewSessionId: opened.preview.previewSessionId,
           candidateSnapshotId: revisionId,
-          message: '宿主无法开始游戏'
+          message: '游戏已就绪'
         })
       ])
       expect(received.join('\n')).not.toContain('preview.command.sync-scene')
@@ -567,7 +560,7 @@ describe('隔离 WebGAL 运行时宿主', () => {
       expect(JSON.stringify(events)).not.toContain(projectRoot)
       expect(JSON.stringify(events)).not.toContain('start.txt')
       expect(gateway.readCandidatePreviewEvent(opened.preview.previewSessionId)).toMatchObject({
-        type: 'stageFailed',
+        type: 'ready',
         sequence: 1,
         previewSessionId: opened.preview.previewSessionId
       })
@@ -625,7 +618,7 @@ describe('隔离 WebGAL 运行时宿主', () => {
         type: 'invalidated',
         sequence: 2
       })
-      expect(events.filter((event) => event.type === 'ready')).toHaveLength(0)
+      expect(events.filter((event) => event.type === 'ready')).toHaveLength(1)
       const sessions = new CandidatePreviewSessionGatewayImpl(gateway, Date.now)
       await expect(
         sessions.resolveCandidatePreviewSession({
@@ -994,7 +987,6 @@ describe('隔离 WebGAL 运行时宿主', () => {
           payload: { sceneName: 'start.txt', sentenceId: 1, stageState: {} }
         })
       )
-      // 同一连接按序处理：注册响应到达即证明上一条迟到快照已被网关处理。
       preview.send(
         JSON.stringify({
           kind: 'request',
@@ -1057,7 +1049,6 @@ function connectPreview(
       received.push(JSON.parse(data.toString()))
       notify()
     } catch {
-      // 非 JSON 帧不参与协议断言。
     }
   })
   const { promise, resolve, reject } = Promise.withResolvers<WebSocket>()

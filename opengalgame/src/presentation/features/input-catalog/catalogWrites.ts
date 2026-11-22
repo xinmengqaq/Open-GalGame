@@ -33,19 +33,12 @@ import type { CatalogFolderId, CatalogNameDialog } from './inputCatalog.types'
 let writeInFlight = false
 const unresolvedCatalogProjects = new Map<string, Set<string>>()
 
-/**
- * 结果未知或响应丢失的失败才需要按操作标识核对；普通校验失败直接显示。
- */
 export function isUncertainCatalogWrite(failure: FailureState): boolean {
   return (
     failure.code === COMMIT_UNCLEAR_CODE || failure.code === COMMUNICATION_FAILED_CODE
   )
 }
 
-/**
- * 按持久操作事实核对结果。已提交返回；确定未提交抛失败；仍无法核对硬报错。
- * 不建立长期门闩，不轮询；未提交或无法核对由调用方释放忙碌态。
- */
 function rememberUnresolved(projectId: string, operationId: string): void {
   const ids = unresolvedCatalogProjects.get(projectId) ?? new Set<string>()
   ids.add(operationId)
@@ -59,7 +52,6 @@ function clearUnresolved(projectId: string, operationId: string): void {
   if (ids.size === 0) unresolvedCatalogProjects.delete(projectId)
 }
 
-/** 该工程是否有未核实的文件写；不影响其他工程。 */
 export function catalogProjectNeedsRecovery(projectId: string): boolean {
   return (unresolvedCatalogProjects.get(projectId)?.size ?? 0) > 0
 }
@@ -123,7 +115,6 @@ async function resolveCatalogWriteOrReport(
   }
 }
 
-/** 工程重新打开后调用明确恢复接口固化 caller 终态；pending 保留。 */
 export async function settleCatalogProjectAfterOpen(
   client: ProjectFilesClient,
   projectId: string
@@ -144,14 +135,12 @@ export async function settleCatalogProjectAfterOpen(
       }
     }
   } catch {
-    // 恢复写失败：保留 pending，下一次写前继续硬拒。
   }
   if (catalogProjectNeedsRecovery(projectId) && stillCurrentProject(projectId)) {
     toast(workbenchFeedback.catalogWriteNeedsRecovery)
   }
 }
 
-/** 同一事件循环内只允许一次写入。忙碌态只覆盖当前工程。 */
 export function beginCatalogWrite(
   projectId: string,
   busy: boolean,
@@ -167,13 +156,11 @@ export function beginCatalogWrite(
   return true
 }
 
-/** 释放进行中的写入；只有仍在该工程时才通知当前忙碌态。 */
 export function endCatalogWrite(projectId: string, setBusy: (value: boolean) => void): void {
   writeInFlight = false
   if (stillCurrentProject(projectId)) setBusy(false)
 }
 
-/** 把拖入的外部文件转成路径后导入。转换失败逐项提示，成功路径走同一导入。 */
 export async function importDroppedFiles(
   client: ProjectFilesClient,
   queryClient: QueryClient,
@@ -360,7 +347,6 @@ function toastImportResult(result: ImportProjectFilesVO): void {
   }
 }
 
-/** 用系统默认程序打开工程文件。 */
 export async function openSourceFile(
   client: ProjectFilesClient,
   projectId: string,
@@ -376,7 +362,6 @@ export async function openSourceFile(
 
 let placeQueue: Promise<void> = Promise.resolve()
 
-/** 把可读取来源挂到当前画布视口附近，优先落在不与已有卡片重叠的位置。 */
 export async function placeSourceOnCanvas(sourceId: string): Promise<void> {
   const projectId = useWorkbenchSessionStore.getState().projectId
   const run = placeQueue.then(
@@ -429,7 +414,6 @@ async function placeSourceOnCanvasNow(projectId: string, sourceId: string): Prom
 const PREVIEW_LAYOUT_WAIT_MS = 1000
 const PREVIEW_LAYOUT_POLL_MS = 40
 
-/** 下一张卡片要避开预览的真实高度；等图片或视频按原始比例回填布局后再继续。 */
 async function waitForPreviewLayout(cardId: string, initialHeight: number): Promise<void> {
   const deadline = Date.now() + PREVIEW_LAYOUT_WAIT_MS
   while (Date.now() < deadline) {

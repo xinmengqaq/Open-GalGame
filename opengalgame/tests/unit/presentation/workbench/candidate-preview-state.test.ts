@@ -135,7 +135,6 @@ function event(
   return mapped
 }
 
-/** 绕过共享适配口的身份过滤，单独验证状态机自己的防御。 */
 function eventWithIdentity(
   sequence: number,
   type: CandidatePreviewEventVO['type'],

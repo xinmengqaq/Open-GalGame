@@ -9,8 +9,6 @@ coverage
 .env
 .env.*
 .opengalgame/
-scripts/langsmith-studio/.workspace/
-.langgraph_api/
 test-results/
 playwright-report/
 blob-report/

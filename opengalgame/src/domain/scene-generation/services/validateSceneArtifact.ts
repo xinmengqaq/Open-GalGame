@@ -30,20 +30,12 @@ const commandCategories: Partial<Record<string, readonly SceneAssetCategory[]>> 
   playVideo: ['video']
 }
 
-/**
- * 命令可以引用的素材类别。未列出的命令不按类别收窄。
- * @returns 允许的类别；命令不引用素材时为 undefined。
- */
 export function assetCategoriesAllowedByCommand(
   command: string
 ): readonly SceneAssetCategory[] | undefined {
   return commandCategories[command]
 }
 
-/**
- * 判断素材类别是否与命令的引用方式一致。
- * 未列出的命令不收窄，任何类别都相符。
- */
 export function assetCategoryMatchesCommand(
   category: SceneAssetCategory,
   command: string
@@ -51,16 +43,6 @@ export function assetCategoryMatchesCommand(
   return commandCategories[command]?.includes(category) ?? true
 }
 
-/**
- * 校验候选是否构成单个场景成品。
- * 跨场景命令、选项和条件依据 webgal-parser 4.6.5：`changeScene` 与 `callScene` 指向其他场景文件，
- * `choose` 与 `chooseLabel` 是选项，`if` 是条件装配。同文件的 `label`、`jumpLabel` 和推进参数不在此列。
- * 素材是否存在、是否越界由调用方先判定，这里只解释素材类别和授权。
- * 文档和提示词保留剧情要求与用户限制；领域不从正文猜测台词是否写对。
- * 已确认的限制要同时写明类别、语句内容和对应输入，只有内容一致的那一条不能自动删除。
- * @returns 可定位的业务问题。没有问题时列表为空。
- * @throws {AppException} 请求身份或素材登记不完整。
- */
 export function validateSceneArtifact(
   artifact: SceneGenerationArtifact,
   request: SceneGenerationRequest
@@ -91,10 +73,6 @@ export function validateSceneArtifact(
   return { issues }
 }
 
-/**
- * @param confirmedControls - 已确认、不能自动删除的控制。
- * @returns 该语句的问题，没有问题时为空数组。
- */
 function statementIssues(
   statement: SceneGenerationStatement,
   confirmedControls: readonly ConfirmedSceneControl[],
@@ -155,7 +133,6 @@ function statementIssues(
   return issues
 }
 
-/** 生成契约的未知命令给出安全表述；其他未知命令不暴露脚本正文。 */
 function generationCommandMessage(statement: SceneGenerationStatement): string {
   if (statement.contractIssue === 'unknown-command' && statement.contractMessage) {
     return '候选含有当前解析器不能识别的命令，请改用已支持命令'
@@ -163,11 +140,6 @@ function generationCommandMessage(statement: SceneGenerationStatement): string {
   return `命令 ${statement.command} 不能被当前解析器识别`
 }
 
-/**
- * 按引擎实际会执行到的语句检查音效会不会在启动前被结束场景清除。
- * 静态跳过的语句不产生演出或结束效果。同文件静态跳转改从目标语句继续。
- * @returns 调度问题。没有问题时为空数组。
- */
 function stageSchedulingIssues(
   statements: readonly SceneGenerationStatement[]
 ): SceneValidationIssue[] {
@@ -210,13 +182,6 @@ function stageSchedulingIssues(
   return issues
 }
 
-/**
- * 连续对白进入预览前必须已证明背景和角色。
- * 只认引擎实际会执行到的对白：静态跳过的语句不建立舞台，也不算对白；
- * 同文件静态跳转改从目标继续，跳过的分支不能补上后面的对白。
- * 单句、旁白和没有对白的候选保持原规则。背景和角色只认仍在舞台上的匹配引用。
- * 重复跳进同一条跳转时停止，避免环路。
- */
 function dialogueContextIssues(artifact: SceneGenerationArtifact): SceneValidationIssue[] {
   const statements = artifact.statements
   const followedJumps = new Set<number>()
@@ -237,7 +202,6 @@ function dialogueContextIssues(artifact: SceneGenerationArtifact): SceneValidati
       cursor = jumped
       continue
     }
-    // 素材匹配已按类别校验；舞台上下文只看命令，不按用途细分。
     if (statement.command === 'changeBg')
       background = statement.assetUses.some((use) => use.outcome === 'matched')
     if (statement.command === 'changeFigure' || statement.command === 'changeFigureDiff') {
@@ -269,7 +233,6 @@ function dialogueContextIssues(artifact: SceneGenerationArtifact): SceneValidati
   return issues
 }
 
-/** 有姓名的对白才要求舞台上下文。旁白和姓名不明确的语句不在此列。 */
 function namedDialogueStatement(statement: SceneGenerationStatement): boolean {
   return (
     statement.command === 'say' &&
@@ -277,11 +240,6 @@ function namedDialogueStatement(statement: SceneGenerationStatement): boolean {
   )
 }
 
-/**
- * 解析同文件静态跳转的下一检查位置。
- * 重复跳进同一条跳转时停止，避免环路。
- * @returns 目标下标；不是静态跳转时为 undefined；环路时为语句数量，表示结束。
- */
 function jumpCursor(
   statements: readonly SceneGenerationStatement[],
   statement: SceneGenerationStatement,
@@ -295,19 +253,11 @@ function jumpCursor(
   return target >= 0 ? target : cursor + 1
 }
 
-/**
- * 判断语句会不会让引擎停住等待玩家。
- * 已给出等待事实时以它为准；只有自动推进时，没有 next 才停住。
- */
 function statementPauses(statement: SceneGenerationStatement): boolean {
   if (statement.waitsForPlayer !== undefined) return statement.waitsForPlayer
   return !statement.automaticAdvance
 }
 
-/**
- * 把已识别命令分成场景跳转、选项或条件。
- * @returns 单场景不允许的控制；台词、演出和同文件标签返回 undefined。
- */
 function sceneControlKind(command: string): SceneControlKind | undefined {
   if (command === 'changeScene' || command === 'callScene') return 'sceneJump'
   if (command === 'choose' || command === 'chooseLabel') return 'option'
@@ -315,7 +265,6 @@ function sceneControlKind(command: string): SceneControlKind | undefined {
   return undefined
 }
 
-/** 生成一条控制问题。只有与已确认内容一致的语句不能自动删除，同类的其他语句仍可修正。 */
 function controlIssue(
   statement: SceneGenerationStatement,
   control: SceneControlKind,
@@ -348,11 +297,6 @@ function controlMessage(command: string, control: SceneControlKind): string {
   return `不能使用 ${command} 写入条件`
 }
 
-/**
- * 解释一条素材引用。清除不构成问题；匹配时核对授权和类别。
- * @param use - 调用方已经归类的引用事实。
- * @returns 引用问题；没有问题时为 undefined。
- */
 function assetIssue(
   statement: SceneGenerationStatement,
   use: SceneAssetUse,
@@ -368,9 +312,6 @@ function assetIssue(
   })
 }
 
-/**
- * @returns 未提供或类别不符的问题；通过时为 undefined。
- */
 function matchedAssetIssue(
   statement: SceneGenerationStatement,
   use: SceneAssetUse,
@@ -392,9 +333,6 @@ function matchedAssetIssue(
   return undefined
 }
 
-/**
- * @param outcome - 缺失、外部、越界或未授权。
- */
 function referenceCode(
   outcome: Exclude<SceneAssetUse['outcome'], 'cleared' | 'matched'>
 ): SceneValidationIssueCode {
@@ -404,9 +342,6 @@ function referenceCode(
   return 'unauthorized-asset'
 }
 
-/**
- * @param outcome - 缺失、外部、越界或未授权。
- */
 function referenceMessage(
   outcome: Exclude<SceneAssetUse['outcome'], 'cleared' | 'matched'>
 ): string {
@@ -416,9 +351,6 @@ function referenceMessage(
   return '引用了本次未提供的素材'
 }
 
-/**
- * @param options - 语句序号、能否修正，以及是否不能自动删除。
- */
 function validationIssue(
   code: SceneValidationIssueCode,
   message: string,

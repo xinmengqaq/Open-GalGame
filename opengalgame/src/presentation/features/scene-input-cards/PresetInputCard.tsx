@@ -18,10 +18,6 @@ interface PresetInputCardProps {
   selected: boolean
 }
 
-/**
- * 动画与特效预设卡。预设状态在头部槽位，具体失败原因留在卡内，
- * 避免同一错误同时出现在通用 Toast 和卡片里。
- */
 export function PresetInputCard({ card, selected }: PresetInputCardProps): ReactElement {
   const commands = useWorkbenchCommands()
   const root = useRef<HTMLDivElement>(null)

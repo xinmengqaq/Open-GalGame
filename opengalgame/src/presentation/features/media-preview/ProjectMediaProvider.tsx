@@ -10,10 +10,6 @@ interface ProjectMediaProviderProps {
   children: ReactNode
 }
 
-/**
- * 工作台内共享一份媒体字节缓存。目录与画布引用同一来源时只读取一次，
- * 最后一份预览卸载后撤销 Blob URL。缓存随工作台卸载，不需要额外释放。
- */
 export function ProjectMediaProvider({
   client,
   projectId,

@@ -3,10 +3,6 @@ import { createHash } from 'node:crypto'
 import { OPERATION_ID_PATTERN } from '@common/contracts/OperationId'
 import { PREVIEW_SAVE_SOURCE_MODULE } from '@application/scene-preview/ports/PreviewSaveVersionGateway'
 
-/**
- * 把项目、场景和 requestId 固定成版本模块可持久查找的调用方身份。
- * 身份不含负载；负载另由预览保存记录核对。
- */
 export function previewCallerOperationId(
   projectId: string,
   sceneId: string,

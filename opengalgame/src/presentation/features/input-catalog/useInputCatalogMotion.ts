@@ -4,10 +4,6 @@ import { useLayoutEffect, useRef, type RefObject } from 'react'
 
 import { prefersReducedMotion } from '../../effects/motion'
 
-/**
- * 目录内容换层、换筛选或读完来源时，让行按顺序落下。
- * 减少了动态效果时只做短淡入，结束后清掉内联样式，避免影响拖拽命中。
- */
 export function useCatalogRowsMotion(
   scope: RefObject<HTMLElement | null>,
   signature: string
@@ -48,10 +44,6 @@ export function useCatalogRowsMotion(
   )
 }
 
-/**
- * 文件夹展开时推开子级，并让直接子行轻微错峰进入。
- * 减少了动态效果时只淡入容器，不移动内容。
- */
 export function useFolderExpandMotion(scope: RefObject<HTMLElement | null>): void {
   useGSAP(
     () => {
@@ -101,7 +93,6 @@ export function useFolderExpandMotion(scope: RefObject<HTMLElement | null>): voi
   )
 }
 
-/** 搜索获得焦点时，底部细线从左侧展开，图标轻微前移。 */
 export function useSearchFocusMotion(scope: RefObject<HTMLElement | null>, focused: boolean): void {
   useGSAP(
     () => {
@@ -145,10 +136,6 @@ export function useSearchFocusMotion(scope: RefObject<HTMLElement | null>, focus
   )
 }
 
-/**
- * 分组切换时，把白底指示块滑到当前分组，宽度跟随按钮。
- * 窗口或面板改宽时直接归位；减少动态效果时只设置位置，不做补间。
- */
 export function useGroupSwitchMotion(scope: RefObject<HTMLElement | null>, active: string): void {
   const previous = useRef<{ x: number; width: number } | null>(null)
 
@@ -200,7 +187,6 @@ export function useGroupSwitchMotion(scope: RefObject<HTMLElement | null>, activ
   }, [active, scope])
 }
 
-/** 读取状态变化时，状态标签重新落位；减少动态效果时只做短淡入。 */
 export function useReadStateMotion(scope: RefObject<HTMLElement | null>, state: string): void {
   useGSAP(
     () => {
@@ -234,7 +220,6 @@ export function useReadStateMotion(scope: RefObject<HTMLElement | null>, state: 
   )
 }
 
-/** 右键菜单出现时的轻微收拢。 */
 export function useContextMenuMotion(
   scope: RefObject<HTMLElement | null>,
   signature: string
@@ -273,7 +258,6 @@ export function useContextMenuMotion(
   )
 }
 
-/** 剪贴板提示出现时展开一条，不遮挡下面的列表。 */
 export function useClipboardBannerMotion(
   scope: RefObject<HTMLElement | null>,
   signature: string
@@ -312,7 +296,6 @@ export function useClipboardBannerMotion(
   )
 }
 
-/** 文件拖入时让投放层淡入。 */
 export function useDropOverlayMotion(scope: RefObject<HTMLElement | null>, active: boolean): void {
   useGSAP(
     () => {
@@ -329,7 +312,6 @@ export function useDropOverlayMotion(scope: RefObject<HTMLElement | null>, activ
   )
 }
 
-/** 空态、失败态与加载骨架首次出现；同层图形轻微错峰浮入。 */
 export function useStateArtMotion(scope: RefObject<HTMLElement | null>): void {
   useGSAP(
     () => {

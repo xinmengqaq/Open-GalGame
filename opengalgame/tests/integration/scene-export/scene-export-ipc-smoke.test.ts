@@ -122,6 +122,18 @@ describe('已保存场景导出 IPC', () => {
     ).resolves.toMatchObject({
       code: ErrorCodes.invalidRequest
     })
+    await expect(
+      invoke(event, {
+        ...missing,
+        destination: {
+          kind: 'selected',
+          selectionId: '00000000-0000-4000-8000-000000000000',
+          path: world.projectRoot
+        }
+      })
+    ).resolves.toMatchObject({
+      code: ErrorCodes.invalidRequest
+    })
     await expect(invoke(event, { ...missing, command: 'electron-builder' })).resolves.toMatchObject(
       {
         code: ErrorCodes.invalidRequest
@@ -176,13 +188,20 @@ function register(userDirectory: string, window: unknown): () => void {
     new SceneScriptParserGatewayImpl(),
     new SceneAssetReferenceGatewayImpl()
   )
-  const services = createSceneExport({ userDirectory, logger, versioning: versionService, sources })
+  const services = createSceneExport({
+    userDirectory,
+    logger,
+    versioning: versionService,
+    sources,
+    chooseDirectory: async () => null
+  })
   return registerSceneExportIpc({
     getWindow: () => window as never,
     rendererUrl: 'http://127.0.0.1:5173/',
     sceneExport: new SceneExportController(
       services.exportSavedScene,
-      services.latestPreviewSave,
+      services.latestSavedSceneVersion,
+      services.chooseDestination,
       exceptions()
     )
   })

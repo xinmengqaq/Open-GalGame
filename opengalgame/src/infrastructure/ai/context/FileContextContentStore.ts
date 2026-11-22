@@ -39,31 +39,14 @@ export interface ExternalContentRange {
 }
 
 export interface ExternalContentStore {
-  /**
-   * @param signal - 取消本次写入。
-   * @throws {AppException} 路径越界、写入失败或调用已取消。
-   */
   put(text: string, signal?: AbortSignal): Promise<ExternalContentReference>
 
-  /**
-   * @param signal - 取消本次读取。
-   * @returns 范围内的文本和截断标记。
-   * @throws {AppException} 引用越界、版本不存在或编码非法。
-   */
   read(request: ExternalContentReadRequest, signal?: AbortSignal): Promise<ExternalContentRange>
 }
 
 export class FileContextContentStore implements ExternalContentStore {
-  /**
-   * @param root - 外置内容根目录。所有标识都在这个目录内解析。
-   */
   constructor(private readonly root: string) {}
 
-  /**
-   * @param signal - 取消本次写入。
-   * @returns 内容引用和不超过固定长度的摘要。
-   * @throws {AppException} 写入失败或调用已取消。
-   */
   async put(text: string, signal?: AbortSignal): Promise<ExternalContentReference> {
     const bytes = Buffer.from(text, 'utf8')
     const version = createHash('sha256').update(bytes).digest('hex')
@@ -80,12 +63,6 @@ export class FileContextContentStore implements ExternalContentStore {
     }
   }
 
-  /**
-   * @param request - 引用、起始码位和最大字符数。
-   * @param signal - 取消本次读取。
-   * @returns 范围内的文本。读到文件末尾时带真实总长度，否则省略总长度。
-   * @throws {AppException} 引用非法、版本不符、编码非法或调用已取消。
-   */
   async read(
     request: ExternalContentReadRequest,
     signal?: AbortSignal
@@ -118,20 +95,12 @@ export class FileContextContentStore implements ExternalContentStore {
   }
 }
 
-/**
- * 生成固定长度的摘要。短文本原样返回。
- * @returns 最多 80 个码位的摘要。
- */
 function summarize(text: string): string {
   const points = [...text]
   if (points.length <= SUMMARY_CHARS) return text
   return `${points.slice(0, SUMMARY_CHARS).join('')}…`
 }
 
-/**
- * 统计 Unicode 码位数量。
- * @returns 码位个数。
- */
 function codePointLength(text: string): number {
   return [...text].length
 }

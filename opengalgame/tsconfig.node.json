@@ -3,7 +3,6 @@
   "include": [
     "electron.vite.config.*",
     "vite.renderer.config.*",
-    "scripts/langsmith-studio/*.ts",
     "scripts/legacy-data-migration/reader-bridge.ts",
     "src/bootstrap/main.ts",
     "src/bootstrap/preload.ts",

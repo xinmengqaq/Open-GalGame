@@ -2,7 +2,6 @@ import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { WebgalInfrastructureError } from '@infrastructure/webgal/WebgalInfrastructureError'
 
-/** 在共享端口出口转换技术失败，完整保留原始原因。 */
 export function sceneReadException(error: unknown): AppException {
   if (error instanceof AppException) return error
   if (error instanceof WebgalInfrastructureError) {

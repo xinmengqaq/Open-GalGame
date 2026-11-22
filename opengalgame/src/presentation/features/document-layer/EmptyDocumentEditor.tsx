@@ -27,7 +27,6 @@ interface EmptyDocumentEditorProps {
   ) => Promise<void>
 }
 
-/** 新建文档的空编辑器。不载入已有卡片正文，也不进入只读文档层。 */
 export function EmptyDocumentEditor({
   parentFolderId,
   busy,

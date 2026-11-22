@@ -4,7 +4,6 @@ import type { RefObject } from 'react'
 
 import { prefersReducedMotion } from '../../effects/motion'
 
-/** 卡片入场。减少动态效果时只做短淡入，结束后清除内联 transform 和透明度。 */
 export function useCardEntranceMotion(scope: RefObject<HTMLElement | null>): void {
   useGSAP(
     () => {
@@ -24,7 +23,6 @@ export function useCardEntranceMotion(scope: RefObject<HTMLElement | null>): voi
   )
 }
 
-/** 选中签条只作用于卡片内部，不改变画布节点坐标。 */
 export function useCardFrameMotion(scope: RefObject<HTMLElement | null>, selected: boolean): void {
   useGSAP(
     () => {
@@ -57,7 +55,6 @@ export function useCardFrameMotion(scope: RefObject<HTMLElement | null>, selecte
   )
 }
 
-/** 预设失败在卡内出现：轻微上浮，减少动态效果时只做短淡入。 */
 export function usePresetErrorMotion(scope: RefObject<HTMLElement | null>, errorKey: number): void {
   useGSAP(
     () => {
@@ -81,7 +78,6 @@ export function usePresetErrorMotion(scope: RefObject<HTMLElement | null>, error
   )
 }
 
-/** 预设切换时只做组件本身的揭示动效，不模拟舞台效果。 */
 export function usePresetPreviewMotion(
   scope: RefObject<HTMLElement | null>,
   presetKey: string
@@ -108,7 +104,6 @@ export function usePresetPreviewMotion(
   )
 }
 
-/** 提示词焦点光晕。文字本身的焦点样式由 CSS 提供。 */
 export function usePromptFocusMotion(scope: RefObject<HTMLElement | null>, focused: boolean): void {
   useGSAP(
     () => {

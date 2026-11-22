@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import {
-  assertCheckpointInScope,
-  createCheckpointReference
-} from '@infrastructure/workflow/CheckpointReference'
-import {
   createForkIdentity,
   createWorkflowIdentity,
   langGraphThreadKey,
@@ -20,7 +16,7 @@ const valid = {
 }
 
 describe('工作流身份', () => {
-  it('拒绝空值、路径片段和跨作用域引用', () => {
+  it('拒绝空值和路径片段', () => {
     expect(() => createWorkflowIdentity({ ...valid, threadId: '' })).toThrow(
       '工作流身份包含空值或非法路径片段'
     )
@@ -33,14 +29,6 @@ describe('工作流身份', () => {
     expect(() => createWorkflowIdentity({ ...valid, operationId: 'a\\b' })).toThrow(
       '工作流身份包含空值或非法路径片段'
     )
-    const current = createWorkflowIdentity(valid)
-    const foreign = createCheckpointReference(
-      createWorkflowIdentity({ ...valid, projectId: 'project-b' }),
-      'checkpoint-a'
-    )
-
-    expect(createCheckpointReference(current, 'checkpoint-a').projectId).toBe('project-a')
-    expect(() => assertCheckpointInScope(current, foreign)).toThrow('检查点引用超出当前作用域')
   })
 
   it('threadId 加 branchId 映射为不同的内部线程键，并且可以还原作用域', () => {

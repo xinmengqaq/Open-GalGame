@@ -18,10 +18,6 @@ export type LoadedInputCatalog = {
   placements: readonly { sourceId: string; parentFolderId: string }[]
 }
 
-/**
- * 读取逻辑目录。文件不存在表示尚未建立目录，不创建文件。
- * @throws {AppException} 文件存在但损坏、版本不受支持或工程身份不符。
- */
 export async function loadInputCatalog(window: ProjectFileReadWindow): Promise<LoadedInputCatalog> {
   const file = await window.readOptionalText(PROJECT_CATALOG_PATH)
   if (file === null) return { folders: [], placements: [] }
@@ -69,11 +65,6 @@ export function toCatalogDocument(
   }
 }
 
-/**
- * 核对归属和名称空间，并计算目录版本。
- * @param sources - 带来源名称的摘要，父目录由调用方填入。
- * @throws {AppException} 归属或名称空间无法确定。
- */
 export function assertJoinedCatalog(
   projectId: string,
   loaded: LoadedInputCatalog,

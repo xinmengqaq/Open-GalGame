@@ -1,0 +1,210 @@
+/*
+ * 导出提示浮层。挂在工作台反馈安全位里，宽度可超出普通 toast 槽位，
+ * 但不设置 fixed/absolute 之外的外框，也不参与顶栏、画布或弹窗布局。
+ */
+.notice {
+  position: relative;
+  display: grid;
+  width: min(432px, calc(100vw - 32px));
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 12px;
+  align-self: center;
+  padding: 13px 38px 13px 13px;
+  border: 1px solid var(--wb-hairline-strong);
+  border-radius: var(--wb-radius-card);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--wb-surface-solid) 94%, transparent) 0%,
+    var(--wb-surface-solid) 100%
+  );
+  box-shadow: var(--wb-shadow-float);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: 13px;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+
+.notice[data-tone='ok'] {
+  border-color: color-mix(in srgb, var(--wb-positive) 34%, var(--wb-hairline));
+}
+
+.notice[data-tone='danger'],
+.notice[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--wb-danger) 30%, var(--wb-hairline));
+}
+
+.signal {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.notice[data-tone='ok'] .signal {
+  background: color-mix(in srgb, var(--wb-positive) 14%, var(--wb-surface-solid));
+  color: var(--wb-positive-strong);
+}
+
+.notice[data-tone='danger'] .signal,
+.notice[data-tone='warning'] .signal {
+  background: color-mix(in srgb, var(--wb-danger) 12%, var(--wb-surface-solid));
+  color: var(--wb-danger-strong);
+}
+
+.signal svg {
+  width: 17px;
+  height: 17px;
+}
+
+.content {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.headline {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.headline strong {
+  color: var(--wb-text-strong);
+  font-size: 13.5px;
+  font-weight: 750;
+}
+
+.detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--wb-text-muted);
+  font-size: 12px;
+}
+
+.pathBlock {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: var(--wb-radius-control);
+  background: var(--wb-surface-soft);
+}
+
+.pathLabel {
+  color: var(--wb-text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.path {
+  color: var(--wb-text);
+  font-family: var(--wb-font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.openAction {
+  display: inline-flex;
+  min-height: 30px;
+  gap: 6px;
+  align-items: center;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-positive) 15%, var(--wb-surface-solid));
+  color: var(--wb-positive-strong);
+  font-family: var(--wb-font);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.openAction:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wb-positive) 24%, var(--wb-surface-solid));
+}
+
+.openAction:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.openAction:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+
+.openAction svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.openError {
+  margin: 0;
+  color: var(--wb-danger);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--wb-text-muted);
+  opacity: 0.72;
+}
+
+.dismiss:hover {
+  background: var(--wb-wash-ink);
+  opacity: 1;
+}
+
+.dismiss:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.dismiss svg {
+  width: 13px;
+  height: 13px;
+}
+
+.spinner {
+  animation: export-notice-spin 0.9s linear infinite;
+}
+
+@keyframes export-notice-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

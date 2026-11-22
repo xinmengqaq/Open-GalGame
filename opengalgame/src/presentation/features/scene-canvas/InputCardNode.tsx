@@ -21,7 +21,6 @@ interface CardPortProps {
   label: string
 }
 
-/** 卡片侧端口：44px 命中区，可见菱形复用关系层形状，中心落在外框边缘。 */
 function CardPort({ cardId, side, state, selected, label }: CardPortProps): ReactElement {
   const left = side === 'left'
   return (
@@ -55,10 +54,6 @@ function CardPort({ cardId, side, state, selected, label }: CardPortProps): Reac
   )
 }
 
-/**
- * React Flow 自定义节点：承载输入卡片，并在卡面之外提供两侧连接端口。
- * 选中与悬停由卡片外框表达；这里只补充端口状态与拒绝轮廓，不重复选择态。
- */
 export function InputCardNodeView({ id }: NodeProps<InputCardNode>): ReactElement | null {
   const nodeActions = useContext(CanvasNodeContext)
   const rootRef = useRef<HTMLDivElement>(null)

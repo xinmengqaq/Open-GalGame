@@ -9,7 +9,7 @@
 <p align="center">把心动写成可以选择的故事。</p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-0.1.0-7c5cff">
+  <img alt="version" src="https://img.shields.io/badge/version-0.2.0-7c5cff">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows-0078D4">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-39-47848F?logo=electron&logoColor=white">
   <img alt="WebGAL" src="https://img.shields.io/badge/WebGAL-4.6.5-9b5de5">
@@ -63,14 +63,14 @@ flowchart TB
   B --> B4["作品历史<br/>提交与回滚"]
 ```
 
-模型服务和 WebGAL 引擎在本机之外，由应用按需调用；导出的游戏不再依赖 OpenGalgame。
+模型请求发往你配置的服务，WebGAL 在本机运行。导出的游戏不再依赖 OpenGalgame。
 
 ## 一次完整的创作
 
 1. 在首页新建空白画布，或导入一个已有的 WebGAL 工程。新建会直接进入工作台；导入的作品会出现在项目页，双击打开。
 2. 在工作台画布上整理这一场的设定、素材和提示词。画布改动会自动保存。
 3. 打开创作抽屉，写清这一场的目标、情绪、出场角色和限制。AI 需要时会问几个选择题；回答后得到场景候选。
-4. 打开候选预览。不满意就提修改或重新生成；满意后接受，内容才进入正式作品，并留下版本记录。
+4. 打开候选预览。不满意就指出要改哪一段；想保留当前写法再试另一条思路，可以在「AI 历史」里从可分叉的记录继续。只有你接受的候选才会写入作品，并留下版本记录。
 5. 试玩当前场景。台词可以直接微调，保存后继续。
 6. 导出当前场景，得到一个可以独立运行的 Windows 游戏。
 
@@ -100,8 +100,7 @@ Electron 的渲染进程不直接读写磁盘，也不持有模型密钥。本�
 
 ## 当前版本
 
-这是 `0.1.0` 预览版，界面和交互还会调整。下面的能力按当前实现整理。
-
+`0.2.0` 使用 Pi Agent Core 生成单场景。Pi 沿用你在连接设置中选好的模型，无需另设账号。版本变化见[更新日志](docs/更新日志.md)。
 
 | 已经可用                                   | 尚未提供                       |
 | ------------------------------------------ | ------------------------------ |
@@ -110,8 +109,6 @@ Electron 的渲染进程不直接读写磁盘，也不持有模型密钥。本�
 | 单场景 AI 生成、提问、候选预览、修改、接受 | 完整的预览编辑                 |
 | 当前场景试玩、台词微调、提交历史与回滚     | 网页包和完整发布链路           |
 | 当前场景导出 Windows 桌面游戏              | macOS 和 Linux 发行            |
-
-部分桌面端流程还在完善，界面细节也可能变化。
 
 ## 常见问题
 
@@ -122,6 +119,10 @@ Electron 的渲染进程不直接读写磁盘，也不持有模型密钥。本�
 **导入已有工程会改动原文件吗？**
 
 读取不会写文件。AI 生成在隔离的候选区进行，只有你接受候选后才会提交到作品；提交前可以先预览。
+
+**创建分叉后提示「结果待核对」，要再创建一次吗？**
+
+先到「AI 历史」选择「重新核对」。工作台没有收到确认时，分支可能已经建好。找到它就从那里继续，不必再建一条。
 
 **导出的游戏还需要 OpenGalgame 吗？**
 
@@ -143,7 +144,7 @@ Electron 的渲染进程不直接读写磁盘，也不持有模型密钥。本�
 | 状态与查询     | Zustand、TanStack Query                          |
 | 可访问性与提示 | Radix UI、sonner                                 |
 | 校验           | Zod                                              |
-| AI 编排        | LangChain、LangGraph                             |
+| 单场景 AI 生成 | Pi Agent Core                                    |
 | 作品版本       | isomorphic-git                                   |
 | 视觉小说引擎   | WebGAL 4.6.5（`webgal-parser`、`webgal-engine`） |
 | 日志           | Pino                                             |

@@ -15,7 +15,6 @@ export type HistoryListItem =
       entries: readonly VersionHistoryEntryVO[]
     }
 
-/** 同一天的记录归入一个日期章节；自动保存组按首条记录的日期归属。 */
 export type HistoryDaySection = {
   key: string
   label: string
@@ -117,7 +116,6 @@ const historyFullDay = new Intl.DateTimeFormat('zh-CN', {
   day: 'numeric'
 })
 
-/** 连续自动保存折叠成一组，手动保存各自成条。 */
 export function groupHistory(entries: readonly VersionHistoryEntryVO[]): HistoryListItem[] {
   const items: HistoryListItem[] = []
   let run: VersionHistoryEntryVO[] = []
@@ -146,7 +144,6 @@ export function groupHistory(entries: readonly VersionHistoryEntryVO[]): History
   return items
 }
 
-/** 本机日历日键，用于日期章节分组。 */
 export function historyDayKey(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -155,7 +152,6 @@ export function historyDayKey(value: string): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
-/** 日期章节标题：今天、昨天、月日或年月日。 */
 export function historyDayLabel(value: string, now = new Date()): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -166,7 +162,6 @@ export function historyDayLabel(value: string, now = new Date()): string {
   return historyFullDay.format(date)
 }
 
-/** 按后端顺序插入日期章节，不重排记录；连续自动保存在章节内折叠。 */
 export function groupHistoryByDay(
   entries: readonly VersionHistoryEntryVO[],
   now = new Date()
@@ -185,7 +180,6 @@ export function groupHistoryByDay(
   return sections
 }
 
-/** 来源模块只给用户看中文名，不回显内部模块标识。 */
 export function sourceModuleLabel(sourceModule: string): string {
   switch (sourceModule) {
     case 'scene-canvas':
@@ -207,14 +201,12 @@ export function contentSourceLabel(source: VersionContentSource): string {
   return source === 'ai' ? historyFeedback.ai : '手工操作'
 }
 
-/** 时间线行内只显示时分，日期由章节标题承担。 */
 export function formatHistoryClock(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return historyTime.format(date)
 }
 
-/** 记录时间。今天和昨天用相对日，其他日期给出月日和时分。 */
 export function formatHistoryTime(value: string, now = new Date()): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -228,7 +220,6 @@ export function formatHistoryTime(value: string, now = new Date()): string {
   return `${historyFullDay.format(date)} ${time}`
 }
 
-/** 自动保存组的时间范围。 */
 export function formatHistoryRange(
   entries: readonly VersionHistoryEntryVO[],
   now = new Date()
@@ -243,7 +234,6 @@ export function saveModeLabel(mode: VersionSaveMode): string {
   return mode === 'manual' ? historyFeedback.manual : historyFeedback.system
 }
 
-/** 结果反馈必须带动作名和数量；详情只作补充。 */
 export function historyResultMessage(result: HistoryActionResult): string {
   if (result.kind === 'undo') {
     return `已撤销 ${result.count} 条记录 · ${result.detail}`
@@ -251,7 +241,6 @@ export function historyResultMessage(result: HistoryActionResult): string {
   return `已清理 ${result.count} 条历史记录 · ${result.detail}`
 }
 
-/** 清理成功后先从已加载记录移除已确认清除的范围，后续再读取第一页。 */
 export function removeClearedEntries(
   entries: readonly VersionHistoryEntryVO[],
   selection:

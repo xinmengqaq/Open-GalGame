@@ -8,16 +8,11 @@ import type {
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 
-/**
- * 短操作串行队列与操作幂等回放。
- * 模型执行只经后台任务边界进入，不排入这里。
- */
 export class ExecutionSerialQueue {
   private readonly serialTails = new Map<string, Promise<void>>()
 
   constructor(private readonly executions: SceneGenerationExecutionRepository) {}
 
-  /** 仅串行启动、回复和状态变更，不把模型执行放入队列；失败不阻断后续短操作。 */
   serialize<T>(key: string, operation: () => Promise<T>): Promise<T> {
     const result = (this.serialTails.get(key) ?? Promise.resolve()).then(operation)
     const tail = result.then(
@@ -31,12 +26,6 @@ export class ExecutionSerialQueue {
     return result
   }
 
-  /**
-   * 返回相同请求的操作，拒绝相同标识对应其他请求。
-   * @param fingerprint - 不含密钥的请求内容。
-   * @returns 已有操作或 null。
-   * @throws {AppException} 相同操作标识被用于不同请求。
-   */
   async replay(
     scope: SceneGenerationScopeDTO,
     fingerprint: string

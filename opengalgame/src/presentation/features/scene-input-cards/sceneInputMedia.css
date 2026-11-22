@@ -1,5 +1,3 @@
-/* 图片与视频卡内容：预览本身就是画布上的浮光表面，不套白卡。 */
-
 .mediaStage {
   position: relative;
   display: flex;
@@ -36,7 +34,6 @@
     0 14px 26px -22px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 52%, transparent);
 }
 
-/* 图片是画布上的素材本体：预览区保持透明，不铺白底或卡片底色。 */
 .mediaStage[data-media-kind='image'] {
   background: transparent;
   box-shadow: none;
@@ -70,7 +67,6 @@
     );
 }
 
-/* 柔光涟漪：同心光带只作空间提示，不铺在标题后面。 */
 
 .mediaStage::before {
   position: absolute;

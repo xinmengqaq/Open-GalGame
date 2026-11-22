@@ -156,11 +156,6 @@ function historyEntryOf(entry: FixtureEntry): VersionHistoryEntryVO {
   }
 }
 
-/**
- * 仅在显式验收模式使用的内存历史。默认浏览器桥仍返回不可用失败。
- * @param options - 撤销回调；empty 用于没有记录的首次保存空态。
- * @returns 三条用户历史用例的内存实现。
- */
 export function createVersionHistoryFixture(options?: { onUndo?: () => void; empty?: boolean }): {
   listHistory(request: ListVersionHistoryDTO): AjaxResult<VersionHistoryPageVO>
   undoHistoryEntry(request: UndoVersionHistoryDTO): AjaxResult<VersionHistoryUndoVO>

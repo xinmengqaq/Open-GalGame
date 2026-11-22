@@ -18,10 +18,6 @@ export class EditSceneGenerationCandidate implements SceneGenerationCandidateEdi
     private readonly coordinator: SceneGenerationCoordinator,
     private readonly preview?: SceneCandidatePreviewGateway
   ) {}
-  /**
-   * 持久写入人工候选文件，清除旧检查点关联的校验与转换结果。
-   * @throws {AppException} 操作不在人工编辑状态、候选版本冲突或写入失败。
-   */
   async editSceneGenerationCandidate(
     request: EditSceneGenerationCandidateDTO
   ): Promise<SceneGenerationStatusVO> {
@@ -51,6 +47,8 @@ export class EditSceneGenerationCandidate implements SceneGenerationCandidateEdi
         candidateSnapshotId: updatedSnapshot.candidateSnapshotId,
         checkpointId: undefined,
         preview: undefined,
+        // 校验结论属于被替换的修订，人工写入后必须重新校验，不能沿用旧结论。
+        artifactValidation: undefined,
         interaction: undefined,
         pendingReply: undefined,
         state: 'interrupted',

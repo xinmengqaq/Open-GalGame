@@ -6,9 +6,6 @@ import type { ParsedScene, ParsedSceneSentence } from '@application/scenes/model
 import type { SceneSourceSnapshot } from '@application/scenes/models/SceneSourceSnapshot'
 import type { SceneSentenceLocation } from '@application/scenes/models/SceneSentenceLocation'
 
-/**
- * @throws 语句不属于当前解析结果时抛出错误。
- */
 export function createWebgalSceneLocation(
   scene: ParsedScene,
   sentenceSequence: number
@@ -18,10 +15,6 @@ export function createWebgalSceneLocation(
   return createLocation(scene, sentence)
 }
 
-/**
- * 检查定位是否仍对应当前源文件和已安装的解析器、引擎版本。
- * @returns 定位仍然有效时为 true。
- */
 export function isWebgalSceneLocationCurrent(
   location: SceneSentenceLocation,
   snapshot: SceneSourceSnapshot
@@ -40,7 +33,6 @@ export function isWebgalSceneLocationCurrent(
   )
 }
 
-/** 把源文件与解析语句绑定成定位，并记录当时的解析器与引擎版本，供日后判断失效。 */
 function createLocation(scene: ParsedScene, sentence: ParsedSceneSentence): SceneSentenceLocation {
   const location = {
     sourceFile: scene.sourceFile.relativePath,

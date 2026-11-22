@@ -1,0 +1,241 @@
+.dialog {
+  display: flex;
+  width: min(560px, calc(100vw - 48px));
+  max-width: min(560px, calc(100vw - 48px));
+  max-height: min(85vh, 720px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #d7c8e8;
+  border-radius: 8px;
+  background: #fffcf7;
+  box-shadow:
+    0 24px 60px #3b365f33,
+    3px 3px 0 #cbb6de;
+  color: #3b365f;
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 24px 8px;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  color: #4a3e6e;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--muted, #6f6584);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: 8px 24px 12px;
+}
+
+.actions {
+  position: relative;
+  display: flex;
+  flex: none;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 12px 24px 20px;
+  border-top: 1px solid #eadff3;
+  background: #fffdfbc7;
+}
+
+/*
+ * 临时状态和结果提示浮在操作栏左侧，绝对定位，不新增行、不改变操作栏高度。
+ * 结束时不再挤占正文，也不会推动「取消 / 开始导出」。
+ */
+.dialogFeedback {
+  position: absolute;
+  top: 50%;
+  left: 24px;
+  display: inline-flex;
+  max-width: calc(100% - 238px);
+  max-height: 52px;
+  min-height: 28px;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 11px 4px 9px;
+  border: 1px solid var(--wb-hairline, #e4d9ef);
+  border-radius: var(--wb-radius-pill, 999px);
+  background: color-mix(in srgb, var(--wb-accent, #8d67ab) 6%, var(--wb-surface-solid, #fffdfb));
+  box-shadow:
+    0 8px 20px -16px color-mix(in srgb, var(--purple-shadow, #3b365f) 58%, transparent),
+    0 2px 6px -4px color-mix(in srgb, var(--purple-shadow, #3b365f) 32%, transparent);
+  color: var(--wb-text-muted, #6f6584);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  transform: translateY(-50%);
+}
+
+.dialogFeedback[data-tone='busy'] {
+  border-color: color-mix(in srgb, var(--wb-accent, #8d67ab) 26%, var(--wb-hairline, #e4d9ef));
+  color: var(--wb-accent-strong, #6d4f86);
+}
+
+.dialogFeedback[data-tone='danger'] {
+  border-color: color-mix(in srgb, var(--wb-danger, #b35b72) 30%, var(--wb-hairline, #e4d9ef));
+  background: color-mix(in srgb, var(--wb-danger, #b35b72) 11%, var(--wb-surface-solid, #fffdfb));
+  color: var(--wb-danger-strong, #9c4258);
+}
+
+.feedbackIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+
+.feedbackIcon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.feedbackSpinner {
+  animation: dialog-feedback-spin 0.9s linear infinite;
+}
+
+.feedbackText {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@keyframes dialog-feedback-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedbackSpinner {
+    animation: none;
+  }
+}
+
+.intro {
+  margin: 0;
+  color: var(--wb-text-muted, #6f6584);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--wb-text-strong, #4a3e6e);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.option {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--wb-line-soft, #d7c8e8);
+  border-radius: 10px;
+  background: #fffdfb;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.option:hover {
+  border-color: #b79ac9;
+  background: #fff;
+}
+
+.option[data-selected='true'] {
+  border-color: #8d67ab;
+  background: #faf4ff;
+  box-shadow: inset 0 0 0 1px #8d67ab;
+}
+
+.option input {
+  margin-top: 4px;
+  accent-color: #8d67ab;
+}
+
+.optionIcon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: #f1e7fa;
+  color: #6d4f86;
+}
+
+.optionIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.optionCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.optionCopy strong {
+  color: var(--wb-text-strong, #4a3e6e);
+  font-size: 14px;
+}
+
+.optionCopy span {
+  color: var(--wb-text-muted, #6f6584);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 选择入口常驻在选项下方；选择结果与进行中状态只走操作栏浮动提示。 */
+.picker {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.picker button {
+  flex: none;
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: 13px;
+}

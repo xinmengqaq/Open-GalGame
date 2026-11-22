@@ -11,7 +11,6 @@ interface ConnectionPortProps {
   className?: string
 }
 
-/** 连接端口的可见形状；命中区域由外层 Handle 提供。 */
 export function ConnectionPort({
   shape = 'diamond',
   state = 'idle',

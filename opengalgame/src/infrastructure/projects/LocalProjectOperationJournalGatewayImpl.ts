@@ -35,7 +35,6 @@ type ProjectOperationDocument = z.infer<typeof projectOperationDocumentSchema>
 const failure = projectDocumentFailure(ProjectErrorCodes.storageFailed, '项目恢复记录读写失败')
 const corruptedMsg = '项目恢复记录损坏，请保留原工程排查'
 
-/** 判断目录项是否是本能力写入的恢复记录文件，跳过临时文件与无关文件。 */
 function isOperationDocumentName(name: string): boolean {
   return (
     !isTemporaryDocumentName(name) &&
@@ -61,7 +60,6 @@ export class LocalProjectOperationJournalGatewayImpl implements ProjectOperation
     return operation
   }
 
-  /** 开始操作，写入身份后才允许修改工作区。 */
   async begin(operation: ProjectOperation): Promise<void> {
     await writeJsonDocument(
       this.operationPath(operation.operationId),
@@ -84,10 +82,6 @@ export class LocalProjectOperationJournalGatewayImpl implements ProjectOperation
     await deleteJsonDocument(this.operationPath(operationId), failure)
   }
 
-  /**
-   * 列出未完成提交。
-   * 实现思路：读不出的记录同样交给恢复逐条报错，不阻断其余记录。
-   */
   async listIncomplete(): Promise<string[]> {
     const names = await listDocumentNames(this.operationsDirectory, failure)
     const incomplete: string[] = []
@@ -104,21 +98,16 @@ export class LocalProjectOperationJournalGatewayImpl implements ProjectOperation
     return incomplete
   }
 
-  /** 恢复记录目录。 @returns 用户目录下的 operations 目录路径。 */
   private get operationsDirectory(): string {
     return join(this.userDirectory, PROJECT_OPERATIONS_DIRECTORY_NAME)
   }
 
-  /**
-   * @throws {AppException} 操作标识格式不正确。
-   */
   private operationPath(operationId: string): string {
     if (!OPERATION_ID_PATTERN.test(operationId))
       throw new AppException({ code: ErrorCodes.invalidRequest, msg: '操作标识格式不正确' })
     return join(this.operationsDirectory, `${operationId}${DOCUMENT_EXTENSION}`)
   }
 
-  /** 读回记录后改写阶段字段，记录不存在时不做任何事。 */
   private async recordStage(operationId: string, stage: ProjectOperation['stage']): Promise<void> {
     const operation = await this.find(operationId)
     if (!operation) return

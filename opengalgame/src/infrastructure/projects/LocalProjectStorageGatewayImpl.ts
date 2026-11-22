@@ -21,7 +21,6 @@ import { ProjectErrorCodes } from '@domain/projects/errors/ProjectErrorCodes'
 import { Project } from '@domain/projects/models/Project'
 import type { WorkspaceInspection } from '@domain/projects/models/ProjectWorkspace'
 
-/** 工程格式版本；存储形态变化时递增，旧版本按不支持拒绝，不当作损坏工程修复。 */
 const FORMAT_VERSION = 2
 const CONFIG_DIRECTORY_NAME = '.opengalgame'
 const MANIFEST_FILE_NAME = 'manifest.json'
@@ -56,11 +55,6 @@ const projectInfoFailure = projectDocumentFailure(
 type ProjectManifestDocument = z.infer<typeof projectManifestDocumentSchema>
 type ProjectInfoDocument = z.infer<typeof projectInfoDocumentSchema>
 
-/**
- * 读取路径信息，不存在时返回 null，其余失败继续抛出。
- * @returns 路径信息；不存在时为 null。
- * @throws {Error} 除不存在外的读取失败。
- */
 async function optionalStat(path: string): Promise<Stats | null> {
   try {
     return await lstat(path)
@@ -70,10 +64,6 @@ async function optionalStat(path: string): Promise<Stats | null> {
   }
 }
 
-/**
- * 统一把文件操作的技术失败转换为项目异常。
- * @throws {AppException} 目录缺失或底层写入失败。
- */
 async function fileOperation<T>(action: () => Promise<T>): Promise<T> {
   try {
     return await action()
@@ -91,10 +81,6 @@ async function fileOperation<T>(action: () => Promise<T>): Promise<T> {
   }
 }
 
-/**
- * @returns 解析后的根目录；位置不存在时为 null。
- * @throws {AppException} 位置是链接或不是目录。
- */
 async function readProjectRoot(location: ProjectLocation): Promise<string | null> {
   const stat = await optionalStat(location.directory)
   if (!stat) return null
@@ -106,10 +92,6 @@ async function readProjectRoot(location: ProjectLocation): Promise<string | null
   return realpath(location.directory)
 }
 
-/**
- * @param root - 工程根目录。
- * @throws {AppException} 标识不符、清单缺失或损坏、格式版本不支持。
- */
 async function readManifest(root: string): Promise<ProjectManifestDocument> {
   const marker = join(root, CONFIG_DIRECTORY_NAME)
   const markerStat = await lstat(marker)
@@ -152,10 +134,6 @@ async function readManifest(root: string): Promise<ProjectManifestDocument> {
   )
 }
 
-/**
- * @returns 工程信息；文件不存在时为 null。
- * @throws {AppException} 读取失败或内容损坏。
- */
 async function readProjectInfo(configDirectory: string): Promise<ProjectInfoDocument | null> {
   const value = await readJsonDocument(
     join(configDirectory, PROJECT_INFO_FILE_NAME),
@@ -170,9 +148,6 @@ async function readProjectInfo(configDirectory: string): Promise<ProjectInfoDocu
   )
 }
 
-/**
- * @throws {AppException} 写入失败。
- */
 async function writeProjectInfo(
   configDirectory: string,
   project: Project,
@@ -191,10 +166,6 @@ async function writeProjectInfo(
   )
 }
 
-/**
- * @param root - 工程根目录。
- * @throws {AppException} 缺少工程信息或两处身份不一致。
- */
 async function readExistingProject(
   root: string
 ): Promise<{ manifest: ProjectManifestDocument; project: ProjectInfoDocument }> {
@@ -213,11 +184,6 @@ async function readExistingProject(
   return { manifest, project }
 }
 
-/**
- * 复用工程根下已有的素材目录，不清空、不覆盖其中已有文件。
- * @param root - 工程根目录。
- * @throws {AppException} 同名路径被文件或链接占用。
- */
 async function createAssetsDirectory(root: string): Promise<void> {
   const path = join(root, ASSETS_DIRECTORY_NAME)
   const stat = await optionalStat(path)
@@ -230,7 +196,6 @@ async function createAssetsDirectory(root: string): Promise<void> {
 }
 
 export class LocalProjectStorageGatewayImpl implements ProjectStorageGateway {
-  /** 只读识别标识与工程信息，不修复已有工程。 */
   inspect(location: ProjectLocation): Promise<WorkspaceInspection> {
     return fileOperation(async () => {
       const root = await readProjectRoot(location)
@@ -246,7 +211,6 @@ export class LocalProjectStorageGatewayImpl implements ProjectStorageGateway {
     })
   }
 
-  /** 在本目录暂存完成后发布，原目录其他文件保持原样。 */
   initialize(operation: ProjectOperation): Promise<void> {
     return fileOperation(async () => {
       const root = await readProjectRoot(operation.location)
@@ -289,7 +253,6 @@ export class LocalProjectStorageGatewayImpl implements ProjectStorageGateway {
     })
   }
 
-  /** 识别发布后崩溃窗口，只承认本操作的完整工程。 */
   isPublished(operation: ProjectOperation): Promise<boolean> {
     return fileOperation(async () => {
       const root = await readProjectRoot(operation.location)
@@ -303,7 +266,6 @@ export class LocalProjectStorageGatewayImpl implements ProjectStorageGateway {
     })
   }
 
-  /** 把合法项目写回已有工程文件。返回写入事实，不抛业务异常。 */
   saveProjectInfo(location: ProjectLocation, project: Project): Promise<'saved' | 'missing'> {
     return fileOperation(async () => {
       const root = await readProjectRoot(location)
@@ -337,11 +299,6 @@ export class LocalProjectStorageGatewayImpl implements ProjectStorageGateway {
     })
   }
 
-  /**
-   * 暂存只允许含本操作写过的文件，凭清单里的操作标识确认归属。
-   * @param staging - 暂存目录路径。
-   * @throws {AppException} 含未知内容或清单归属不符。
-   */
   private async verifyStagingOwnership(
     staging: string,
     operation: ProjectOperation
@@ -374,11 +331,6 @@ export class LocalProjectStorageGatewayImpl implements ProjectStorageGateway {
       })
   }
 
-  /**
-   * @param root - 工程根目录。
-   * @returns 暂存目录路径。
-   * @throws {AppException} 操作标识格式不正确。
-   */
   private stagingPath(root: string, operation: ProjectOperation): string {
     if (!OPERATION_ID_PATTERN.test(operation.operationId))
       throw new AppException({ code: ErrorCodes.invalidRequest, msg: '操作标识格式不正确' })

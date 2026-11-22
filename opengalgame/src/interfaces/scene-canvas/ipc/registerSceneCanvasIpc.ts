@@ -3,10 +3,6 @@ import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { createIpcRequestAccess } from '../../ipc/createIpcRequestAccess'
 import type { SceneCanvasController } from './SceneCanvasController'
 
-/**
- * 注册固定场景画布通道。注册与注销共用同一份通道表。
- * @param options - 控制器和受信任窗口。
- */
 export function registerSceneCanvasIpc(options: {
   sceneCanvas: SceneCanvasController
   getWindow: () => BrowserWindow | null

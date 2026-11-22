@@ -77,20 +77,13 @@ const updateCheck = z.discriminatedUnion('phase', [
   })
 ])
 
-/** 本域旧失败信封一直限制 msg≤200；共享失败模式其余不变。 */
 const boundedFailureResultSchema = failureResultSchema.extend({ msg: z.string().max(200) })
 
-/**
- * @returns 合法的更新状态；阶段与附带事实不一致时为 null。
- */
 export function parseUpdateStatusEvent(value: unknown): UpdateStatusVO | null {
   const parsed = updateStatus.safeParse(value)
   return parsed.success ? parsed.data : null
 }
 
-/**
- * @returns 读取状态的安全结果。
- */
 export function parseUpdateStatusResult(value: unknown): AjaxResult<UpdateStatusVO> | null {
   const parsed = z
     .union([
@@ -105,9 +98,6 @@ export function parseUpdateStatusResult(value: unknown): AjaxResult<UpdateStatus
   return parsed.success ? parsed.data : null
 }
 
-/**
- * @returns 检查更新的安全结果。
- */
 export function parseUpdateCheckResult(value: unknown): AjaxResult<UpdateCheckVO> | null {
   const parsed = z
     .union([
@@ -122,9 +112,6 @@ export function parseUpdateCheckResult(value: unknown): AjaxResult<UpdateCheckVO
   return parsed.success ? parsed.data : null
 }
 
-/**
- * @returns 安装请求的安全结果；成功时只有 null。
- */
 export function parseInstallUpdateResult(value: unknown): AjaxResult<null> | null {
   const parsed = z
     .union([

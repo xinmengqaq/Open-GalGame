@@ -88,7 +88,6 @@
   font-weight: 700;
 }
 
-/* 工作台弹层里的下拉：与表单同一套浅底控件、柔光焦点和无边框浮层菜单。 */
 :global([data-theme='workbench']) .trigger {
   min-height: 44px;
   padding: 10px 14px;

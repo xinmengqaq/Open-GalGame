@@ -18,10 +18,6 @@ interface SelectProps {
   onChange: (value: string) => void
 }
 
-/**
- * 统一风格的下拉选择。首字母跳转、Home／End、焦点归还与碰撞定位由 Radix 承担。
- * 选中项文本由调用方给出，不依赖选项是否已挂载，收起状态也能显示当前值。
- */
 export function Select({
   id,
   value,

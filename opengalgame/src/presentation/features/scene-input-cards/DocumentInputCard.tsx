@@ -11,7 +11,6 @@ import { sourceFactsOf } from '../workbench-session/workbenchSessionSelectors'
 import { useWorkbenchSessionStore } from '../workbench-session/workbenchSession.store'
 import type { SessionDocumentCard } from '../workbench-session/workbenchSession.types'
 
-/** 文档卡片内容。只展示身份、简介和文档格式，阅读入口在卡片底部操作槽。 */
 export function DocumentInputCard({ card }: { card: SessionDocumentCard }): ReactElement {
   const source = useWorkbenchSessionStore(
     useShallow((state) => sourceFactsOf(state, card.sourceId))
@@ -44,7 +43,6 @@ export function DocumentInputCard({ card }: { card: SessionDocumentCard }): Reac
   )
 }
 
-/** 文档阅读入口。位于卡片底部独立操作槽，不与来源状态抢位置。 */
 export function DocumentReadAction({ onOpen }: { onOpen: () => void }): ReactElement {
   return (
     <button

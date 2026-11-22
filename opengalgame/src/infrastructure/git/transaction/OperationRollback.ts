@@ -23,11 +23,6 @@ import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 
-/**
- * 追加一个回退提交，只恢复记录里的路径。不重置分支，不改写已有提交。
- * @returns 回退提交标识。重复回退返回已有提交。
- * @throws {AppException} 目标路径已变化、结果不明或回退失败。补偿失败时同时保留两个原因。
- */
 export async function rollbackLimited(
   projectRoot: string,
   operationId: string,
@@ -198,7 +193,6 @@ async function restoreWorktree(
   return buildRollbackTree(projectRoot, record, headOid, effects, appliedStageOids)
 }
 
-/** 工作区已由备份门槛恢复到原始内容后，只构建并暂存回退树。 */
 async function buildRollbackTree(
   projectRoot: string,
   record: OperationRecord,

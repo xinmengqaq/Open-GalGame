@@ -57,10 +57,6 @@ import {
 } from '../contracts/ProjectFilesResponseSchema'
 import type { ProjectFilesClient } from './ProjectFilesClient'
 
-/**
- * 把未知桥接结果收成已校验响应。传输中断或结构不符时返回通信失败。
- * @returns 校验后的响应，或安全通信失败。
- */
 async function readProjectFilesResult<T>(
   action: () => Promise<unknown>,
   parse: (value: unknown) => AjaxResult<T> | null
@@ -74,9 +70,6 @@ async function readProjectFilesResult<T>(
 }
 
 export class ProjectFilesClientImpl implements ProjectFilesClient {
-  /**
-   * @param bridge - 与主进程通信的固定桥接。
-   */
   constructor(private readonly bridge: DesktopBridge) {}
 
   inspectProjectFiles(
@@ -106,7 +99,6 @@ export class ProjectFilesClientImpl implements ProjectFilesClient {
     )
   }
 
-  /** 按来源身份读取媒体字节。结构不符时返回通信失败。 */
   readProjectMedia(request: ReadProjectMediaDTO): Promise<AjaxResult<ProjectMediaVO>> {
     return readProjectFilesResult(
       () => this.bridge.readProjectMedia(request),
@@ -128,7 +120,6 @@ export class ProjectFilesClientImpl implements ProjectFilesClient {
     )
   }
 
-  /** 用系统默认程序打开工程文件。 */
   openProjectFile(request: ProjectFileScopeDTO): Promise<AjaxResult<null>> {
     return readProjectFilesResult(
       () => this.bridge.openProjectFile(request),
@@ -239,7 +230,6 @@ export class ProjectFilesClientImpl implements ProjectFilesClient {
     )
   }
 
-  /** 把拖入文件转成路径。不经过导入通道。 */
   pathForDroppedFile(file: File): Promise<AjaxResult<string>> {
     return readProjectFilesResult(
       () => this.bridge.pathForDroppedFile(file),

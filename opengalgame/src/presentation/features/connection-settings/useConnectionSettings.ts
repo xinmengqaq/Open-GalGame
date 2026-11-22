@@ -15,17 +15,12 @@ import {
   type ConnectionExtensionMode
 } from './connectionDraft'
 
-/**
- * 从未保存过连接配置时的草稿默认值；已保存配置始终以磁盘摘要为准，不用这里覆盖。
- * 最大输出不再取 4096：现场生成会在 4096 处截断，默认值与上下文窗口保持同一量级。
- */
 const DEFAULT_CONTEXT_WINDOW = '128000'
 const DEFAULT_MAX_OUTPUT_TOKENS = '32768'
 
 export type SettingsViewState =
   'closed' | 'loading' | 'load-error' | 'editing' | 'testing' | 'saving' | 'listing'
 
-/** 已保存摘要来自磁盘、本次会话缓存，或还没有保存过。 */
 export type SettingsSummarySource = 'saved' | 'session' | 'empty'
 
 type SettingsFeedback = {
@@ -185,7 +180,6 @@ export function useConnectionSettings(client: ConnectionSettingsClient): Setting
     return buildConnectionSettingsRequest(draftFields(), connectionExtensionRequest(extension))
   }
 
-  /** 用当前草稿测试上游连接，结果只作反馈、不落盘。 */
   async function testConnection(): Promise<void> {
     setState('testing')
     const result = await client.testConnection(buildRequest())
@@ -213,7 +207,6 @@ export function useConnectionSettings(client: ConnectionSettingsClient): Setting
     toast.error(failure.title, { description: failure.detail })
   }
 
-  /** 保存当前连接设置，成功后清空密钥与扩展草稿，并按返回摘要刷新状态。 */
   async function saveSettings(): Promise<boolean> {
     setState('saving')
     const request = buildRequest()

@@ -10,7 +10,6 @@ type DocumentLayerMotion = {
   closeWithMotion: (onClosed: () => void) => void
 }
 
-/** 文档层滑入与淡出。减少动态效果时只短淡入，关闭后清除内联样式。 */
 export function useDocumentLayerMotion(cardId: string | null): DocumentLayerMotion {
   const overlayRef = useRef<HTMLDivElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)

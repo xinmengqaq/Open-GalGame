@@ -1,10 +1,6 @@
 import type { WebgalRuntimeHost } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
 import { WEBGAL_COMPATIBILITY_PROFILE } from '@infrastructure/webgal/compatibility/WebgalCompatibilityProfile'
 
-/**
- * 固定 `webgal-engine@4.6.5` 的编辑器同步协议没有这些确认。
- * 不能用 sync-scene、run-scene-content 或 iframe load 补上。
- */
 export const MISSING_PREVIEW_CONTROL_COMMANDS = [
   'preview.command.pause',
   'preview.command.resume',
@@ -48,10 +44,6 @@ export type PreviewControlCapability =
       readonly missingEvents: readonly string[]
     }
 
-/**
- * 预览专用控制桥。
- * 固定引擎没有暂停、继续、草稿、捕获或恢复的命令和确认事件时，明确报告能力不可用。
- */
 export class WebgalPreviewControlBridge {
   private readonly waiters = new Set<(confirmation: PreviewControlConfirmation) => void>()
   private removeHostConnection: (() => void) | undefined
@@ -70,10 +62,6 @@ export class WebgalPreviewControlBridge {
     }
   }
 
-  /**
-   * 只转发引擎发出的固定控制确认。
-   * 连接出现、iframe load 和旧协议快照都不进入这里。
-   */
   subscribe(listener: (confirmation: PreviewControlConfirmation) => void): () => void {
     this.ensureAttached()
     this.waiters.add(listener)

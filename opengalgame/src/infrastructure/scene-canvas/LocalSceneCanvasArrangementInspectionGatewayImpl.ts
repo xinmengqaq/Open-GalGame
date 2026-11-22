@@ -27,7 +27,6 @@ import {
 import { currentDocumentToModel } from './sceneArrangementCurrentMapping'
 import { arrangementPath, CANVAS_DIRECTORY } from './sceneCanvasPaths'
 
-/** 用当前编排格式检查工程内已保存编排。不删除卡片，也不加载来源正文。 */
 export class LocalSceneCanvasArrangementInspectionGatewayImpl implements SceneCanvasArrangementReaderGateway {
   inspectSceneCanvasArrangements(
     project: VerifiedProjectReadLocation

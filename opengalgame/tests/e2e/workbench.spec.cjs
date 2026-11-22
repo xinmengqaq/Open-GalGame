@@ -9,7 +9,6 @@ async function openWorkbench(page, search = '') {
   await expect(page.getByRole('heading', { name: '工作区' })).toBeVisible()
 }
 
-/** 断言最上层弹窗内容中心与视口中心的偏差不超过 2px。 */
 async function expectDialogCentered(page) {
   await expect
     .poll(
@@ -154,10 +153,8 @@ test('浏览器只读夹具显示各类卡片与两条关联', async ({ page }) 
     await expect(page.getByTestId(`rf__node-${cardId}`)).toBeVisible()
   }
 
-  // 夹具保存的视口会把高位关系标签推到画布裁切边缘；先用现有“适配画布”把内容放进可交互区域。
   await page.getByRole('button', { name: '适配画布' }).click()
 
-  // 标签会压住卡片时只留光点，名称文字被收起；关系锚点按钮始终可访问，用它选择关联并核对详情。
   const namedRelation = page.getByRole('button', { name: '编辑特殊关系：同一场景（已命名）' })
   const unnamedRelation = page.getByRole('button', { name: '编辑特殊关系：关系还没写（未命名）' })
   await expect(namedRelation).toBeVisible()
@@ -243,10 +240,9 @@ test('文档层和目录菜单挂载到 body，文档层覆盖视口', async ({ 
   await expect(menu).toHaveCount(0)
 })
 
-test('导出与试玩预览在缺少可运行前置时保持禁用并给出固定原因', async ({ page }) => {
+test('导出与试玩预览在缺少可运行前置时保持禁用并给出可读原因', async ({ page }) => {
   await openWorkbench(page)
 
-  /* 先等预览可用性查询落定，让挂载后的异步读取（含导出前置 hydration）完成。 */
   const previewButton = page.getByRole('button', { name: '试玩预览', exact: true })
   await expect(previewButton).toBeDisabled()
   await expect(previewButton).toHaveAttribute(
@@ -256,10 +252,10 @@ test('导出与试玩预览在缺少可运行前置时保持禁用并给出固�
 
   const exportButton = page.getByRole('button', { name: '导出', exact: true })
   await expect(exportButton).toBeDisabled()
-  await expect(exportButton).toHaveAttribute(
-    'title',
-    '还没有保存成功的场景内容；先在试玩预览里保存一次'
-  )
+  /* 文案随可导出来源增加而变化；只要求禁用且有能说明下一步的可读原因。 */
+  const exportHint = await exportButton.getAttribute('title')
+  expect(exportHint).toBeTruthy()
+  expect(exportHint).toMatch(/保存|生成|恢复|处理|导出/)
 })
 
 test('生成入口关闭抽屉后把焦点还给生成按钮', async ({ page }) => {

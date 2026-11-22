@@ -50,10 +50,6 @@ type ContentManifest = z.infer<typeof manifestSchema>
 const MANIFEST_DIRECTORY = ['opengalgame', 'version-content', 'manifests']
 const OBJECT_DIRECTORY = ['opengalgame', 'version-content', 'objects']
 
-/**
- * 为内联字节和已证明的场景候选形成可重启核对的内容身份。
- * 不能证明的候选、已准备引用、工作区路径和快照标识不能伪装成已保留。
- */
 export class FileVersionContentGateway implements VersionContentGateway {
   private readonly revisions: AiProjectFileSystemImpl
 
@@ -133,7 +129,6 @@ export class FileVersionContentGateway implements VersionContentGateway {
   }
 }
 
-/** 按内容身份读回已保留字节。摘要对不上时失败，不用路径充当身份。 */
 export async function readRetainedBlob(
   projectRoot: string,
   retentionRef: string
