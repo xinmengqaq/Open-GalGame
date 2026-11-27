@@ -4,7 +4,7 @@
 
 <h1 align="center">OpenGalgame</h1>
 
-<p align="center"><strong>画布式编辑 + AI 生成，基于 WebGAL 引擎的 Galgame 创作产品。</strong></p>
+<p align="center"><strong>画布式编辑 + AI 生成，基于 <a href="https://github.com/OpenWebGAL/WebGAL">WebGAL</a> 引擎的 Galgame 创作产品。</strong></p>
 
 <p align="center">把心动写成可以选择的故事。</p>
 
@@ -15,8 +15,7 @@
   <img alt="WebGAL" src="https://img.shields.io/badge/WebGAL-4.6.5-9b5de5">
 </p>
 
-OpenGalgame 是一款本地优先、基于 WebGAL 引擎的 AI Galgame（视觉小说）创作工具。你可以像摆卡片一样，在画布上整理角色、设定、素材和灵感，让 AI 根据这些内容生成 WebGAL 场景候选；候选经你审阅并接受后才会写入正式作品。写完当场就能试玩、微调台词，最后直接打包成独立运行的 Windows 游戏。
-
+OpenGalgame 是一款本地优先、基于 [WebGAL](https://github.com/OpenWebGAL/WebGAL) 引擎的 AI Galgame（视觉小说）创作工具。你可以像摆卡片一样，在画布上整理角色、设定、素材和灵感，让 AI 根据这些内容生成 WebGAL 场景候选；候选经你审阅并接受后才会写入正式作品。写完当场就能试玩、微调台词，最后直接打包成独立运行的 Windows 游戏。
 
 ## 目录
 
@@ -33,17 +32,17 @@ OpenGalgame 是一款本地优先、基于 WebGAL 引擎的 AI Galgame（视觉�
 ## 功能
 
 
-| 能力       | 说明                                                                               |
-| ---------- | ---------------------------------------------------------------------------------- |
-| 作品管理   | 新建空白画布，或者导入已有的 WebGAL 工程；在项目页随时打开、重命名或移出列表       |
-| 场景画布   | 用卡片整理文档、素材和提示词，连线理清关系；支持只读文档层、撤销重做与自动保存     |
-| 应用设置   | 统一设置中心，支持外观与字号、内置字体、OpenAI 兼容 / Anthropic 连接测试与更新检查 |
+| 能力       | 说明                                                                                                 |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| 作品管理   | 新建空白画布，或者导入已有的 WebGAL 工程；在项目页随时打开、重命名或移出列表                         |
+| 场景画布   | 用卡片整理文档、素材和提示词，连线理清关系；支持只读文档层、撤销重做与自动保存                       |
+| 应用设置   | 统一设置中心，支持外观与字号、内置字体、OpenAI 兼容 / Anthropic 连接测试与更新检查                   |
 | AI 生成    | 在创作抽屉里描述场景，结合画布上的文档、素材和提示词生成 WebGAL 场景候选；不是聊天助手，没有自由对话 |
-| 候选审阅   | 候选场景先在预览里查看，不满意可以提出修改或重新生成，确认接受后才写入作品         |
-| 试玩与改稿 | 当前场景可以直接试玩，发现台词别扭也能当场微调并保存                               |
-| 新手引导   | 八步交互式教程，从连接模型到导出成品，直接在界面上标出下一步操作                   |
-| 版本历史   | 按日期排布的时间线记录，随时翻看作品历史，改坏了一键回滚                           |
-| 导出游戏   | 把当前场景、用到的素材和 WebGAL 引擎打包在一起，直接生成可运行的 Windows 游戏      |
+| 候选审阅   | 候选场景先在预览里查看，不满意可以提出修改或重新生成，确认接受后才写入作品                           |
+| 试玩与改稿 | 当前场景可以直接试玩，发现台词别扭也能当场微调并保存                                                 |
+| 新手引导   | 八步交互式教程，从连接模型到导出成品，直接在界面上标出下一步操作                                     |
+| 版本历史   | 按日期排布的时间线记录，随时翻看作品历史，改坏了一键回滚                                             |
+| 导出游戏   | 把当前场景、用到的素材和 WebGAL 引擎打包在一起，直接生成可运行的 Windows 游戏                        |
 
 ## 功能架构
 
@@ -153,7 +152,7 @@ flowchart TB
 
 感谢这些优秀的开源项目提供了关键能力：
 
-- [WebGAL](https://docs.openwebgal.com/)：场景格式、解析器、运行时，以及 Terre 4.6.5 的 Windows 桌面导出模板。
+- [WebGAL](https://github.com/OpenWebGAL/WebGAL) 与 [WebGAL Terre](https://github.com/OpenWebGAL/WebGAL_Terre)：场景格式、解析器、运行时，以及 Terre 4.6.5 的 Windows 桌面导出模板。两者均以 [MPL-2.0](https://www.mozilla.org/en-US/MPL/2.0/) 分发；
 - [isomorphic-git](https://github.com/isomorphic-git/isomorphic-git)：作品版本、提交、历史和回滚。
 - [React Flow](https://github.com/xyflow/xyflow)：场景画布的节点、连线和画布交互。
 - [GSAP](https://gsap.com/)：页面入场和转场动效。
