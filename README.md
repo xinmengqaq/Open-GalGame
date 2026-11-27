@@ -147,6 +147,29 @@ Electron 的渲染进程不直接读写磁盘，也不持有模型密钥。本�
 | 日志           | Pino                                             |
 | 测试           | Vitest、Playwright                               |
 
+## 从源码构建
+
+```bash
+cd opengalgame
+npm ci
+npm run dev
+```
+
+字体文件不进入 Git。构建前从国内 npm 镜像获取四套 Regular 400 字体，放到 `opengalgame/src/presentation/assets/fonts/`：
+
+| 目录 | npm 包 | 文件 |
+| --- | --- | --- |
+| `noto-sans-sc` | `@fontsource/noto-sans-sc@5.3.1` | `400.css` + `files/*-400-normal.woff2` |
+| `noto-serif-sc` | `@fontsource/noto-serif-sc@5.3.1` | `400.css` + `files/*-400-normal.woff2` |
+| `wenkai-gb` | `lxgw-wenkai-gb-web@1.530.0` | `lxgwwenkaigb-regular/result.css` + `*.woff2` |
+| `smiley-sans` | `@fontpkg/smiley-sans@2.0.4` | `SmileySans-Oblique.ttf.woff2` |
+
+```bash
+npm pack @fontsource/noto-sans-sc@5.3.1 --registry=https://registry.npmmirror.com
+```
+
+字体许可与版权声明在 `opengalgame/resources/font-licenses/`。
+
 ## 许可
 
 本项目自 2026-11-27 起按 [Apache License 2.0](LICENSE) 发布，并在 [NOTICE](opengalgame/resources/licenses/NOTICE.txt) 中保留版权与归属声明。此前按 MIT License 发布的版本继续适用 [MIT License](opengalgame/resources/licenses/MIT.txt)，不因本次许可变更而改变。
