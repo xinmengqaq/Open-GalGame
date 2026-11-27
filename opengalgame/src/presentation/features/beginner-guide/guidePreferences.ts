@@ -30,6 +30,11 @@ export type GuidePreferences = {
   lastStepId: string | null
   /** 上次查看的第 4 步编排拍；其他步骤或旧偏好为 null。 */
   lastBeatId: GuideArrangeBeatId | null
+  /**
+   * 用户用入口右侧 × 关闭教程后为 true，入口不再出现；
+   * 从设置重新显示入口或重新进入教程时清除。
+   */
+  entryHidden: boolean
 }
 
 export type GuideRestoreSignal =
@@ -43,7 +48,8 @@ export function createDefaultGuidePreferences(): GuidePreferences {
     invitationHandled: false,
     tutorialModeActive: false,
     lastStepId: null,
-    lastBeatId: null
+    lastBeatId: null,
+    entryHidden: false
   }
 }
 
@@ -83,7 +89,8 @@ export function readGuidePreferences(
     lastBeatId:
       lastStepId === GUIDE_STEP_ID.arrangeScene && isGuideArrangeBeatId(parsed.lastBeatId)
         ? parsed.lastBeatId
-        : null
+        : null,
+    entryHidden: parsed.entryHidden === true
   }
 }
 
@@ -110,7 +117,8 @@ export function writeGuidePreferences(
     lastBeatId:
       lastStepId === GUIDE_STEP_ID.arrangeScene && isGuideArrangeBeatId(preferences.lastBeatId)
         ? preferences.lastBeatId
-        : null
+        : null,
+    entryHidden: preferences.entryHidden === true
   }
 
   try {

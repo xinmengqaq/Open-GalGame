@@ -126,7 +126,8 @@ beforeEach(() => {
     invitationHandled: true,
     tutorialModeActive: true,
     lastStepId: 'polish-dialogue',
-    lastBeatId: null
+    lastBeatId: null,
+    entryHidden: false
   })
 })
 
@@ -146,7 +147,8 @@ async function flush(): Promise<void> {
 
 async function mountHost(
   source: FakeGuideSource,
-  page: 'home' | 'projects' | 'workbench' = 'workbench'
+  page: 'home' | 'projects' | 'workbench' = 'workbench',
+  restoreEntryRequest = 0
 ): Promise<void> {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -155,7 +157,7 @@ async function mountHost(
     root?.render(
       createElement(BeginnerGuideHost, {
         page,
-        restartRequest: 0,
+        restoreEntryRequest,
         observationSource: source,
         importMedia: async () => 'unavailable' as const
       })
@@ -191,10 +193,7 @@ async function click(button: HTMLElement): Promise<void> {
   await flush()
 }
 
-async function setSnapshot(
-  source: FakeGuideSource,
-  next: GuideContextSnapshot
-): Promise<void> {
+async function setSnapshot(source: FakeGuideSource, next: GuideContextSnapshot): Promise<void> {
   await act(async () => {
     source.setSnapshot(next)
   })
@@ -218,9 +217,9 @@ describe('教程模式固定与退出入口', () => {
     expect(document.body.textContent).toContain('第 7 / 8 步')
     expect(document.body.textContent).toContain('在试玩预览里改一句')
     expect(document.querySelector('[data-guide-entry]')).toBeNull()
-    expect(document.querySelector('[data-guide-overlay="expanded"]')?.getAttribute('data-guide-layout')).toBe(
-      'default'
-    )
+    expect(
+      document.querySelector('[data-guide-overlay="expanded"]')?.getAttribute('data-guide-layout')
+    ).toBe('default')
 
     await setSnapshot(source, { ...WORKBENCH, generationDrawerOpen: true })
     expect(document.querySelector('[data-guide-overlay="expanded"]')).not.toBeNull()
@@ -237,9 +236,9 @@ describe('教程模式固定与退出入口', () => {
     expect(document.querySelector('[data-guide-portal]')?.parentElement).toBe(previewSlot)
 
     await setSnapshot(source, WORKBENCH)
-    expect(document.querySelector('[data-guide-overlay="expanded"]')?.getAttribute('data-guide-layout')).toBe(
-      'default'
-    )
+    expect(
+      document.querySelector('[data-guide-overlay="expanded"]')?.getAttribute('data-guide-layout')
+    ).toBe('default')
   })
 
   it('折叠胶囊可展开也可退出，退出后无浮窗高亮但保留入口，重启不再自动出现', async () => {
@@ -280,6 +279,33 @@ describe('教程模式固定与退出入口', () => {
     expect(readGuidePreferences().tutorialModeActive).toBe(true)
   })
 
+  it('展开面板可退出教程，入口 × 关闭入口并持久隐藏', async () => {
+    const source = new FakeGuideSource(WORKBENCH)
+    await mountHost(source)
+
+    const panelExit = document.querySelector<HTMLButtonElement>('[data-guide-exit="panel"]')
+    expect(panelExit?.getAttribute('aria-label')).toBe('退出教程模式')
+    await click(panelExit as HTMLButtonElement)
+    expect(document.querySelector('[data-guide-overlay]')).toBeNull()
+    expect(document.querySelector('[data-guide-entry]')).not.toBeNull()
+
+    const entryExit = document.querySelector<HTMLButtonElement>('[data-guide-entry-exit]')
+    expect(entryExit?.getAttribute('aria-label')).toBe('关闭新手教程')
+    await click(entryExit as HTMLButtonElement)
+    expect(document.querySelector('[data-guide-entry]')).toBeNull()
+    expect(readGuidePreferences().entryHidden).toBe(true)
+
+    await unmountHost()
+    await mountHost(new FakeGuideSource(WORKBENCH))
+    expect(document.querySelector('[data-guide-entry]')).toBeNull()
+
+    await unmountHost()
+    await mountHost(new FakeGuideSource(WORKBENCH), 'workbench', 1)
+    expect(document.querySelector('[data-guide-entry]')).not.toBeNull()
+    expect(document.querySelector('[data-guide-overlay]')).toBeNull()
+    expect(readGuidePreferences().entryHidden).toBe(false)
+  })
+
   it('预览里退出保留左下入口，接受邀请后回到第 7 步', async () => {
     const previewSlot = document.createElement('div')
     previewSlot.setAttribute('data-guide-top-layer-host', 'preview')
@@ -288,9 +314,9 @@ describe('教程模式固定与退出入口', () => {
 
     const source = new FakeGuideSource({ ...WORKBENCH, previewOpen: true })
     await mountHost(source)
-    expect(document.querySelector('[data-guide-overlay="expanded"]')?.getAttribute('data-guide-layout')).toBe(
-      'preview'
-    )
+    expect(
+      document.querySelector('[data-guide-overlay="expanded"]')?.getAttribute('data-guide-layout')
+    ).toBe('preview')
 
     await click(buttonWith('退出跟做'))
     expect(document.querySelector('[data-guide-overlay]')).toBeNull()
@@ -301,9 +327,9 @@ describe('教程模式固定与退出入口', () => {
     await click(entry as HTMLButtonElement)
     expect(document.body.textContent).toContain('把一段戏做成能玩的场景')
     await click(buttonWith('开始跟做'))
-    expect(document.querySelector('[data-guide-overlay="expanded"]')?.getAttribute('data-guide-layout')).toBe(
-      'preview'
-    )
+    expect(
+      document.querySelector('[data-guide-overlay="expanded"]')?.getAttribute('data-guide-layout')
+    ).toBe('preview')
     expect(document.body.textContent).toContain('第 7 / 8 步')
   })
 
@@ -328,7 +354,8 @@ describe('教程模式固定与退出入口', () => {
       invitationHandled: true,
       tutorialModeActive: true,
       lastStepId: 'export-build',
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
     const previewRoot = document.createElement('div')
     previewRoot.setAttribute('data-testid', 'preview-page')
@@ -357,7 +384,8 @@ describe('教程模式固定与退出入口', () => {
       invitationHandled: true,
       tutorialModeActive: true,
       lastStepId: 'export-build',
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
     const previewRoot = document.createElement('div')
     previewRoot.setAttribute('data-testid', 'preview-page')
@@ -382,7 +410,8 @@ describe('教程模式固定与退出入口', () => {
       invitationHandled: true,
       tutorialModeActive: false,
       lastStepId: 'polish-dialogue',
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
     const source = new FakeGuideSource({ ...WORKBENCH, page: 'project-list' })
     await mountHost(source, 'projects')

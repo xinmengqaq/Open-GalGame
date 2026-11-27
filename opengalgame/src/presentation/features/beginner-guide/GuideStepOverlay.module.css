@@ -172,6 +172,37 @@
   box-shadow: var(--wb-focus);
 }
 
+.panelExit {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.panelExit svg {
+  width: 13px;
+  height: 13px;
+}
+
+.panelExit:hover {
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.panelExit:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
 .content {
   display: flex;
   min-height: 0;
@@ -639,13 +670,20 @@
   box-shadow:
     var(--wb-shadow-float),
     inset 0 1px 0 color-mix(in srgb, #fff 68%, transparent);
+  cursor: grab;
   pointer-events: auto;
+  touch-action: none;
+  user-select: none;
   backdrop-filter: blur(24px) saturate(1.06);
   -webkit-backdrop-filter: blur(24px) saturate(1.06);
   transition:
     background var(--wb-duration-fast) var(--wb-ease),
     border-color var(--wb-duration-fast) var(--wb-ease),
     box-shadow var(--wb-duration-fast) var(--wb-ease);
+}
+
+.pillGroup[data-dragging='true'] {
+  cursor: grabbing;
 }
 
 .pillGroup:hover {

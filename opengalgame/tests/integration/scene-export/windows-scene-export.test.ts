@@ -187,7 +187,7 @@ describe('最小 Windows 场景导出', () => {
         process.execPath,
         [
           '-e',
-          "const asar=require('@electron/asar'); const root=process.argv[1]; const dest=require('node:os').tmpdir()+'/terre-check'; asar.extractAll(root+'/resources/app.asar', dest); const fs=require('node:fs'); const base=dest+'/public/game/'; console.log(fs.readFileSync(base+'scene/start.txt','utf8')); console.log(fs.readFileSync(base+'figure/hero.png').toString('hex')); console.log(fs.readFileSync(base+'background/room.webp').toString('hex')); console.log(fs.readFileSync(dest+'/public/webgal-engine.json','utf8')); console.log('__CONFIG__'+fs.readFileSync(base+'config.txt','utf8')); console.log('__USER_STYLE__'+fs.readFileSync(base+'userStyleSheet.css','utf8')); console.log('__MAIN__'+fs.readFileSync(dest+'/main.js','utf8'));",
+          "const asar=require('@electron/asar'); const root=process.argv[1]; const dest=require('node:os').tmpdir()+'/terre-check'; asar.extractAll(root+'/resources/app.asar', dest); const fs=require('node:fs'); const base=dest+'/public/game/'; console.log(fs.readFileSync(base+'scene/start.txt','utf8')); console.log(fs.readFileSync(base+'figure/hero.png').toString('hex')); console.log(fs.readFileSync(base+'background/room.webp').toString('hex')); console.log(fs.readFileSync(dest+'/public/webgal-engine.json','utf8')); console.log('__CONFIG__'+fs.readFileSync(base+'config.txt','utf8')); console.log('__USER_STYLE__'+fs.readFileSync(base+'userStyleSheet.css','utf8')); console.log('__INDEX__'+fs.readFileSync(dest+'/public/index.html','utf8')); console.log('__PANIC__'+fs.readFileSync(dest+'/public/opengalgame-panic-guard.js','utf8')); console.log('__MAIN__'+fs.readFileSync(dest+'/main.js','utf8'));",
           output
         ],
         { cwd: join(process.cwd(), 'node_modules', '@electron', 'asar'), encoding: 'utf8' }
@@ -202,6 +202,10 @@ describe('最小 Windows 场景导出', () => {
       )
       expect(listing).toContain('__USER_STYLE__html,body{background:#000}\n')
       expect(listing).not.toMatch(/#root\s*\{|\.App\s*\{|#pixiCont|canvas\s*\{[^}]*width/i)
+      expect(listing).toMatch(/__PANIC__[\s\S]*stopImmediatePropagation/)
+      expect(listing).toMatch(
+        /__INDEX__[\s\S]*opengalgame-panic-guard\.js[\s\S]*<script type="module"/
+      )
       expect(listing).toMatch(/__MAIN__[\s\S]*setBounds\(area\);\s*win\.maximize\(\)/)
       expect(listing).not.toMatch(/__MAIN__[\s\S]*width:\s*1600/)
     } finally {

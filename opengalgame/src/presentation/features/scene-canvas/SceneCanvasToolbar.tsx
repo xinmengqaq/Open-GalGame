@@ -1,12 +1,11 @@
 import { useReactFlow, useViewport } from '@xyflow/react'
 import { clsx } from 'clsx'
-import { useCallback, type ReactElement } from 'react'
+import type { ReactElement } from 'react'
 
 import { PlusIcon } from '../../components/Icons'
 import { Button } from '../../components/Button'
 import { prefersReducedMotion } from '../../effects/motion'
 import { FitIcon, MinusIcon, RedoIcon, UndoIcon } from '../../pages/workbench/WorkbenchIcons'
-import type { RegisterWorkbenchInset } from '../../pages/workbench/shell/workbenchLayout'
 import { useWorkbenchCommands } from '../workbench-session/workbenchCommandsContext'
 import { useWorkbenchSessionStore } from '../workbench-session/workbenchSession.store'
 import { EffectIcon, MotionIcon, SparkIcon } from './SceneCanvasIcons'
@@ -16,14 +15,12 @@ interface SceneCanvasToolbarProps {
   onAddPrompt: () => void
   onAddAnimation: () => void
   onAddEffect: () => void
-  registerInset?: RegisterWorkbenchInset
 }
 
 export function SceneCanvasToolbar({
   onAddPrompt,
   onAddAnimation,
-  onAddEffect,
-  registerInset
+  onAddEffect
 }: SceneCanvasToolbarProps): ReactElement {
   const commands = useWorkbenchCommands()
   const { zoomIn, zoomOut, fitView } = useReactFlow()
@@ -32,14 +29,9 @@ export function SceneCanvasToolbar({
   const future = useWorkbenchSessionStore((state) => state.future)
   const reduced = prefersReducedMotion()
   const percent = Math.round(zoom * 100)
-  const registerDock = useCallback(
-    (node: HTMLElement | null) => registerInset?.('bottomDock', node),
-    [registerInset]
-  )
 
   return (
     <footer
-      ref={registerDock}
       className={styles.dock}
       data-motion="toolbar"
       data-testid="canvas-dock"

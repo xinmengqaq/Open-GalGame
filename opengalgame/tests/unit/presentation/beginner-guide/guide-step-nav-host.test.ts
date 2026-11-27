@@ -98,7 +98,13 @@ beforeEach(() => {
   window.localStorage.clear()
   window.localStorage.setItem(
     GUIDE_PREFERENCES_KEY,
-    JSON.stringify({ version: 1, invitationHandled: true, lastStepId: null, lastBeatId: null })
+    JSON.stringify({
+      version: 1,
+      invitationHandled: true,
+      tutorialModeActive: true,
+      lastStepId: null,
+      lastBeatId: null
+    })
   )
 })
 
@@ -114,7 +120,7 @@ async function flush(): Promise<void> {
   })
 }
 
-async function mountHost(source: FakeGuideSource, restartRequest = 1): Promise<void> {
+async function mountHost(source: FakeGuideSource, restoreEntryRequest = 0): Promise<void> {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -122,7 +128,7 @@ async function mountHost(source: FakeGuideSource, restartRequest = 1): Promise<v
     root.render(
       createElement(BeginnerGuideHost, {
         page: 'workbench',
-        restartRequest,
+        restoreEntryRequest,
         observationSource: source,
         importMedia: async () => 'unavailable' as const
       })

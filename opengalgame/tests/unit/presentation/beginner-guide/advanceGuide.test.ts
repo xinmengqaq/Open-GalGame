@@ -595,9 +595,6 @@ describe('新手指引推进状态机', () => {
     state = stateAt(GUIDE_STEP_ID.saveAndGenerate)
     state = send(state, fact<CanvasSavedFact>({ kind: 'canvasSaved', reason: 'manual' }))
     expect(state.milestoneIndex).toBe(1)
-    state = advanceGuide(state, { type: 'restart' }).state
-    expect([state.stepId, state.milestoneIndex]).toEqual(['configure-model', 0])
-    expect(state.scope).toEqual(TEST_SCOPE)
   })
 
   it('恢复时没有 lastStepId 从第一步开始，旧 id 请求打开目录', () => {

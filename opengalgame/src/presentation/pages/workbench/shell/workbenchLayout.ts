@@ -1,19 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 
-export type WorkbenchInsetSlot = 'topBar' | 'feedback' | 'bottomDock' | 'modal'
+export type WorkbenchInsetSlot = 'topBar' | 'feedback' | 'modal'
 
 export interface WorkbenchLayoutInsets {
   topBar: number
   feedback: number
-  bottomDock: number
   modal: number
-}
-
-export interface CanvasSafeArea {
-  top: number
-  right: number
-  bottom: number
-  left: number
 }
 
 export type RegisterWorkbenchInset = (slot: WorkbenchInsetSlot, node: HTMLElement | null) => void
@@ -21,17 +13,7 @@ export type RegisterWorkbenchInset = (slot: WorkbenchInsetSlot, node: HTMLElemen
 export const emptyWorkbenchInsets: WorkbenchLayoutInsets = {
   topBar: 0,
   feedback: 0,
-  bottomDock: 0,
   modal: 0
-}
-
-export function canvasSafeAreaOf(insets: WorkbenchLayoutInsets): CanvasSafeArea {
-  return {
-    top: 0,
-    right: 0,
-    bottom: insets.bottomDock,
-    left: 0
-  }
 }
 
 function heightOf(node: HTMLElement | undefined): number {
@@ -50,13 +32,11 @@ export function useWorkbenchLayoutInsets(): {
     const next: WorkbenchLayoutInsets = {
       topBar: heightOf(nodes.current.topBar),
       feedback: heightOf(nodes.current.feedback),
-      bottomDock: heightOf(nodes.current.bottomDock),
       modal: heightOf(nodes.current.modal)
     }
     setInsets((current) =>
       current.topBar === next.topBar &&
       current.feedback === next.feedback &&
-      current.bottomDock === next.bottomDock &&
       current.modal === next.modal
         ? current
         : next

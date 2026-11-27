@@ -607,8 +607,6 @@ function WorkbenchScreen({
               ) : (
                 <SceneCanvas
                   client={projectFilesClient}
-                  layoutInsets={layout.insets}
-                  registerInset={layout.registerInset}
                   noticeSlot={noticeSlot}
                   onInspect={() => void page.inspectProject()}
                   onReload={() => void page.loadWorkspace()}

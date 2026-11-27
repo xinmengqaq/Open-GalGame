@@ -26,7 +26,7 @@ import { useGuideSession } from './useGuideSession'
 import { useGuideReturnPulse } from './useGuideReturnPulse'
 
 interface BeginnerGuideHostProps {
-  restartRequest?: number
+  restoreEntryRequest?: number
   page: 'home' | 'projects' | 'workbench'
   observationSource: GuideObservationSource
   importMedia: GuideMediaImportAction
@@ -56,7 +56,7 @@ function readCardTitles(source: GuideObservationSource): Readonly<Record<string,
  * 业务数据一律来自观察源，不接收 clients、store 或页面组件。
  */
 export function BeginnerGuideHost({
-  restartRequest = 0,
+  restoreEntryRequest = 0,
   page,
   observationSource,
   importMedia,
@@ -64,10 +64,10 @@ export function BeginnerGuideHost({
 }: BeginnerGuideHostProps): ReactElement | null {
   const { session, actions } = useGuideSession({ source: observationSource })
   const guidePage: GuidePage = page === 'projects' ? 'project-list' : page
-  const { restart } = actions
+  const { restoreEntry } = actions
   useEffect(() => {
-    if (restartRequest > 0) restart()
-  }, [restartRequest, restart])
+    if (restoreEntryRequest > 0) restoreEntry()
+  }, [restoreEntryRequest, restoreEntry])
   const { showInvitation, syncContext } = actions
   const [previewOpen, setPreviewOpen] = useState(() => {
     try {
@@ -213,14 +213,14 @@ export function BeginnerGuideHost({
     // 不把主题提到 body，首页与工作台的其它元素不受影响。
     // 抽屉/预览打开时挂进其内容，避免被模态的 aria-hidden 和焦点陷阱排除。
     <div className={theme.theme} data-guide-portal="true">
-      {modal === null &&
-        session.mode === 'idle' && (
-          <GuideEntry
-            lastStepId={session.lastStepId}
-            layout={previewOpen ? 'preview' : 'default'}
-            onOpen={() => actions.openInvitation()}
-          />
-        )}
+      {modal === null && session.mode === 'idle' && !session.entryHidden && (
+        <GuideEntry
+          lastStepId={session.lastStepId}
+          layout={previewOpen ? 'preview' : 'default'}
+          onOpen={() => actions.openInvitation()}
+          onClose={() => actions.hideEntry()}
+        />
+      )}
       {overlay}
       <GuideDialog
         session={session}

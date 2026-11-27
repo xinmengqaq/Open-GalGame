@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-  type ReactElement
-} from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 
 import { GuideCopyText } from './GuideCopy'
 import { useGuideMarkers } from './useGuideMarkers'
@@ -33,15 +27,7 @@ import {
 import styles from './GuideStepOverlay.module.css'
 import { useGuideOverlayMotion } from './useGuideMotion'
 import { guideNavigationViewOf, type GuideNavigationView } from './guideNavigation'
-
-type GuideOverlayLayout = 'default' | 'preview'
-
-interface GuidePoint {
-  left: number
-  top: number
-}
-
-type PlacedGuidePoint = GuidePoint & { layout: GuideOverlayLayout }
+import { useGuideDrag, type GuideOverlayLayout } from './guideDrag'
 
 interface GuideStepOverlayProps {
   guide: GuideSessionState
@@ -74,7 +60,6 @@ type MediaAttempt = {
   outcome: GuideMediaImportOutcome | 'importing'
 }
 
-const VIEWPORT_EDGE = 12
 const PILL_RING_RADIUS = 9
 const PILL_RING_LENGTH = 2 * Math.PI * PILL_RING_RADIUS
 
@@ -161,17 +146,6 @@ function importButtonLabel(
   if (outcome === 'importing') return '正在打开文件…'
   if (outcome === 'unverified') return '等待确认导入结果'
   return available ? `导入其他${label}` : `导入${label}`
-}
-
-function clampPosition(left: number, top: number, node: HTMLElement): GuidePoint {
-  const width = node.offsetWidth
-  const height = node.offsetHeight
-  const maxLeft = Math.max(VIEWPORT_EDGE, window.innerWidth - width - VIEWPORT_EDGE)
-  const maxTop = Math.max(VIEWPORT_EDGE, window.innerHeight - height - VIEWPORT_EDGE)
-  return {
-    left: Math.min(Math.max(VIEWPORT_EDGE, left), maxLeft),
-    top: Math.min(Math.max(VIEWPORT_EDGE, top), maxTop)
-  }
 }
 
 function ArrangeKindGlyph({ view }: { view: GuideArrangeView }): ReactElement | null {
@@ -275,18 +249,11 @@ export function GuideStepOverlay({
 
   const panelRef = useRef<HTMLElement>(null)
   const pillRef = useRef<HTMLButtonElement>(null)
+  const pillGroupRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
   const collapseFocusRef = useRef(false)
-  const dragRef = useRef<{
-    pointerId: number
-    x: number
-    y: number
-    left: number
-    top: number
-  } | null>(null)
   const wasExpanded = useRef(expanded)
-  const [position, setPosition] = useState<PlacedGuidePoint | null>(null)
-  const [dragging, setDragging] = useState(false)
+  const drag = useGuideDrag(layout)
   const [mediaAttempt, setMediaAttempt] = useState<MediaAttempt | null>(null)
 
   const arrangeKey = view
@@ -343,10 +310,6 @@ export function GuideStepOverlay({
     setMediaAttempt(null)
   }, [attemptKey])
 
-  // 不同表面各自使用自己的停靠位：页面上的拖动坐标不会带到预览左下，
-  // 预览里的拖动也只在预览内保留。展开/收起本身仍保留当前位置。
-  const placedPosition = position?.layout === layout ? position : null
-
   useEffect(() => {
     const previous = wasExpanded.current
     wasExpanded.current = expanded
@@ -363,17 +326,9 @@ export function GuideStepOverlay({
   }, [expanded])
 
   useEffect(() => {
-    const node = expanded ? panelRef.current : pillRef.current
+    const node = expanded ? panelRef.current : pillGroupRef.current
     if (!node) return
-    const reclamp = (): void => {
-      setPosition((current) => {
-        if (!current || current.layout !== layout) return current
-        const next = clampPosition(current.left, current.top, node)
-        return next.left === current.left && next.top === current.top
-          ? current
-          : { ...next, layout }
-      })
-    }
+    const reclamp = drag.reclamp.bind(null, node)
     reclamp()
     window.addEventListener('resize', reclamp)
     const observer = new ResizeObserver(reclamp)
@@ -382,45 +337,7 @@ export function GuideStepOverlay({
       window.removeEventListener('resize', reclamp)
       observer.disconnect()
     }
-  }, [expanded, layout])
-
-  const endDrag = (event: ReactPointerEvent<HTMLElement>): void => {
-    const drag = dragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-    dragRef.current = null
-    setDragging(false)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }
-
-  const startDrag = (event: ReactPointerEvent<HTMLElement>): void => {
-    if (event.button !== 0) return
-    const target = event.target as HTMLElement
-    if (target.closest('button, a, input, textarea, select')) return
-    const panel = panelRef.current
-    if (!panel) return
-    const rect = panel.getBoundingClientRect()
-    dragRef.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      left: rect.left,
-      top: rect.top
-    }
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setDragging(true)
-  }
-
-  const moveDrag = (event: ReactPointerEvent<HTMLElement>): void => {
-    const drag = dragRef.current
-    const panel = panelRef.current
-    if (!drag || !panel || drag.pointerId !== event.pointerId) return
-    setPosition({
-      ...clampPosition(drag.left + event.clientX - drag.x, drag.top + event.clientY - drag.y, panel),
-      layout
-    })
-  }
+  }, [drag.reclamp, expanded, layout])
 
   const handleImport = (): void => {
     if (!mediaKind || mediaAttemptHere === 'importing' || mediaAttemptHere === 'unverified') return
@@ -450,18 +367,17 @@ export function GuideStepOverlay({
     return (
       <div className={styles.layer} data-layout={layout}>
         <div
+          ref={pillGroupRef}
           className={styles.pillGroup}
           data-guide-layout={layout}
-          style={
-            placedPosition
-              ? {
-                  left: placedPosition.left,
-                  top: placedPosition.top,
-                  right: 'auto',
-                  bottom: 'auto'
-                }
-              : undefined
-          }
+          data-dragging={drag.dragging || undefined}
+          style={drag.style}
+          onPointerDown={(event) => drag.start(event, pillGroupRef.current)}
+          onClickCapture={(event) => {
+            if (!drag.consumeClick()) return
+            event.preventDefault()
+            event.stopPropagation()
+          }}
         >
           <button
             ref={pillRef}
@@ -557,16 +473,7 @@ export function GuideStepOverlay({
       <aside
         ref={panelRef}
         className={styles.panel}
-        style={
-          placedPosition
-            ? {
-                left: placedPosition.left,
-                top: placedPosition.top,
-                right: 'auto',
-                bottom: 'auto'
-              }
-            : undefined
-        }
+        style={drag.style}
         aria-label={`新手教程，第 ${number} 步「${step.title}」，共 ${total} 步`}
         data-guide-overlay="expanded"
         data-guide-layout={layout}
@@ -575,11 +482,12 @@ export function GuideStepOverlay({
       >
         <header
           className={styles.top}
-          onPointerDown={startDrag}
-          onPointerMove={moveDrag}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          data-dragging={dragging || undefined}
+          onPointerDown={(event) => {
+            const target = event.target as HTMLElement
+            if (target.closest('button, a, input, textarea, select')) return
+            drag.start(event, panelRef.current)
+          }}
+          data-dragging={drag.dragging || undefined}
         >
           <svg className={styles.grip} viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
             <circle cx="3" cy="4" r="1" />
@@ -622,6 +530,25 @@ export function GuideStepOverlay({
               aria-hidden="true"
             >
               <path d="M3.5 5.5 7 9l3.5-3.5" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={styles.panelExit}
+            onClick={onExit}
+            aria-label="退出教程模式"
+            title="退出教程"
+            data-guide-exit="panel"
+          >
+            <svg
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="m3.9 3.9 6.2 6.2M10.1 3.9 3.9 10.1" />
             </svg>
           </button>
         </header>

@@ -8,12 +8,6 @@ import {
   PROJECT_WORKSPACE_NOT_READY_CODE,
   workbenchFeedback
 } from '../../feedback/workbenchFeedback'
-import {
-  canvasSafeAreaOf,
-  emptyWorkbenchInsets,
-  type RegisterWorkbenchInset,
-  type WorkbenchLayoutInsets
-} from '../../pages/workbench/shell/workbenchLayout'
 import { defaultCardSize } from '../workbench-session/contentKindLabel'
 import { useWorkbenchCommands } from '../workbench-session/workbenchCommandsContext'
 import { useWorkbenchSessionStore } from '../workbench-session/workbenchSession.store'
@@ -34,8 +28,6 @@ interface SceneCanvasProps {
   client: ProjectFilesClient
   onInspect: () => void
   onReload: () => void
-  layoutInsets?: WorkbenchLayoutInsets
-  registerInset?: RegisterWorkbenchInset
   noticeSlot?: HTMLElement | null
 }
 
@@ -43,8 +35,6 @@ export function SceneCanvas({
   client,
   onInspect,
   onReload,
-  layoutInsets,
-  registerInset,
   noticeSlot
 }: SceneCanvasProps): ReactElement {
   return (
@@ -53,8 +43,6 @@ export function SceneCanvas({
         client={client}
         onInspect={onInspect}
         onReload={onReload}
-        layoutInsets={layoutInsets}
-        registerInset={registerInset}
         noticeSlot={noticeSlot}
       />
     </ReactFlowProvider>
@@ -65,8 +53,6 @@ function SceneCanvasBody({
   client,
   onInspect,
   onReload,
-  layoutInsets,
-  registerInset,
   noticeSlot
 }: SceneCanvasProps): ReactElement {
   const commands = useWorkbenchCommands()
@@ -84,7 +70,6 @@ function SceneCanvasBody({
       (relation) => `${relation.relationId}:${relation.specificName}:${relation.recordCardId ?? ''}`
     )
     .join('|')
-  const safeArea = canvasSafeAreaOf(layoutInsets ?? emptyWorkbenchInsets)
 
   useSceneCanvasMotion({
     root: stageRef,
@@ -170,7 +155,6 @@ function SceneCanvasBody({
           client={client}
           surfaceRef={viewportRef}
           canvas={canvas}
-          safeArea={safeArea}
           onAddPrompt={() => addCard('prompt')}
           onAttachRecord={canvas.attachRecordToAnchor}
         />
@@ -179,7 +163,6 @@ function SceneCanvasBody({
           onAddPrompt={() => addCard('prompt')}
           onAddAnimation={() => addCard('animation')}
           onAddEffect={() => addCard('effect')}
-          registerInset={registerInset}
         />
         <SceneCanvasContextMenu
           menu={canvas.menu}

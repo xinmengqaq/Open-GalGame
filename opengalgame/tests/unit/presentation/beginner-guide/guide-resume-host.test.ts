@@ -133,6 +133,7 @@ beforeEach(() => {
     JSON.stringify({
       version: 1,
       invitationHandled: true,
+      tutorialModeActive: true,
       lastStepId: 'save-and-generate'
     })
   )
@@ -154,7 +155,7 @@ async function flush(): Promise<void> {
 async function mountHost(
   source: FakeGuideSource,
   page: HostPage = 'workbench',
-  restartRequest = 1
+  restoreEntryRequest = 0
 ): Promise<{ render: (page: HostPage) => Promise<void> }> {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -164,7 +165,7 @@ async function mountHost(
       root.render(
         createElement(BeginnerGuideHost, {
           page: nextPage,
-          restartRequest,
+          restoreEntryRequest,
           observationSource: source,
           importMedia: async () => 'unavailable' as const
         })

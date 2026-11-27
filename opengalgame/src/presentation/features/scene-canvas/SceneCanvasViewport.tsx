@@ -14,14 +14,12 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
   type RefObject
 } from 'react'
 
 import type { ProjectFilesClient } from '@interfaces/project-files/client/ProjectFilesClient'
-import type { CanvasSafeArea } from '../../pages/workbench/shell/workbenchLayout'
 import { useWorkbenchCommands } from '../workbench-session/workbenchCommandsContext'
 import { useWorkbenchSessionStore } from '../workbench-session/workbenchSession.store'
 import { InputCardNodeView } from './InputCardNode'
@@ -60,7 +58,6 @@ interface SceneCanvasViewportProps {
   client: ProjectFilesClient
   surfaceRef: RefObject<HTMLDivElement | null>
   canvas: SceneCanvasState
-  safeArea: CanvasSafeArea
   onAddPrompt: () => void
   onAttachRecord: (relationId: string) => boolean
 }
@@ -69,7 +66,6 @@ export function SceneCanvasViewport({
   client,
   surfaceRef,
   canvas,
-  safeArea,
   onAddPrompt,
   onAttachRecord
 }: SceneCanvasViewportProps): ReactElement {
@@ -253,14 +249,6 @@ export function SceneCanvasViewport({
       data-testid="scene-canvas"
       data-content-scope="canvas"
       onMouseUpCapture={noteReleasePoint}
-      style={
-        {
-          '--canvas-safe-top': `${safeArea.top}px`,
-          '--canvas-safe-right': `${safeArea.right}px`,
-          '--canvas-safe-bottom': `${safeArea.bottom}px`,
-          '--canvas-safe-left': `${safeArea.left}px`
-        } as CSSProperties
-      }
     >
       <ReactFlow<CanvasNode, CanvasEdge>
         nodes={canvas.nodes}

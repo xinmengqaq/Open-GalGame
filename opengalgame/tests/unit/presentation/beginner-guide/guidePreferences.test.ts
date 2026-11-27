@@ -49,7 +49,8 @@ describe('新手指引本机偏好', () => {
       invitationHandled: false,
       tutorialModeActive: false,
       lastStepId: null,
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
 
     const storage = new MemoryStorage()
@@ -59,11 +60,13 @@ describe('新手指引本机偏好', () => {
         invitationHandled: true,
         tutorialModeActive: true,
         lastStepId: 'arrange-scene',
-        lastBeatId: null
+        lastBeatId: null,
+        entryHidden: false
       },
       storage
     )
     expect(Object.keys(stored(storage)).sort()).toEqual([
+      'entryHidden',
       'invitationHandled',
       'lastBeatId',
       'lastStepId',
@@ -75,7 +78,8 @@ describe('新手指引本机偏好', () => {
       invitationHandled: true,
       tutorialModeActive: true,
       lastStepId: 'arrange-scene',
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
   })
 
@@ -104,7 +108,8 @@ describe('新手指引本机偏好', () => {
       invitationHandled: false,
       tutorialModeActive: false,
       lastStepId: null,
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
 
     const arrayValue = new MemoryStorage()
@@ -130,7 +135,8 @@ describe('新手指引本机偏好', () => {
       invitationHandled: true,
       tutorialModeActive: false,
       lastStepId: 'playtest-candidate',
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
     expect(shouldAutoInvite(preferences)).toBe(false)
     storage.writes = 0
@@ -169,7 +175,8 @@ describe('新手指引本机偏好', () => {
       invitationHandled: true,
       tutorialModeActive: true,
       lastStepId: null,
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
   })
 
@@ -183,7 +190,8 @@ describe('新手指引本机偏好', () => {
         invitationHandled: true,
         tutorialModeActive: false,
         lastStepId: 'save-and-generate',
-        lastBeatId: null
+        lastBeatId: null,
+        entryHidden: false
       })
     ).toEqual({ kind: 'resume', stepId: 'save-and-generate', beatId: null })
     expect(
@@ -192,7 +200,8 @@ describe('新手指引本机偏好', () => {
         invitationHandled: true,
         tutorialModeActive: false,
         lastStepId: 'removed-step',
-        lastBeatId: null
+        lastBeatId: null,
+        entryHidden: false
       })
     ).toEqual({ kind: 'open-catalog', staleStepId: 'removed-step' })
   })
@@ -204,7 +213,9 @@ describe('新手指引本机偏好', () => {
         version: 1,
         invitationHandled: true,
         tutorialModeActive: false,
-        lastStepId: null
+        lastStepId: null,
+        lastBeatId: null,
+        entryHidden: false
       })
     ).toBe(false)
   })
@@ -234,7 +245,8 @@ describe('新手指引本机偏好', () => {
         invitationHandled: true,
         tutorialModeActive: true,
         lastStepId: 'arrange-scene',
-        lastBeatId: 'cue'
+        lastBeatId: 'cue',
+        entryHidden: false
       },
       storage
     )
@@ -243,7 +255,8 @@ describe('新手指引本机偏好', () => {
       invitationHandled: true,
       tutorialModeActive: true,
       lastStepId: 'arrange-scene',
-      lastBeatId: 'cue'
+      lastBeatId: 'cue',
+      entryHidden: false
     })
     expect(resolveGuideRestore(readGuidePreferences(storage))).toEqual({
       kind: 'resume',
@@ -257,7 +270,8 @@ describe('新手指引本机偏好', () => {
         invitationHandled: true,
         tutorialModeActive: false,
         lastStepId: 'save-and-generate',
-        lastBeatId: 'cue'
+        lastBeatId: 'cue',
+        entryHidden: false
       },
       storage
     )

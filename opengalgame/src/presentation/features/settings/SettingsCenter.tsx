@@ -60,7 +60,7 @@ export interface SettingsCenterProps {
   connection: ConnectionSettingsFlow
   appUpdate: AppUpdateFlow
   onClose: () => void
-  onRestartGuide: () => void
+  onRestoreGuideEntry: () => void
 }
 
 export function SettingsCenter({
@@ -71,7 +71,7 @@ export function SettingsCenter({
   connection,
   appUpdate,
   onClose,
-  onRestartGuide
+  onRestoreGuideEntry
 }: SettingsCenterProps): ReactElement {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(() =>
     resolveInitialSettingsSection(requestedSection, modelConfigured)
@@ -79,7 +79,7 @@ export function SettingsCenter({
   const [pendingAction, setPendingAction] = useState<
     { kind: 'close' } | { kind: 'switch'; nextSection: SettingsSectionId } | null
   >(null)
-  const [guideRestartPending, setGuideRestartPending] = useState(false)
+  const [guideEntryRestorePending, setGuideEntryRestorePending] = useState(false)
   const [legalOpen, setLegalOpen] = useState(false)
 
   const wasOpenRef = useRef(false)
@@ -123,7 +123,7 @@ export function SettingsCenter({
 
   const finishClose = useCallback((): void => {
     setPendingAction(null)
-    setGuideRestartPending(false)
+    setGuideEntryRestorePending(false)
     setLegalOpen(false)
     connection.close()
     onClose()
@@ -145,7 +145,7 @@ export function SettingsCenter({
       const initial = resolveInitialSettingsSection(requestedSection, modelConfigured)
       setActiveSection(initial)
       setPendingAction(null)
-      setGuideRestartPending(false)
+      setGuideEntryRestorePending(false)
       void appearance.load({ syncDraft: false })
       void connection.loadForSection()
     }
@@ -374,9 +374,9 @@ export function SettingsCenter({
                     <Button
                       variant="secondary"
                       className={styles.inlineAction}
-                      onClick={() => setGuideRestartPending(true)}
+                      onClick={() => setGuideEntryRestorePending(true)}
                     >
-                      重新跟做新手教程
+                      重新显示新手教程入口
                     </Button>
                   </section>
                   <section className={styles.guideBlock} aria-labelledby="settings-update-title">
@@ -408,17 +408,17 @@ export function SettingsCenter({
       />
 
       <ConfirmDialog
-        open={guideRestartPending}
-        title="重新跟做新手教程？"
-        message="会从第 1 步重新开始完整教程，并关闭设置中心。已保存的工程和设置不受影响。"
-        confirmLabel="重新开始"
+        open={guideEntryRestorePending}
+        title="重新显示新手教程入口？"
+        message="页面右下角会重新出现教程入口。不会重新开始教程，也不会改动已读进度。已保存的工程和设置不受影响。"
+        confirmLabel="显示入口"
         cancelLabel="继续设置"
         onConfirm={() => {
-          setGuideRestartPending(false)
+          setGuideEntryRestorePending(false)
           finishClose()
-          onRestartGuide()
+          onRestoreGuideEntry()
         }}
-        onCancel={() => setGuideRestartPending(false)}
+        onCancel={() => setGuideEntryRestorePending(false)}
       />
 
       <AppearanceSaveErrorDialog flow={appearance} />

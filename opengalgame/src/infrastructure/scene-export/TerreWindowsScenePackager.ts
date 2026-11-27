@@ -39,6 +39,7 @@ import {
   EXPORT_STAGING_PREFIX
 } from './exportDestinationPaths'
 import { validateParentDirectory } from './LocalSceneExportDestinationGateway'
+import { writeCopiedTemplatePanicGuard } from './panicHotkeyGuard'
 
 const require = createRequire(import.meta.url)
 const execFileAsync = promisify(execFile)
@@ -1059,6 +1060,7 @@ async function assembleOfficialWindowsExport(
   const sourceAssets = await writeSingleScene(publicDir, source, userDirectory)
   await maximizeCopiedTemplateWindow(path.join(appDir, 'main.js'))
   await writeCopiedTemplateBaseStyle(publicDir)
+  await writeCopiedTemplatePanicGuard(publicDir)
   const asar = require(require.resolve('@electron/asar')) as AsarPackager
   await asar.createPackageWithOptions(appDir, path.join(exportDir, 'resources', 'app.asar'), {
     unpack: '**/node_modules/steamworks.js/dist/**'

@@ -60,6 +60,7 @@ function storedPreference(storage: MemoryStorage): {
   tutorialModeActive: boolean
   lastStepId: string | null
   lastBeatId: string | null
+  entryHidden: boolean
 } {
   const raw = storage.getItem(GUIDE_PREFERENCES_KEY)
   expect(raw).not.toBeNull()
@@ -69,6 +70,7 @@ function storedPreference(storage: MemoryStorage): {
     tutorialModeActive: boolean
     lastStepId: string | null
     lastBeatId: string | null
+    entryHidden: boolean
   }
 }
 
@@ -188,7 +190,8 @@ describe('新手指引窗口会话', () => {
         invitationHandled: true,
         tutorialModeActive: false,
         lastStepId: 'arrange-scene',
-        lastBeatId: null
+        lastBeatId: null,
+        entryHidden: false
       },
       storage
     )
@@ -198,7 +201,8 @@ describe('新手指引窗口会话', () => {
       invitationHandled: true,
       tutorialModeActive: false,
       lastStepId: 'arrange-scene',
-      lastBeatId: null
+      lastBeatId: null,
+      entryHidden: false
     })
 
     vi.stubGlobal('window', { localStorage: storage })
@@ -210,7 +214,8 @@ describe('新手指引窗口会话', () => {
         invitationHandled: true,
         tutorialModeActive: false,
         lastStepId: 'arrange-scene',
-        lastBeatId: null
+        lastBeatId: null,
+        entryHidden: false
       })
       expect(shouldAutoInvite(preferences)).toBe(false)
 
@@ -540,21 +545,6 @@ describe('新手指引窗口会话', () => {
 
     model = reduce(model, { type: 'start-tutorial' }, storage)
     expect(model.guide?.stepId).toBe('configure-model')
-  })
-
-  it('重新开始回到第一步，并更新阅读位置', () => {
-    const storage = new MemoryStorage()
-    let model = start(storage)
-    model = reduce(
-      model,
-      { type: 'select-step', stepId: GUIDE_STEP_ID.arrangeScene, scope: TEST_SCOPE },
-      storage
-    )
-    expect(model.guide?.stepId).toBe('arrange-scene')
-
-    model = reduce(model, { type: 'restart', scope: TEST_SCOPE }, storage)
-    expect(model.guide?.stepId).toBe('configure-model')
-    expect(storedPreference(storage).lastStepId).toBe('configure-model')
   })
 
   it('存储不可用时仍能在当前窗口跟做', () => {
@@ -937,6 +927,34 @@ describe('新手指引窗口会话', () => {
     expect(storedPreference(storage).tutorialModeActive).toBe(true)
   })
 
+  it('关闭教程入口后持久隐藏，重新进入教程时恢复', () => {
+    const storage = new MemoryStorage()
+    let model = reduce(start(storage), { type: 'exit' }, storage)
+    expect(model.mode).toBe('idle')
+
+    model = reduce(model, { type: 'hide-entry' }, storage)
+    expect(model.preferences.entryHidden).toBe(true)
+    expect(storedPreference(storage)).toMatchObject({
+      invitationHandled: true,
+      entryHidden: true
+    })
+
+    const reopened = createGuideSessionModel(readGuidePreferences(storage), TEST_SCOPE)
+    expect(reopened.mode).toBe('idle')
+    expect(reopened.preferences.entryHidden).toBe(true)
+
+    const restored = reduce(reopened, { type: 'restore-entry' }, storage)
+    expect(restored.mode).toBe('idle')
+    expect(restored.guide).toBeNull()
+    expect(restored.preferences.entryHidden).toBe(false)
+    expect(restored.preferences.lastStepId).toBe('configure-model')
+
+    model = reduce(restored, { type: 'start-tutorial', scope: TEST_SCOPE }, storage)
+    expect(model.mode).toBe('reading')
+    expect(model.preferences.entryHidden).toBe(false)
+    expect(storedPreference(storage).entryHidden).toBe(false)
+  })
+
   it('已开启偏好初始化即回到上次步骤，未开启偏好不会自动打开教程', () => {
     const resumed = new MemoryStorage()
     writeGuidePreferences(
@@ -945,7 +963,8 @@ describe('新手指引窗口会话', () => {
         invitationHandled: true,
         tutorialModeActive: true,
         lastStepId: 'polish-dialogue',
-        lastBeatId: null
+        lastBeatId: null,
+        entryHidden: false
       },
       resumed
     )
@@ -960,7 +979,8 @@ describe('新手指引窗口会话', () => {
         invitationHandled: true,
         tutorialModeActive: false,
         lastStepId: 'polish-dialogue',
-        lastBeatId: null
+        lastBeatId: null,
+        entryHidden: false
       },
       exited
     )

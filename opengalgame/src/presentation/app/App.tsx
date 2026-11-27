@@ -82,7 +82,7 @@ export function App({
   const [settingsModelConfigured, setSettingsModelConfigured] = useState<boolean | undefined>(
     undefined
   )
-  const [guideRestart, setGuideRestart] = useState(0)
+  const [guideEntryRestore, setGuideEntryRestore] = useState(0)
   const readModelConfigured = useCallback(async (): Promise<boolean> => {
     try {
       const result = await connectionClient.getSettingsSummary()
@@ -117,7 +117,7 @@ export function App({
       <ToastHost />
       {/* 教程唯一挂载点：App 是真实组合根，AppShell 仅为 Stage 包装。 */}
       <BeginnerGuideHost
-        restartRequest={guideRestart}
+        restoreEntryRequest={guideEntryRestore}
         page={page}
         observationSource={guideObservationSource}
         importMedia={creatorActions.mediaImport}
@@ -162,7 +162,7 @@ export function App({
         connection={connection}
         appUpdate={appUpdate}
         onClose={() => setSettingsOpen(false)}
-        onRestartGuide={() => setGuideRestart((n) => n + 1)}
+        onRestoreGuideEntry={() => setGuideEntryRestore((n) => n + 1)}
       />
       <AppUpdateErrorDialog flow={appUpdate} />
     </AppShell>

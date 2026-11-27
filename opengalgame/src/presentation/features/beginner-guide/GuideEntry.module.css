@@ -1,15 +1,12 @@
-/* 独立入口：工作台右下角的玻璃签。沿用局部 --wb-* 主题，
-   不加入场位移；鼠标和键盘进入同一枚真实按钮。 */
-.entry {
+/* 独立入口：默认停在工作台右下角，可拖到视口内任意位置并保留在最上层；
+   入口与关闭按钮同处一条玻璃签，各自是独立原生按钮。 */
+.entryGroup {
   position: fixed;
-  z-index: 40;
+  z-index: 1300;
   right: clamp(16px, 2.2vw, 28px);
   bottom: clamp(76px, 9vh, 96px);
   display: inline-flex;
-  min-height: 42px;
-  align-items: center;
-  gap: 9px;
-  padding: 5px 13px 5px 6px;
+  align-items: stretch;
   border: 1px solid color-mix(in srgb, var(--wb-text) 8%, transparent);
   border-radius: var(--wb-radius-pill);
   background: color-mix(in srgb, var(--wb-surface-solid) 82%, transparent);
@@ -19,7 +16,9 @@
   color: var(--wb-text);
   font-family: var(--wb-font);
   line-height: 1.2;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   backdrop-filter: blur(22px) saturate(1.06);
   -webkit-backdrop-filter: blur(22px) saturate(1.06);
   transition:
@@ -28,7 +27,11 @@
     box-shadow var(--wb-duration-fast) var(--wb-ease);
 }
 
-.entry:hover {
+.entryGroup[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.entryGroup:hover {
   border-color: color-mix(in srgb, var(--wb-accent) 30%, var(--wb-hairline-strong));
   background: color-mix(in srgb, var(--wb-surface-solid) 94%, transparent);
   box-shadow:
@@ -36,13 +39,29 @@
     inset 0 1px 0 color-mix(in srgb, #fff 72%, transparent);
 }
 
-.entry:active {
-  transform: translateY(1px);
+.entry {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 13px 5px 6px;
+  border: 0;
+  border-radius: var(--wb-radius-pill) 0 0 var(--wb-radius-pill);
+  background: transparent;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background var(--wb-duration-fast) var(--wb-ease);
+}
+
+.entry:hover {
+  background: color-mix(in srgb, var(--wb-accent) 8%, transparent);
 }
 
 .entry:focus-visible {
   outline: none;
-  box-shadow: var(--wb-focus), var(--wb-shadow-soft);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--wb-accent-strong) 72%, transparent);
 }
 
 .mark {
@@ -87,21 +106,54 @@
   white-space: nowrap;
 }
 
-.entry[data-layout='preview'] {
+.entryExit {
+  display: grid;
+  width: 40px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--wb-hairline);
+  border-radius: 0 var(--wb-radius-pill) var(--wb-radius-pill) 0;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.entryExit svg {
+  width: 13px;
+  height: 13px;
+}
+
+.entryExit:hover {
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.entryExit:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--wb-danger) 62%, transparent);
+}
+
+.entryGroup[data-layout='preview'] {
   right: auto;
   bottom: 22px;
   left: 26px;
-  z-index: 1300;
 }
 
 @media (max-width: 720px) {
-  .entry {
+  .entryGroup {
     right: 14px;
     bottom: 76px;
+  }
+
+  .entry {
     padding-right: 10px;
   }
 
-  .entry[data-layout='preview'] {
+  .entryGroup[data-layout='preview'] {
     right: auto;
     bottom: 16px;
     left: 16px;
@@ -109,7 +161,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-reduced-motion='full']) .entry {
+  :root:not([data-reduced-motion='full']) .entryGroup,
+  :root:not([data-reduced-motion='full']) .entry,
+  :root:not([data-reduced-motion='full']) .entryExit {
     transition: none;
   }
 }

@@ -176,7 +176,6 @@ export type GuideCommand =
   | { type: 'fact'; fact: GuideFact }
   | { type: 'context-changed'; scope: GuideScopeContext }
   | { type: 'step-selected'; stepId: GuideStepId }
-  | { type: 'restart' }
   | { type: 'pause' }
   | { type: 'resume'; scope?: GuideScopeContext }
   | { type: 'collapse' }
@@ -353,8 +352,6 @@ export function advanceGuide(state: GuideSessionState, command: GuideCommand): G
       return applyContextChanged(state, command.scope)
     case 'step-selected':
       return applyStepSelected(state, command.stepId)
-    case 'restart':
-      return applyStepSelected(state, GUIDE_FIRST_STEP_ID)
     case 'pause':
       return applyPause(state)
     case 'resume':

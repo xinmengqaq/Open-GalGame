@@ -80,7 +80,7 @@ export type GuideSessionAction =
   | { type: 'dismiss-invitation' }
   | { type: 'start-tutorial'; stepId?: GuideStepId; scope?: GuideScopeContext }
   | { type: 'select-step'; stepId: GuideStepId; scope?: GuideScopeContext }
-  | { type: 'restart'; scope?: GuideScopeContext }
+  | { type: 'restore-entry' }
   | { type: 'fact'; fact: GuideFact }
   | { type: 'sync-context'; scope: GuideScopeContext; page?: GuidePage }
   | { type: 'pause' }
@@ -97,6 +97,7 @@ export type GuideSessionAction =
   | { type: 'close-catalog' }
   | { type: 'open-example' }
   | { type: 'close-example' }
+  | { type: 'hide-entry' }
   | { type: 'exit' }
   | { type: 'finish' }
 
@@ -227,19 +228,11 @@ export function guideSessionReduce(
       }
     }
 
-    case 'restart': {
-      if (!model.guide) {
-        return startReading(model, model.preferences, GUIDE_FIRST_STEP_ID, action.scope, storage)
-      }
-      const next = applyGuideCommand(model, { type: 'restart' }, storage, false)
-      return {
-        ...next,
-        catalogOpen: false,
-        exampleOpen: false,
-        collapsedForTrial: false,
-        deferredFacts: [],
-        pausedFacts: []
-      }
+    case 'restore-entry': {
+      if (!model.preferences.entryHidden) return model
+      const preferences: GuidePreferences = { ...model.preferences, entryHidden: false }
+      writeGuidePreferences(preferences, storage)
+      return { ...model, preferences }
     }
 
     case 'fact': {
@@ -344,6 +337,28 @@ export function guideSessionReduce(
     case 'close-example':
       return flushDeferredFacts({ ...model, exampleOpen: false }, storage)
 
+    case 'hide-entry': {
+      const preferences: GuidePreferences = {
+        ...model.preferences,
+        invitationHandled: true,
+        tutorialModeActive: false,
+        entryHidden: true
+      }
+      writeGuidePreferences(preferences, storage)
+      return {
+        ...model,
+        mode: 'idle',
+        preferences,
+        guide: null,
+        catalogOpen: false,
+        exampleOpen: false,
+        restoreSignal: null,
+        collapsedForTrial: false,
+        deferredFacts: [],
+        pausedFacts: []
+      }
+    }
+
     case 'exit':
       return {
         ...model,
@@ -396,7 +411,8 @@ function startReading(
     ...preferences,
     tutorialModeActive: true,
     lastStepId: restored.state.stepId,
-    lastBeatId: guideBeatIdOf(restored.state)
+    lastBeatId: guideBeatIdOf(restored.state),
+    entryHidden: false
   }
   writeGuidePreferences(nextPreferences, storage)
   return {
@@ -568,6 +584,7 @@ export type GuideSessionView = {
   prompt: GuidePrompt | null
   shouldAutoInvite: boolean
   lastStepId: string | null
+  entryHidden: boolean
 }
 
 export type GuideSessionActions = {
@@ -576,7 +593,7 @@ export type GuideSessionActions = {
   dismissInvitation: () => void
   startTutorial: (stepId?: GuideStepId) => void
   selectStep: (stepId: GuideStepId) => void
-  restart: () => void
+  restoreEntry: () => void
   pause: () => void
   resume: () => void
   collapse: () => void
@@ -591,6 +608,7 @@ export type GuideSessionActions = {
   closeCatalog: () => void
   openExample: () => void
   closeExample: () => void
+  hideEntry: () => void
   exit: () => void
   finish: () => void
   syncContext: (snapshot: GuideContextSnapshot) => void
@@ -649,7 +667,8 @@ export function useGuideSession(options: UseGuideSessionOptions): {
       guide: model.guide,
       prompt: model.guide?.prompt ?? null,
       shouldAutoInvite: model.mode === 'idle' && shouldAutoInvite(model.preferences),
-      lastStepId: model.preferences.lastStepId
+      lastStepId: model.preferences.lastStepId,
+      entryHidden: model.preferences.entryHidden
     }),
     [model]
   )
@@ -669,7 +688,7 @@ export function useGuideSession(options: UseGuideSessionOptions): {
       dismissInvitation: () => dispatch({ type: 'dismiss-invitation' }),
       startTutorial: (stepId) => dispatch({ type: 'start-tutorial', stepId, scope: withScope() }),
       selectStep: (stepId) => dispatch({ type: 'select-step', stepId, scope: withScope() }),
-      restart: () => dispatch({ type: 'restart', scope: withScope() }),
+      restoreEntry: () => dispatch({ type: 'restore-entry' }),
       pause: () => dispatch({ type: 'pause' }),
       resume: () => dispatch({ type: 'resume', scope: withScope() }),
       collapse: () => dispatch({ type: 'collapse' }),
@@ -684,6 +703,7 @@ export function useGuideSession(options: UseGuideSessionOptions): {
       closeCatalog: () => dispatch({ type: 'close-catalog' }),
       openExample: () => dispatch({ type: 'open-example' }),
       closeExample: () => dispatch({ type: 'close-example' }),
+      hideEntry: () => dispatch({ type: 'hide-entry' }),
       exit: () => dispatch({ type: 'exit' }),
       finish: () => dispatch({ type: 'finish' }),
       syncContext: (snapshot) =>
