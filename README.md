@@ -28,6 +28,7 @@ OpenGalgame 是一款本地优先、基于 [WebGAL](https://github.com/OpenWebGA
 - [技术栈](#技术栈)
 - [致谢](#致谢)
 - [关于与许可](#关于与许可)
+- [参与贡献](#参与贡献)
 
 ## 功能
 
@@ -163,3 +164,7 @@ flowchart TB
 本项目以 [Apache License 2.0](LICENSE) 发布，许可范围与义务以 [LICENSE](LICENSE) 正文为准。
 
 官方构建只通过项目 [GitHub Releases](https://github.com/xinmengqaq/Open-GalGame/releases) 发布。其他渠道的销售、预装、代下载、转载或修改版均属第三方独立发行，与维护者无隶属、代理或背书关系，其更新、支持、收费、安全与合规由发行方自行负责；官方支持仅覆盖官方构建。许可证不授予项目名称、图标或品牌标识的商标权。内置字体按 [SIL Open Font License 1.1](opengalgame/resources/font-licenses/OFL-1.1.txt) 分发，字体版权与保留名称见[字体许可说明](opengalgame/resources/font-licenses/NOTICES.md)。
+
+## 参与贡献
+
+欢迎提交 Bug、功能建议或代码；开发环境、PR 流程和 AI 辅助说明见[贡献指南](docs/CONTRIBUTING.md)。
