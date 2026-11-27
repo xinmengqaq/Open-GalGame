@@ -109,7 +109,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .notice {
+  :root:not([data-reduced-motion='full']) .notice {
     animation: none;
   }
 }

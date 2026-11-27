@@ -132,7 +132,7 @@ function failureStateOf(
       subject: '画布编排',
       title: '画布编排读取失败',
       detail,
-      nextStep: '重新读取通常可以恢复；若仍然失败，检查工程诊断。',
+      nextStep: '重新读取；仍然失败时检查工程诊断。',
       actions: [
         { intent: 'inspect', label: '检查工程', emphasis: 'secondary' },
         { intent: 'reload', label: '重新读取', emphasis: 'primary' }
@@ -176,7 +176,7 @@ function damagedStateOf(
         : '来源目录内容损坏',
     detail: error?.msg ?? null,
     nextStep: arrangement
-      ? '检查工程诊断，确认恢复范围；损坏内容不会被自动覆盖。'
+      ? '检查工程诊断，确认损坏范围。'
       : '检查工程诊断，确认来源记录；目录内容不会被自动覆盖。',
     actions: [{ intent: 'inspect', label: '检查工程', emphasis: 'primary' }],
     failureCode: code
@@ -192,7 +192,7 @@ function readingStateOf(scope: 'catalog' | 'arrangement'): WorkbenchState {
     subject: arrangement ? '画布编排' : '来源目录',
     title: arrangement ? '正在读取画布编排' : '正在读取来源目录',
     detail: null,
-    nextStep: arrangement ? '读取完成后即可继续编排。' : '目录就绪后可以把素材拖入画布。',
+    nextStep: '',
     actions: [],
     failureCode: null
   }
@@ -208,11 +208,7 @@ function readyStateOf(scope: WorkbenchStateScope): WorkbenchState {
     subject: catalog ? '来源目录' : arrangement ? '画布编排' : '工程与画布',
     title: catalog ? '来源目录已就绪' : arrangement ? '画布编排已就绪' : '工程与画布已就绪',
     detail: null,
-    nextStep: catalog
-      ? '可以把可读取的素材拖入画布。'
-      : arrangement
-        ? '可以继续编排卡片和关系。'
-        : '可以从目录拖入素材，或继续编排画布。',
+    nextStep: '',
     actions: [],
     failureCode: null
   }
@@ -226,10 +222,7 @@ function emptyStateOf(scope: WorkbenchStateScope): WorkbenchState {
     subject: scope === 'catalog' ? '来源目录' : scope === 'arrangement' ? '画布编排' : '工程与画布',
     title: scope === 'catalog' ? '来源目录还是空的' : '画布还没有卡片',
     detail: null,
-    nextStep:
-      scope === 'catalog'
-        ? '导入文件或新建文件夹，再把素材拖入画布。'
-        : '从目录拖入文本或文件素材，开始编排。',
+    nextStep: '',
     actions: [],
     failureCode: null
   }

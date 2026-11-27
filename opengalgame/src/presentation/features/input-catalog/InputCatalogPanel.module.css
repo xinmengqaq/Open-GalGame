@@ -56,7 +56,6 @@
   }
 }
 
-
 .header {
   flex: none;
   padding: 20px 18px 6px;
@@ -106,14 +105,6 @@
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.headerHint {
-  margin: 6px 0 0;
-  color: var(--wb-text-muted);
-  font-size: 11.5px;
-  font-weight: 550;
-  line-height: 1.5;
 }
 
 .headerTools {
@@ -173,7 +164,6 @@
     transform: scale(1.16);
   }
 }
-
 
 .filters {
   display: grid;
@@ -447,7 +437,6 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--wb-surface-solid) 78%, transparent);
 }
 
-
 .crumbs {
   display: flex;
   flex: none;
@@ -584,7 +573,9 @@
   flex-direction: column;
   min-height: 0;
   margin: 0;
-  padding: 0 10px 12px;
+  /* 顶部留出教程光环和键盘焦点环的扩散空间；首行贴着滚动容器上沿时
+     不会被裁成一条断线。 */
+  padding: 8px 10px 12px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -639,7 +630,6 @@
   font-size: 11.5px;
   line-height: 1.55;
 }
-
 
 .footer {
   position: relative;
@@ -759,10 +749,6 @@ button.importButton:disabled {
     padding: 16px 14px 4px;
   }
 
-  .headerHint {
-    display: none;
-  }
-
   .filters {
     padding: 2px 14px 8px;
   }
@@ -784,21 +770,21 @@ button.importButton:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .busyBar,
-  .readState[data-tone='reading'] .readStateDot {
+  :root:not([data-reduced-motion='full']) .busyBar,
+  :root:not([data-reduced-motion='full']) .readState[data-tone='reading'] .readStateDot {
     animation: none;
   }
 
-  .search,
-  .searchIcon,
-  .search input,
-  .searchClear,
-  .groupTab,
-  .typeChip,
-  .crumb,
-  .sectionClear,
-  button.footerSecondary,
-  button.importButton {
+  :root:not([data-reduced-motion='full']) .search,
+  :root:not([data-reduced-motion='full']) .searchIcon,
+  :root:not([data-reduced-motion='full']) .search input,
+  :root:not([data-reduced-motion='full']) .searchClear,
+  :root:not([data-reduced-motion='full']) .groupTab,
+  :root:not([data-reduced-motion='full']) .typeChip,
+  :root:not([data-reduced-motion='full']) .crumb,
+  :root:not([data-reduced-motion='full']) .sectionClear,
+  :root:not([data-reduced-motion='full']) button.footerSecondary,
+  :root:not([data-reduced-motion='full']) button.importButton {
     transition: none;
   }
 }

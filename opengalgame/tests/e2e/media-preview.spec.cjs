@@ -6,6 +6,7 @@ const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
 
 const { mediaFixtures } = require('./support/media-fixtures.cjs')
+const { seedGuidePreference } = require('./support/guide-preference.cjs')
 
 const appRoot = resolve(__dirname, '..', '..')
 const evidenceDir = join(appRoot, 'artifacts', 'media-r24')
@@ -45,8 +46,7 @@ function recordMediaReads(page) {
     try {
       const payload = request.postDataJSON()
       if (payload?.method === 'readProjectMedia') reads.push(payload.input?.sourceId)
-    } catch {
-    }
+    } catch {}
   })
   return reads
 }
@@ -380,14 +380,14 @@ async function stopChildren() {
     if (child.exitCode === null) {
       try {
         execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' })
-      } catch {
-      }
+      } catch {}
     }
   }
   children.clear()
 }
 
 async function openWorkbench(page) {
+  await seedGuidePreference(page)
   await page.goto(baseUrl)
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 30000 })
   await page.getByRole('button', { name: '项目选择' }).click()

@@ -74,7 +74,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .recovery {
+  :root:not([data-reduced-motion='full']) .recovery {
     animation: none;
   }
 }

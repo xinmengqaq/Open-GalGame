@@ -45,9 +45,7 @@ export function InputCatalogFailureState({
         </div>
       ) : null}
       <p className={styles.stateFootnote}>
-        {reload
-          ? '这是读取失败，不是空目录。重试只重新读取来源，不会改动已有文件。'
-          : state.nextStep}
+        {reload ? '读取失败，不是空目录；重试不会改动已有文件。' : state.nextStep}
       </p>
     </div>
   )

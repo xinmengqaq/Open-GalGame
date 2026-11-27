@@ -1,6 +1,9 @@
 const { test, expect } = require('@playwright/test')
 const path = require('node:path')
 
+const { seedGuidePreference } = require('./support/guide-preference.cjs')
+const { openConnectionSettings } = require('./support/settings-center.cjs')
+
 const fixtureFolder = path.join(__dirname)
 const evidenceRoot = path.join(
   __dirname,
@@ -27,6 +30,7 @@ async function openProjects(page) {
 }
 
 async function openWorkbench(page, search = '') {
+  await seedGuidePreference(page)
   await page.goto(`/${search}`)
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 10000 })
   await openProjects(page)
@@ -126,6 +130,7 @@ for (const viewport of [
     test.use({ viewport })
 
     test('创建 1309 只给重新构建，带身份时直接打开工程', async ({ page }) => {
+      await seedGuidePreference(page)
       await page.goto('/?homeFailure=create-with-id')
       await expect(page.getByRole('button', { name: /新建空白画布/ })).toBeVisible()
       await page.getByRole('button', { name: /新建空白画布/ }).click()
@@ -152,6 +157,7 @@ for (const viewport of [
     })
 
     test('创建 1309 无身份时刷新列表，由工作台面板承接重建', async ({ page }) => {
+      await seedGuidePreference(page)
       await page.goto('/?projects=empty&homeFailure=create-without-id&workspace=not-ready')
       await expect(page.getByRole('button', { name: /新建空白画布/ })).toBeVisible()
       await page.getByRole('button', { name: /新建空白画布/ }).click()
@@ -187,6 +193,7 @@ for (const viewport of [
     })
 
     test('创建 1309 关闭弹窗后新工程仍在列表可见可打开', async ({ page }) => {
+      await seedGuidePreference(page)
       await page.goto('/?projects=empty&homeFailure=create-without-id')
       await expect(page.getByRole('button', { name: /新建空白画布/ })).toBeVisible()
       await page.getByRole('button', { name: /新建空白画布/ }).click()
@@ -210,6 +217,7 @@ for (const viewport of [
     })
 
     test('导入 1309 只给重新构建，关闭后工程在列表可打开', async ({ page }) => {
+      await seedGuidePreference(page)
       await page.goto('/?projects=empty&homeFailure=import')
       await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible()
       const chooserPromise = page.waitForEvent('filechooser')
@@ -258,6 +266,7 @@ for (const viewport of [
     })
 
     test('新建项目弹窗没有反馈条覆盖', async ({ page }) => {
+      await seedGuidePreference(page)
       await page.goto('/')
       await expect(page.getByRole('button', { name: /新建空白画布/ })).toBeVisible()
       await page.getByRole('button', { name: /新建空白画布/ }).click()
@@ -269,27 +278,42 @@ for (const viewport of [
     })
 
     test('扩展 JSON 提示按供应商区分 User-Agent 覆盖关系', async ({ page }) => {
+      await seedGuidePreference(page)
       await page.goto('/')
       await expect(page.getByRole('button', { name: /新建空白画布/ })).toBeVisible()
-      await page.getByRole('button', { name: /连接设置/ }).click()
-      await expect(page.getByRole('heading', { name: '连接设置' })).toBeVisible()
-      await page.locator('#connection-extension-entry').click()
-      const openAiHint = page.getByText('OpenAI 兼容下，自定义 User-Agent 可能被 SDK 覆盖。')
-      await expect(openAiHint).toBeVisible()
-      await openAiHint.scrollIntoViewIfNeeded()
+      const settings = await openConnectionSettings(page)
+      await expect(settings.getByRole('tab', { name: '模型连接' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+      const helpTrigger = settings.getByRole('button', { name: '扩展请求配置说明' })
+      await helpTrigger.click()
+      let helpNote = page.getByRole('note', { name: '扩展请求配置说明' })
+      await expect(helpNote).toBeVisible()
+      const openAiHint = helpNote.getByText(/OpenAI/)
+      await expect(openAiHint).toContainText(/User-Agent/)
+      await expect(openAiHint).toContainText(/(忽略|覆盖|不保证)/)
       await page.screenshot({
         path: path.join(evidenceRoot, `08-connection-hint-openai-${size}.png`)
       })
+      await helpTrigger.click()
+      await expect(helpNote).toHaveCount(0)
+      await expect(settings).toBeVisible()
 
       await page.locator('#provider-id').click()
       await page.getByRole('option', { name: 'Anthropic' }).click()
-      const anthropicHint = page.getByText('Anthropic 会保留自定义 User-Agent。')
-      await expect(anthropicHint).toBeVisible()
-      await expect(openAiHint).toHaveCount(0)
-      await anthropicHint.scrollIntoViewIfNeeded()
+      await helpTrigger.click()
+      helpNote = page.getByRole('note', { name: '扩展请求配置说明' })
+      await expect(helpNote).toBeVisible()
+      const anthropicHint = helpNote.getByText(/Anthropic/)
+      await expect(anthropicHint).toContainText(/User-Agent/)
+      await expect(anthropicHint).toContainText(/(保留|支持)/)
+      await expect(helpNote.getByText(/OpenAI/)).toHaveCount(0)
       await page.screenshot({
         path: path.join(evidenceRoot, `09-connection-hint-anthropic-${size}.png`)
       })
+      await helpTrigger.click()
+      await expect(helpNote).toHaveCount(0)
     })
   })
 }

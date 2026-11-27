@@ -149,12 +149,9 @@ export function SceneCanvasViewport({
       if (actual && actual.kind === resolved.kind && actual.id === resolved.id) return
       if (!actual && isInteractiveCanvasElement(target)) return
       if (actual?.kind === 'anchor') {
-        const glyphOf = (
-          id: string
-        ): (typeof targets)[number]['candidate'] | undefined =>
-          targets.find(
-            (item) => item.candidate.kind === 'anchor' && item.candidate.id === id
-          )?.candidate
+        const glyphOf = (id: string): (typeof targets)[number]['candidate'] | undefined =>
+          targets.find((item) => item.candidate.kind === 'anchor' && item.candidate.id === id)
+            ?.candidate
         if (resolved.kind === 'anchor') {
           const resolvedGlyph = glyphOf(resolved.id)
           if (
@@ -254,6 +251,7 @@ export function SceneCanvasViewport({
       className={styles.viewport}
       ref={surfaceRef}
       data-testid="scene-canvas"
+      data-content-scope="canvas"
       onMouseUpCapture={noteReleasePoint}
       style={
         {
@@ -307,7 +305,12 @@ export function SceneCanvasViewport({
         proOptions={{ hideAttribution: false }}
         className={styles.flow}
       >
-        <Background variant={BackgroundVariant.Dots} gap={30} size={1} color="#b9a6cf" />
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={30}
+          size={1}
+          color="var(--content-border-strong)"
+        />
       </ReactFlow>
       {cards.length === 0 ? <SceneCanvasEmptyState onAddPrompt={onAddPrompt} /> : null}
       <SceneCanvasDropZone active={drop.draggingOver} />

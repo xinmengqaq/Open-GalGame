@@ -38,11 +38,7 @@
   justify-self: start;
 }
 
-.errorHint {
-  padding-top: 10px;
-  border-top: 1px dashed #eadff3;
-  margin: 0;
-  color: #6f6584;
-  font-size: 12px;
-  line-height: 1.6;
+.safeAction:focus {
+  outline: 3px solid color-mix(in srgb, currentColor 58%, transparent);
+  outline-offset: 2px;
 }

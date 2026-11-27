@@ -1,0 +1,112 @@
+.trigger {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.trigger svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.trigger:hover {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent-strong);
+}
+
+.trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+}
+
+.statusTrigger {
+  display: inline-flex;
+  width: auto;
+  height: 22px;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.statusTrigger[data-tone='warning'] {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.statusTrigger[data-tone='warning']:hover {
+  background: color-mix(in srgb, var(--warning) 16%, var(--warning-bg));
+  color: var(--warning);
+}
+
+.bubble {
+  z-index: 9;
+  width: min(340px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-panel);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  transform-origin: var(--radix-popover-content-transform-origin);
+  animation: settings-help-in 140ms var(--ease-out);
+}
+
+.bubble p {
+  margin: 0;
+}
+
+.bubble p + p {
+  margin-top: 8px;
+}
+
+.arrow {
+  fill: var(--surface-raised);
+  stroke: color-mix(in srgb, var(--accent) 20%, var(--border));
+}
+
+@keyframes settings-help-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+:root[data-reduced-motion='reduce'] .trigger {
+  transition: none;
+}
+
+:root[data-reduced-motion='reduce'] .bubble {
+  animation: none;
+}

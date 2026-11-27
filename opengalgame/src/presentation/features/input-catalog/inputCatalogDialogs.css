@@ -235,7 +235,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chooserCard {
+  :root:not([data-reduced-motion='full']) .chooserCard {
     transition: none;
   }
 }

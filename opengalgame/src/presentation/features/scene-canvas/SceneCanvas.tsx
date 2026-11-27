@@ -125,7 +125,12 @@ function SceneCanvasBody({
   if (status === 'failed' && error) {
     if (error.code === PROJECT_WORKSPACE_NOT_READY_CODE) return <></>
     return (
-      <section ref={stageRef} className={styles.stage} data-state="failed">
+      <section
+        ref={stageRef}
+        className={styles.stage}
+        data-state="failed"
+        data-content-scope="canvas"
+      >
         <SceneCanvasFailureState error={error} onInspect={onInspect} onReload={onReload} />
       </section>
     )

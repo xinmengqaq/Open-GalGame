@@ -16,8 +16,11 @@ import type { PreviewFailureView, PreviewSaveUiState } from './previewPresentati
 import { usePreviewDraftEditing } from './usePreviewDraftEditing'
 import {
   usePreviewSaveSettlement,
+  type PreviewSaveCleared,
   type PreviewSaveNotice,
   type PreviewSaveOutcome,
+  type PreviewSaveStarted,
+  type PreviewSaveUnsettled,
   type PreviewSavedVersion
 } from './usePreviewSaveSettlement'
 import {
@@ -34,13 +37,26 @@ import {
   type PreviewUpdateNotice
 } from './useScenePreviewStage'
 
-export type { PreviewSaveNotice, PreviewSaveOutcome, PreviewSavedVersion, PreviewSessionUiState }
+export type {
+  PreviewSaveCleared,
+  PreviewSaveNotice,
+  PreviewSaveOutcome,
+  PreviewSaveStarted,
+  PreviewSaveUnsettled,
+  PreviewSavedVersion,
+  PreviewSessionUiState
+}
 
 interface UseScenePreviewOptions {
   readonly client: ScenePreviewClient
   readonly projectId: string
   readonly sceneId: string
   readonly onSavedVersion?: (saved: PreviewSavedVersion) => void
+  readonly onSaveStarted?: (event: PreviewSaveStarted) => void
+  readonly onSaveUnsettled?: (event: PreviewSaveUnsettled) => void
+  readonly onSaveCleared?: (event: PreviewSaveCleared) => void
+  /** 真实未保存改词的有无；不含对白。 */
+  readonly onDraftDirtyChange?: (dirty: boolean) => void
 }
 
 export interface UseScenePreviewResult {
@@ -97,6 +113,8 @@ export interface UseScenePreviewResult {
   readonly saveNotice: PreviewSaveNotice
   readonly save: () => Promise<PreviewSaveOutcome>
   readonly checkSettlement: () => Promise<void>
+  /** 明确放弃未处理保存或未保存草稿并退出时调用。 */
+  readonly abandonUnsettled: (discardedDrafts?: boolean) => void
   readonly saveBlockedReason: string | null
   readonly closing: boolean
   readonly closeError: PreviewFailureView | null
@@ -107,7 +125,11 @@ export function useScenePreview({
   client,
   projectId,
   sceneId,
-  onSavedVersion
+  onSavedVersion,
+  onSaveStarted,
+  onSaveUnsettled,
+  onSaveCleared,
+  onDraftDirtyChange
 }: UseScenePreviewOptions): UseScenePreviewResult {
   const availability = useScenePreviewAvailability({ client, projectId, sceneId })
   const draft = usePreviewDraftEditing()
@@ -149,11 +171,23 @@ export function useScenePreview({
     projectId,
     sceneId,
     onSavedVersion,
+    onSaveStarted,
+    onSaveUnsettled,
+    onSaveCleared,
     draft,
     lifecycle,
     stage,
     saveInFlightRef
   })
+
+  /* 只把“有无真实未保存改词”交给教程；草稿正文仍留在预览内部。 */
+  const draftDirty = draft.dirtyIds.length > 0
+  const reportedDraftDirtyRef = useRef(false)
+  useEffect(() => {
+    if (reportedDraftDirtyRef.current === draftDirty) return
+    reportedDraftDirtyRef.current = draftDirty
+    onDraftDirtyChange?.(draftDirty)
+  }, [draftDirty, onDraftDirtyChange])
 
   const { syncSessionRef, syncLockBasisRefs } = lifecycle
   const { syncRefs } = draft
@@ -304,6 +338,7 @@ export function useScenePreview({
     saveNotice: save.saveNotice,
     save: save.save,
     checkSettlement: save.checkSettlement,
+    abandonUnsettled: save.abandonUnsettled,
     saveBlockedReason: save.saveBlockedReason,
     closing,
     closeError,

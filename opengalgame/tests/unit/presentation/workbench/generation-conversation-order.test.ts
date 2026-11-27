@@ -52,6 +52,7 @@ function renderConversation(
   return renderToStaticMarkup(
     createElement(GenerationConversation, {
       status: renderStatus,
+      cards: [],
       progress: [],
       draft: emptyDraft,
       pending: false,
@@ -140,7 +141,7 @@ describe('GenerationConversation 消息顺序', () => {
 
     const initialIndex = textIndex(html, initialBubbleText)
     const reviseIndex = textIndex(html, '把雨夜改成黄昏')
-    const completedIndex = textIndex(html, '这一场已经写入作品，可以到作品历史查看。')
+    const completedIndex = textIndex(html, '已写入作品。')
 
     expect(initialIndex).toBeLessThan(reviseIndex)
     expect(reviseIndex).toBeLessThan(completedIndex)
@@ -201,7 +202,7 @@ describe('GenerationConversation pending start 视图', () => {
     )
 
     expect(html).toContain('正在准备生成…')
-    expect(html).not.toContain('这一场已经写入作品，可以到作品历史查看。')
+    expect(html).not.toContain('已写入作品。')
     expect(html).not.toContain('按画布重新生成')
     expect(html).not.toContain('旧问题提示')
     expect(html).not.toContain('旧决定说明')
@@ -237,7 +238,7 @@ describe('GenerationConversation pending start 视图', () => {
     expect(html).toContain(initialBubbleText)
     expect(html).toContain('画布保存失败，本次生成没有开始。')
     expect(html).toContain('role="alert"')
-    expect(html).not.toContain('这一场已经写入作品，可以到作品历史查看。')
+    expect(html).not.toContain('已写入作品。')
     expect(html).not.toContain('按画布重新生成')
     expect(html).not.toContain('旧问题提示')
     expect(html).not.toContain('旧决定说明')
@@ -293,11 +294,11 @@ describe('GenerationConversation pending start 视图', () => {
 
     const runningHtml = renderConversation(status({ operationId: 'operation-2' }))
 
-    expect(pendingHtml).not.toContain('这一场已经写入作品，可以到作品历史查看。')
+    expect(pendingHtml).not.toContain('已写入作品。')
     expect(runningHtml).toContain(initialBubbleText)
     expect(runningHtml).toContain(runStripText)
     expect(runningHtml).not.toContain('正在准备生成…')
-    expect(runningHtml).not.toContain('这一场已经写入作品，可以到作品历史查看。')
+    expect(runningHtml).not.toContain('已写入作品。')
     expect(runningHtml).not.toContain('旧问题提示')
     expect(runningHtml).not.toContain('旧修改要求')
   })

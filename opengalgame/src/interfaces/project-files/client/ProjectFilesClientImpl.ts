@@ -1,4 +1,5 @@
 import type {
+  ChooseProjectFilesDTO,
   CopyProjectFileDTO,
   CopyProjectFolderDTO,
   CreateProjectFolderDTO,
@@ -106,9 +107,11 @@ export class ProjectFilesClientImpl implements ProjectFilesClient {
     )
   }
 
-  chooseProjectFiles(): Promise<AjaxResult<readonly string[] | null>> {
+  chooseProjectFiles(
+    request?: ChooseProjectFilesDTO
+  ): Promise<AjaxResult<readonly string[] | null>> {
     return readProjectFilesResult(
-      () => this.bridge.chooseProjectFiles(),
+      () => this.bridge.chooseProjectFiles(request),
       parseChosenProjectFilesResult
     )
   }

@@ -76,7 +76,13 @@ export function ConfirmDialog({
 
   const actions = alternateAction ? (
     <>
-      <Button variant="secondary" disabled={busy} onClick={onCancel}>
+      <Button
+        variant="secondary"
+        className={styles.safeAction}
+        data-autofocus
+        disabled={busy}
+        onClick={onCancel}
+      >
         {cancelLabel}
       </Button>
       <Button disabled={busy} onClick={alternateAction.onClick}>
@@ -85,7 +91,13 @@ export function ConfirmDialog({
     </>
   ) : (
     <>
-      <Button variant="secondary" disabled={busy} onClick={onCancel}>
+      <Button
+        variant="secondary"
+        className={styles.safeAction}
+        data-autofocus
+        disabled={busy}
+        onClick={onCancel}
+      >
         {cancelLabel}
       </Button>
       {confirmTone === 'danger' ? (

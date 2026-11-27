@@ -60,6 +60,11 @@
   flex-direction: column;
 }
 
+/* 教程 portal 只借用对话框内容树的焦点/可访问范围，不参与抽屉布局。 */
+.wb-drawer__guide-layer {
+  display: contents;
+}
+
 .wb-drawer__header {
   position: relative;
   flex: none;
@@ -233,8 +238,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wb-drawer__close:hover:not(:disabled),
-  .wb-drawer__close:active:not(:disabled) {
+  :root:not([data-reduced-motion='full']) .wb-drawer__close:hover:not(:disabled),
+  :root:not([data-reduced-motion='full']) .wb-drawer__close:active:not(:disabled) {
     transform: none;
   }
 }

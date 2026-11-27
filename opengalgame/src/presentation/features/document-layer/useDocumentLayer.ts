@@ -18,6 +18,13 @@ export type DocumentBodyView = {
   reload: () => void
 }
 
+/** 只有加载完成且正文非空时，文档层才真正向用户显示了可读内容。 */
+export function documentBodyDisplayable(
+  view: Pick<DocumentBodyView, 'status' | 'body'>
+): boolean {
+  return view.status === 'ready' && view.body.trim().length > 0
+}
+
 type DocumentRequest = {
   cardId: string
   status: 'loading' | 'failed'

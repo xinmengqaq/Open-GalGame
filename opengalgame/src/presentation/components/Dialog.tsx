@@ -3,7 +3,7 @@ import gsap from 'gsap'
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react'
 
 import { prefersReducedMotion } from '../effects/motion'
-import { DialogElementContext } from './dialogElement'
+import { DialogElementContext, registerPageModal } from './dialogElement'
 import styles from './Dialog.module.css'
 
 interface DialogProps {
@@ -12,9 +12,13 @@ interface DialogProps {
   subtitle?: ReactNode
   size?: 'form' | 'wide' | 'narrow'
   placement?: 'center' | 'right'
+  /** 首页系输入弹窗使用与工作台一致的圆角玻璃材质。 */
+  surface?: 'paper' | 'glass'
   titleClassName?: string
   allowClose: boolean
   onClose: () => void
+  /** 关闭按钮的读屏名；默认「关闭弹窗」。 */
+  closeLabel?: string
   children: ReactNode
   actions: ReactNode
 }
@@ -29,14 +33,17 @@ export function Dialog({
   subtitle,
   size = 'form',
   placement = 'center',
+  surface = 'paper',
   titleClassName,
   allowClose,
   onClose,
+  closeLabel = '关闭弹窗',
   children,
   actions
 }: DialogProps): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   const titleId = useId()
   const [element, setElement] = useState<HTMLDialogElement | null>(null)
   const [workbench, setWorkbench] = useState(false)
@@ -55,14 +62,38 @@ export function Dialog({
     const node = dialogRef.current
     const shell = shellRef.current
     if (!node) return
+    const restoreFocus = (): void => {
+      const target = returnFocusRef.current
+      returnFocusRef.current = null
+      window.requestAnimationFrame(() => {
+        const active = document.activeElement
+        if (
+          (!active || active === document.body) &&
+          target?.isConnected &&
+          target.getClientRects().length > 0 &&
+          !target.matches(':disabled')
+        ) {
+          target.focus({ preventScroll: true })
+        }
+      })
+    }
     if (open) {
       delete node.dataset.closing
-      if (!node.open) node.showModal()
+      if (!node.open) {
+        returnFocusRef.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null
+        node.showModal()
+        // 原生 dialog 默认聚焦第一个可聚焦元素；破坏性确认需要把初始焦点放在安全动作上。
+        node.querySelector<HTMLElement>('[data-autofocus]')?.focus()
+      }
+      // 教程目录本身就是模态框，不能成为自己的挂载目标。
+      if (!node.closest('[data-guide-portal]')) return registerPageModal(node)
       return
     }
     if (!node.open) return
     if (placement !== 'right') {
       node.close()
+      restoreFocus()
       return
     }
     node.dataset.closing = 'true'
@@ -72,6 +103,7 @@ export function Dialog({
       delete node.dataset.closing
       if (node.open) node.close()
       gsap.set(targets, { clearProps: 'transform,opacity,visibility' })
+      restoreFocus()
     }
     if (prefersReducedMotion()) {
       gsap.to(node, { autoAlpha: 0, duration: 0.12, onComplete: finish })
@@ -142,8 +174,17 @@ export function Dialog({
         className={styles.dialog}
         data-size={size}
         data-placement={placement}
-        data-theme={workbench && placement === 'center' ? 'workbench' : undefined}
+        data-theme={
+          workbench && placement === 'center'
+            ? 'workbench'
+            : surface === 'glass'
+              ? 'home'
+              : undefined
+        }
         aria-labelledby={titleId}
+        onClick={(event) => {
+          if (event.target === dialogRef.current && allowClose) onClose()
+        }}
         onCancel={(event) => {
           event.preventDefault()
           if (allowClose) onClose()
@@ -160,7 +201,8 @@ export function Dialog({
             <button
               type="button"
               className={styles.close}
-              aria-label="关闭弹窗"
+              aria-label={closeLabel}
+              data-tip={closeLabel}
               disabled={!allowClose}
               onClick={() => allowClose && onClose()}
             >

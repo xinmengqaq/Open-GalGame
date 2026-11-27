@@ -12,6 +12,7 @@ import {
   SheetDescription,
   SheetTitle
 } from '@presentation/components/ui/sheet'
+import { setGuideTopLayerHost } from '@presentation/features/beginner-guide/guideTopLayer'
 import type { SessionSnapshot } from '@presentation/features/workbench-session/workbenchSession.types'
 import theme from '../workbenchTheme.module.css'
 import { useCandidatePreviewTab } from './candidate/candidatePreviewContext'
@@ -49,6 +50,8 @@ interface WorkbenchDrawerProps {
   generationClient: SceneGenerationClient
   candidatePreviewClient: ScenePreviewClient
   candidateTarget: CandidatePreviewTarget | null
+  onCandidateOpened?: (candidateSnapshotId: string) => void
+  onCandidateReturned?: (candidateSnapshotId: string) => void
   writeBlockedReason: string | null
   hasUnsavedEdits: boolean
   captureDraft: () => Promise<SessionSnapshot | null>
@@ -75,6 +78,8 @@ export function WorkbenchDrawer({
   generationClient,
   candidatePreviewClient,
   candidateTarget,
+  onCandidateOpened,
+  onCandidateReturned,
   writeBlockedReason,
   hasUnsavedEdits,
   captureDraft,
@@ -88,6 +93,18 @@ export function WorkbenchDrawer({
   const busy = worksBusy !== null
 
   useDrawerMotion(root, { tab: tabs.active })
+
+  // 原生 <dialog> 是浏览器顶层模态。它打开时 Escape 只应关闭该弹窗；
+  // 在 window 捕获阶段截住，避免 Radix 的 document 监听同时收起抽屉。
+  useEffect(() => {
+    if (!open) return
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      if (document.querySelector('dialog[open]')) event.stopPropagation()
+    }
+    window.addEventListener('keydown', handleEscape, true)
+    return () => window.removeEventListener('keydown', handleEscape, true)
+  }, [open])
 
   useEffect(() => {
     if (worksBusy === null) {
@@ -186,6 +203,8 @@ export function WorkbenchDrawer({
           active={tabs.active === 'candidate'}
           generationClient={generationClient}
           onActivate={() => onOpenTab('candidate')}
+          onCandidateOpened={onCandidateOpened}
+          onCandidateReturned={onCandidateReturned}
           previewClient={candidatePreviewClient}
           target={candidateTarget}
         >
@@ -246,6 +265,13 @@ export function WorkbenchDrawer({
             </div>
           </div>
         </CandidatePreviewProvider>
+        {/* 新手教程 portal 的同级槽位：教程因此留在对话框内容、
+            焦点陷阱与可访问树内，而绘制层级仍高于抽屉表面。 */}
+        <div
+          ref={setGuideTopLayerHost}
+          className="wb-drawer__guide-layer"
+          data-guide-top-layer-host=""
+        />
       </SheetContent>
     </Sheet>
   )

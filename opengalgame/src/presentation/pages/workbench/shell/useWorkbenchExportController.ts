@@ -18,7 +18,11 @@ import {
   sceneExportEntryOf,
   type SceneExportEntry
 } from './sceneExportEntry'
-import { exportNoticeOf, exportRequestOf } from './sceneTaskPresentation'
+import {
+  exportNoticeOf,
+  exportRequestOf,
+  isDefiniteExportFailure
+} from './sceneTaskPresentation'
 import type { SavedSceneVersionFact } from './WorkbenchPreviewLayer'
 
 const EXPORT_NOTICE_CLEAR_MS = 5000
@@ -56,6 +60,10 @@ export interface WorkbenchExportControllerOptions {
   readonly commands: WorkbenchCommands
   readonly refreshPreviewAvailability: () => void
   readonly generationSettled: WorkbenchExportGenerationSettled
+  /** 导出真实成功（status==='succeeded'）后调用；失败、停止、取消不调用。 */
+  readonly onExported?: (event: { sceneId: string }) => void
+  /** 导出明确未成功（失败、暂不可用或前置保存停止）时调用；通信不明不调用。 */
+  readonly onExportFailed?: (event: { sceneId: string }) => void
 }
 
 export type SceneExportDestinationMode = 'workspace' | 'selected'
@@ -101,7 +109,9 @@ export function useWorkbenchExportController(
     entry: entryInputs,
     commands,
     refreshPreviewAvailability,
-    generationSettled
+    generationSettled,
+    onExported,
+    onExportFailed
   } = options
   const { opened, projectId, sceneId } = scope
   const { succeeded, commitId, operationId } = generationSettled
@@ -243,7 +253,8 @@ export function useWorkbenchExportController(
         let state = useWorkbenchSessionStore.getState()
         if (state.projectId !== projectId) return
         if (sessionIsDirty(state)) {
-          await commands.save('manual')
+          // 导出前保存不属于用户主动保存，不向新手引导报告 manual 保存事实。
+          await commands.save('manual', { reportGuide: false })
           state = useWorkbenchSessionStore.getState()
           if (run !== exportRun.current || state.projectId !== projectId) return
           if (
@@ -255,6 +266,11 @@ export function useWorkbenchExportController(
               label: '导出已停止',
               detail: state.saveError?.msg ?? '工作台改动没有保存成功，导出已停止。'
             })
+            try {
+              onExportFailed?.({ sceneId })
+            } catch {
+              // 指引观察者异常不能把已停止的导出改成成功。
+            }
             return
           }
         }
@@ -265,16 +281,46 @@ export function useWorkbenchExportController(
         )
         if (run !== exportRun.current) return
         setNotice(exportNoticeOf(result))
+        if (result.status === 'succeeded') {
+          try {
+            onExported?.({ sceneId })
+          } catch {
+            // 指引观察者异常不能把已完成的导出改成失败。
+          }
+        } else if (result.status === 'failed' || result.status === 'unavailable') {
+          try {
+            onExportFailed?.({ sceneId })
+          } catch {
+            // 指引观察者异常不能改变已显示的导出结果。
+          }
+        }
       } catch (error) {
         if (run !== exportRun.current) return
         const failure = failureOf(error)
         setNotice({ tone: 'danger', label: '导出失败', detail: failure.msg })
+        /* 通信中断或响应缺失只表示本机结果未知；普通导出页仍保留原提示，
+           但不向教程宣告这次确定没有导出成功。 */
+        if (!isDefiniteExportFailure(error)) return
+        try {
+          onExportFailed?.({ sceneId })
+        } catch {
+          // 指引观察者异常不能改变已显示的导出失败。
+        }
       } finally {
         exportingRef.current = false
         if (run === exportRun.current) setExporting(false)
       }
     },
-    [commands, entry.canRun, projectId, savedSceneVersion, sceneExportClient, sceneId]
+    [
+      commands,
+      entry.canRun,
+      onExported,
+      onExportFailed,
+      projectId,
+      savedSceneVersion,
+      sceneExportClient,
+      sceneId
+    ]
   )
 
   /* 两个入口都只打开同一个目的地弹窗；取消弹窗不发送导出请求、不写盘。

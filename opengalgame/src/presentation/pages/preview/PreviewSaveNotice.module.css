@@ -97,7 +97,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spin {
+  :root:not([data-reduced-motion='full']) .spin {
     animation: none;
   }
 }

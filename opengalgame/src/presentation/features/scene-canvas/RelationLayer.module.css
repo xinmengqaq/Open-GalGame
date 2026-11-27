@@ -1,28 +1,27 @@
 .edgeLayer {
   pointer-events: none;
-  --relation-line: var(--wb-positive-strong);
-  --relation-ink: var(--wb-positive-strong);
+  --relation-line: var(--content-document);
+  --relation-ink: var(--content-document);
 }
 
 .edgeLayer[data-tone='unnamed'] {
-  --relation-line: var(--wb-warning);
-  --relation-ink: var(--wb-warning);
+  --relation-line: var(--content-audio);
+  --relation-ink: var(--content-audio);
 }
 
 .edgeLayer[data-active='true'] {
-  --relation-line: var(--wb-accent);
-  --relation-ink: var(--wb-accent-strong);
+  --relation-line: var(--content-image);
+  --relation-ink: var(--content-focus);
 }
 
 .edgeLayer[data-rejected='true'] {
-  --relation-line: var(--wb-danger);
-  --relation-ink: var(--wb-danger-strong);
+  --relation-line: var(--content-video);
+  --relation-ink: color-mix(in srgb, var(--content-video) 70%, var(--content-text));
 }
-
 
 .edgeUnderlay {
   fill: none;
-  stroke: var(--relation-line, var(--wb-positive-strong));
+  stroke: var(--relation-line, var(--content-document));
   stroke-width: 14;
   stroke-linecap: round;
   opacity: 0.08;
@@ -32,7 +31,7 @@
 
 .edgeLine {
   fill: none;
-  stroke: var(--relation-line, var(--wb-positive-strong));
+  stroke: var(--relation-line, var(--content-document));
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -78,14 +77,14 @@
 }
 
 .edgeEndpoint {
-  fill: var(--relation-line, var(--wb-positive-strong));
+  fill: var(--relation-line, var(--content-document));
   stroke: none;
   pointer-events: none;
 }
 
 .edgeLayer[data-tone='unnamed'] .edgeEndpoint {
-  fill: var(--wb-surface-solid);
-  stroke: var(--relation-line, var(--wb-warning));
+  fill: var(--content-surface);
+  stroke: var(--relation-line, var(--content-audio));
   stroke-width: 1.6;
 }
 
@@ -97,14 +96,13 @@
   cursor: pointer;
 }
 
-
 .recordEdgeLayer {
   pointer-events: none;
 }
 
 .recordEdgeLine {
   fill: none;
-  stroke: color-mix(in srgb, var(--wb-positive) 76%, transparent);
+  stroke: color-mix(in srgb, var(--content-animation) 76%, transparent);
   stroke-width: 1.8;
   stroke-dasharray: 2 7;
   stroke-linecap: round;
@@ -112,19 +110,22 @@
 }
 
 .recordEdgeSource {
-  fill: color-mix(in srgb, var(--wb-positive) 82%, transparent);
+  fill: color-mix(in srgb, var(--content-animation) 82%, transparent);
 }
 
 .recordEdgePin {
-  fill: var(--wb-surface-solid);
-  stroke: color-mix(in srgb, var(--wb-positive-strong) 78%, transparent);
+  fill: var(--content-surface);
+  stroke: color-mix(in srgb, var(--content-document) 78%, transparent);
   stroke-width: 1.5;
 }
 
-
 :global(.react-flow__node-relationAnchor) .anchor {
-  --relation-line: var(--wb-positive-strong);
-  --relation-ink: var(--wb-positive-strong);
+  --relation-line: var(--content-document);
+  --relation-ink: var(--content-document);
+  --relation-shadow-chip: 0 10px 22px -20px
+    color-mix(in srgb, var(--content-focus) 52%, transparent);
+  --relation-shadow-soft: 0 16px 34px -30px
+    color-mix(in srgb, var(--content-focus) 56%, transparent);
   --label-lift: 30px;
   position: absolute;
   top: 50%;
@@ -139,22 +140,20 @@
   transition: transform 180ms var(--wb-ease);
 }
 
-
 .anchor[data-tone='unnamed'] {
-  --relation-line: var(--wb-warning);
-  --relation-ink: var(--wb-warning);
+  --relation-line: var(--content-audio);
+  --relation-ink: var(--content-audio);
 }
 
 .anchor[data-active='true'] {
-  --relation-line: var(--wb-accent);
-  --relation-ink: var(--wb-accent-strong);
+  --relation-line: var(--content-image);
+  --relation-ink: var(--content-focus);
 }
 
 .anchor[data-rejected='true'] {
-  --relation-line: var(--wb-danger);
-  --relation-ink: var(--wb-danger-strong);
+  --relation-line: var(--content-video);
+  --relation-ink: color-mix(in srgb, var(--content-video) 70%, var(--content-text));
 }
-
 
 .anchor::after {
   position: absolute;
@@ -187,10 +186,10 @@
   border-radius: var(--wb-radius-pill);
   background: linear-gradient(
     100deg,
-    color-mix(in srgb, var(--relation-line) 10%, var(--wb-surface-solid)) 0%,
-    color-mix(in srgb, var(--wb-surface-solid) 86%, transparent) 64%
+    color-mix(in srgb, var(--relation-line) 10%, var(--content-surface)) 0%,
+    color-mix(in srgb, var(--content-surface) 86%, transparent) 64%
   );
-  box-shadow: var(--wb-shadow-chip);
+  box-shadow: var(--relation-shadow-chip);
   backdrop-filter: blur(10px);
   pointer-events: auto;
   transition:
@@ -203,38 +202,38 @@
 .anchor[data-tone='unnamed'] .labelRow {
   background: linear-gradient(
     100deg,
-    color-mix(in srgb, var(--wb-warning) 10%, var(--wb-surface-solid)) 0%,
-    color-mix(in srgb, var(--wb-surface-solid) 86%, transparent) 64%
+    color-mix(in srgb, var(--content-audio) 10%, var(--content-surface)) 0%,
+    color-mix(in srgb, var(--content-surface) 86%, transparent) 64%
   );
 }
 
 .anchor[data-active='true'] .labelRow {
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--wb-accent) 20%, transparent),
-    var(--wb-shadow-chip);
+    0 0 0 3px color-mix(in srgb, var(--content-image) 20%, transparent),
+    var(--relation-shadow-chip);
 }
 
 .anchor[data-rejected='true'] .labelRow {
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--wb-danger) 20%, transparent),
-    var(--wb-shadow-chip);
+    0 0 0 3px color-mix(in srgb, var(--content-video) 20%, transparent),
+    var(--relation-shadow-chip);
 }
 
 .anchor[data-loadable='true'] .labelRow {
   background: linear-gradient(
     100deg,
-    color-mix(in srgb, var(--wb-positive) 18%, var(--wb-surface-solid)) 0%,
-    color-mix(in srgb, var(--wb-surface-solid) 88%, transparent) 68%
+    color-mix(in srgb, var(--content-animation) 18%, var(--content-surface)) 0%,
+    color-mix(in srgb, var(--content-surface) 88%, transparent) 68%
   );
   box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--wb-positive) 16%, transparent),
-    var(--wb-shadow-chip);
+    0 0 0 4px color-mix(in srgb, var(--content-animation) 16%, transparent),
+    var(--relation-shadow-chip);
 }
 
 .anchor:hover .labelRow {
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--relation-line) 12%, transparent),
-    var(--wb-shadow-soft);
+    var(--relation-shadow-soft);
 }
 
 .label {
@@ -257,7 +256,6 @@
   cursor: pointer;
 }
 
-
 .label::before {
   position: absolute;
   top: 50%;
@@ -269,11 +267,11 @@
 }
 
 .label:hover {
-  color: var(--wb-text-strong);
+  color: var(--content-text);
 }
 
 .label:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--wb-accent) 66%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--content-image) 66%, transparent);
   outline-offset: 3px;
 }
 
@@ -295,11 +293,11 @@
 }
 
 .anchor[data-active='true'] .stateMark {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-accent) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--content-image) 22%, transparent);
 }
 
 .anchor[data-rejected='true'] .stateMark {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-danger) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--content-video) 22%, transparent);
 }
 
 .labelText {
@@ -309,7 +307,7 @@
 }
 
 .anchor[data-tone='unnamed'] .labelText {
-  color: var(--wb-warning);
+  color: var(--content-audio);
   font-weight: 600;
 }
 
@@ -340,8 +338,8 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--wb-accent) 8%, transparent);
-  color: var(--wb-text-muted);
+  background: color-mix(in srgb, var(--content-image) 8%, transparent);
+  color: var(--content-text-muted);
   font-size: 14px;
   line-height: 1;
   opacity: 0.55;
@@ -358,10 +356,9 @@
 }
 
 .recordDetach:hover {
-  background: color-mix(in srgb, var(--wb-danger) 12%, transparent);
-  color: var(--wb-danger-strong);
+  background: color-mix(in srgb, var(--content-video) 12%, transparent);
+  color: color-mix(in srgb, var(--content-video) 70%, var(--content-text));
 }
-
 
 .anchor[data-condensed='true'] {
   --label-lift: 0px;
@@ -448,15 +445,15 @@
 
 .anchor[data-condensed='true'][data-loadable='true'] .labelRow {
   box-shadow:
-    0 0 0 5px color-mix(in srgb, var(--wb-positive) 15%, transparent),
-    var(--wb-shadow-chip);
+    0 0 0 5px color-mix(in srgb, var(--content-animation) 15%, transparent),
+    var(--relation-shadow-chip);
 }
 
 .anchor[data-condensed='true'][data-loadable='true'] .stateMark {
-  background: var(--wb-positive-strong);
+  background: var(--content-document);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--wb-positive) 16%, transparent),
-    0 0 16px -2px color-mix(in srgb, var(--wb-positive) 62%, transparent);
+    0 0 0 3px color-mix(in srgb, var(--content-animation) 16%, transparent),
+    0 0 16px -2px color-mix(in srgb, var(--content-animation) 62%, transparent);
 }
 
 .anchor[data-condensed='true'][data-loadable='true'] .dropHint {
@@ -476,9 +473,9 @@
   padding: 5px 11px;
   border: 0;
   border-radius: var(--wb-radius-pill);
-  background: color-mix(in srgb, var(--wb-positive) 14%, var(--wb-surface-solid));
-  box-shadow: var(--wb-shadow-chip);
-  color: var(--wb-positive-strong);
+  background: color-mix(in srgb, var(--content-animation) 14%, var(--content-surface));
+  box-shadow: var(--relation-shadow-chip);
+  color: var(--content-document);
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -486,7 +483,6 @@
   pointer-events: none;
   transform: translateX(-50%);
 }
-
 
 .portAnchor {
   position: absolute;
@@ -500,7 +496,6 @@
   transform: translateX(-50%);
   transition: opacity 140ms ease;
 }
-
 
 .anchor[data-condensed='true'] .portAnchor {
   opacity: 0;
@@ -517,8 +512,8 @@
   height: 9px;
   border: 1.5px solid transparent;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--wb-accent) 48%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-accent) 10%, transparent);
+  background: color-mix(in srgb, var(--content-image) 48%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--content-image) 10%, transparent);
   pointer-events: none;
   transform: rotate(45deg);
   transition:
@@ -536,14 +531,14 @@
 
 .port[data-state='named'] {
   border-color: transparent;
-  background: var(--wb-positive-strong);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-positive) 12%, transparent);
+  background: var(--content-document);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--content-animation) 12%, transparent);
 }
 
 .port[data-state='unnamed'] {
-  border-color: var(--wb-warning);
+  border-color: var(--content-audio);
   border-style: dashed;
-  background: color-mix(in srgb, var(--wb-surface-solid) 80%, transparent);
+  background: color-mix(in srgb, var(--content-surface) 80%, transparent);
   box-shadow: none;
 }
 
@@ -551,34 +546,33 @@
   width: 11px;
   height: 11px;
   border-color: transparent;
-  background: var(--wb-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wb-accent) 20%, transparent);
+  background: var(--content-image);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--content-image) 20%, transparent);
 }
 
 .port[data-state='ready'] {
   width: 11px;
   height: 11px;
-  border: 1.5px solid color-mix(in srgb, var(--wb-positive-strong) 78%, transparent);
-  background: color-mix(in srgb, var(--wb-surface-solid) 72%, transparent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wb-positive) 12%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--content-document) 78%, transparent);
+  background: color-mix(in srgb, var(--content-surface) 72%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--content-animation) 12%, transparent);
 }
 
 .port[data-state='rejected'] {
   width: 12px;
   height: 12px;
   border-color: transparent;
-  background: var(--wb-danger);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--wb-danger) 16%, transparent);
+  background: var(--content-video);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--content-video) 16%, transparent);
 }
 
 .port[data-state='active']::after {
   position: absolute;
   inset: 3.5px;
   border-radius: 1px;
-  background: var(--wb-surface-solid);
+  background: var(--content-surface);
   content: '';
 }
-
 
 :global(.react-flow__node-relationAnchor) .anchor .anchorHandle {
   position: absolute !important;
@@ -595,7 +589,6 @@
   transform: none !important;
   pointer-events: none !important;
 }
-
 
 :global(.react-flow__node-relationAnchor) .anchor .anchorHandle::before {
   position: absolute;
@@ -622,19 +615,19 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .labelRow,
-  .stateMark,
-  .recordDetach,
-  .port,
-  .edgeLine,
-  .edgeUnderlay,
-  .anchor {
+  :root:not([data-reduced-motion='full']) .labelRow,
+  :root:not([data-reduced-motion='full']) .stateMark,
+  :root:not([data-reduced-motion='full']) .recordDetach,
+  :root:not([data-reduced-motion='full']) .port,
+  :root:not([data-reduced-motion='full']) .edgeLine,
+  :root:not([data-reduced-motion='full']) .edgeUnderlay,
+  :root:not([data-reduced-motion='full']) .anchor {
     transition: none;
   }
 
-  .anchor[data-condensed='true'] .labelText,
-  .anchor[data-condensed='true'] .recordMark,
-  .anchor[data-condensed='true'] .recordDetach {
+  :root:not([data-reduced-motion='full']) .anchor[data-condensed='true'] .labelText,
+  :root:not([data-reduced-motion='full']) .anchor[data-condensed='true'] .recordMark,
+  :root:not([data-reduced-motion='full']) .anchor[data-condensed='true'] .recordDetach {
     transition: none;
   }
 }

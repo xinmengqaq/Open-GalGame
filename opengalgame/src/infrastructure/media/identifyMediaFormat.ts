@@ -1,11 +1,13 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 
-const imageExtensions = new Set(['png', 'jpg', 'gif', 'webp'])
-const audioExtensions = new Set(['mp3', 'flac', 'wav'])
-const containerExtensions = new Set(['ogg', 'mp4', 'webm'])
-const svgNamespace = 'http://www.w3.org/2000/svg'
+import {
+  isAudioFileExtension,
+  isContainerFileExtension,
+  isImageFileExtension,
+  type MediaCategory
+} from '@common/media/mediaFileName'
 
-export type MediaCategory = 'image' | 'audio' | 'video'
+const svgNamespace = 'http://www.w3.org/2000/svg'
 
 export type MediaFormatIdentification =
   | { supported: true; category: MediaCategory; extension: string; mediaType: string }
@@ -31,13 +33,13 @@ async function identifyBinary(bytes: Uint8Array): Promise<MediaFormatIdentificat
   const { fileTypeFromBuffer } = await import('file-type')
   const detected = await fileTypeFromBuffer(bytes)
   if (!detected) return undefined
-  if (imageExtensions.has(detected.ext)) {
+  if (isImageFileExtension(detected.ext)) {
     return { supported: true, category: 'image', extension: detected.ext, mediaType: detected.mime }
   }
-  if (audioExtensions.has(detected.ext)) {
+  if (isAudioFileExtension(detected.ext)) {
     return { supported: true, category: 'audio', extension: detected.ext, mediaType: detected.mime }
   }
-  if (!containerExtensions.has(detected.ext)) return { supported: false, reason: 'unsupported' }
+  if (!isContainerFileExtension(detected.ext)) return { supported: false, reason: 'unsupported' }
   if (detected.mime.startsWith('audio/')) {
     return { supported: true, category: 'audio', extension: detected.ext, mediaType: detected.mime }
   }

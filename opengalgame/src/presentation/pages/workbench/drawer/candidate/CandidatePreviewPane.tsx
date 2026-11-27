@@ -12,7 +12,6 @@ import {
   RotateCcw,
   TimerOff,
   TriangleAlert,
-  Volume2,
   X
 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactElement } from 'react'
@@ -36,12 +35,12 @@ const phaseCopy: Record<
 > = {
   opening: {
     title: '正在打开游戏候选',
-    description: '正在核对候选会话并启动游戏。',
+    description: '正在启动游戏。',
     tone: 'live'
   },
   ready: {
     title: '游戏已就绪',
-    description: '读取完成，可以对照游戏画面判断是否需要修改。',
+    description: '真实画面已就绪。',
     tone: 'ready'
   },
   'read-failed': {
@@ -119,10 +118,8 @@ export function CandidatePreviewPane({
 }): ReactElement | null {
   const { state, phase, reloadStage, reopen, retryRead } = controller
   const [issuesOpenSession, setIssuesOpenSession] = useState<string | null>(null)
-  const [soundHintClosedSession, setSoundHintClosedSession] = useState<string | null>(null)
   const root = useRef<HTMLElement>(null)
   const issueCount = state.issues.length
-  const soundHintVisible = phase === 'ready' && soundHintClosedSession !== state.sessionId
   const issuesAvailable =
     (phase === 'ready' || phase === 'stage-failed' || phase === 'opening' || phase === 'expired') &&
     issueCount > 0
@@ -172,6 +169,31 @@ export function CandidatePreviewPane({
       : phase === 'failed' && state.failureMessage
         ? state.failureMessage
         : copy.description
+  const reopenLabel = phase === 'stage-failed' || phase === 'expired' ? '重新运行' : '重新打开候选'
+  const reopenTitle =
+    phase === 'stage-failed' || phase === 'expired'
+      ? '重新运行当前候选，不改变候选内容'
+      : '重新打开候选'
+  const reopenAction = (
+    <button
+      className="wb-candidate__action wb-candidate__action--primary"
+      onClick={reopen}
+      title={reopenTitle}
+      type="button"
+    >
+      <RotateCcw aria-hidden="true" />
+      {reopenLabel}
+    </button>
+  )
+  const fallbackActions =
+    phase === 'read-failed' ? (
+      <button className="wb-candidate__action" onClick={retryRead} type="button">
+        <RefreshCw aria-hidden="true" />
+        重新读取
+      </button>
+    ) : phase === 'invalidated' || phase === 'expired' || phase === 'failed' ? (
+      reopenAction
+    ) : undefined
 
   return (
     <section aria-label="游戏候选预览" className="wb-candidate" data-phase={phase} ref={root}>
@@ -206,7 +228,7 @@ export function CandidatePreviewPane({
             description={
               openingStalled
                 ? '已经等待较久，画面还没有就绪。可以重新打开再试一次。'
-                : '从候选入口开始，真实画面准备好后会自动显示。'
+                : '真实画面准备好后会自动显示。'
             }
           />
         ) : null}
@@ -214,6 +236,7 @@ export function CandidatePreviewPane({
         {stageFailureVisible ? (
           <GameStageStatePanel
             accent="danger"
+            actions={reopenAction}
             description={stageFailureDescription}
             icon={<MonitorOff />}
             role="alert"
@@ -225,6 +248,7 @@ export function CandidatePreviewPane({
         {fallbackVisible ? (
           <GameStageStatePanel
             accent={fallbackAccentOf(phase)}
+            actions={fallbackActions}
             description={fallbackDescription}
             icon={fallbackIconOf(phase)}
             role={phase === 'read-failed' || phase === 'failed' ? 'alert' : 'status'}
@@ -280,20 +304,6 @@ export function CandidatePreviewPane({
         ) : null}
       </GameStageFrame>
 
-      {soundHintVisible ? (
-        <p className="wb-candidate__sound" role="note">
-          <Volume2 aria-hidden="true" />
-          <span>画面已就绪。没听到音乐时，先点“重新载入画面”，再点画面里的“开始游戏”。</span>
-          <button
-            aria-label="关闭声音提示"
-            onClick={() => setSoundHintClosedSession(state.sessionId)}
-            type="button"
-          >
-            <X aria-hidden="true" />
-          </button>
-        </p>
-      ) : null}
-
       <footer className="wb-candidate__bar">
         {fallbackVisible ? null : (
           <span aria-live="polite" className="wb-candidate__phase" data-tone={copy.tone}>
@@ -316,12 +326,6 @@ export function CandidatePreviewPane({
         ) : null}
 
         <span className="wb-candidate__actions">
-          {phase === 'read-failed' ? (
-            <button className="wb-candidate__action" onClick={retryRead} type="button">
-              <RefreshCw aria-hidden="true" />
-              重新读取
-            </button>
-          ) : null}
           {phase === 'ready' ? (
             <>
               <button
@@ -343,24 +347,6 @@ export function CandidatePreviewPane({
                 重新载入画面
               </button>
             </>
-          ) : null}
-          {phase === 'stage-failed' ||
-          phase === 'invalidated' ||
-          phase === 'expired' ||
-          phase === 'failed' ? (
-            <button
-              className="wb-candidate__action wb-candidate__action--primary"
-              onClick={reopen}
-              title={
-                phase === 'stage-failed' || phase === 'expired'
-                  ? '重新运行当前候选，不改变候选内容'
-                  : '重新打开候选'
-              }
-              type="button"
-            >
-              <RotateCcw aria-hidden="true" />
-              {phase === 'stage-failed' || phase === 'expired' ? '重新运行' : '重新打开候选'}
-            </button>
           ) : null}
           {phase === 'opening' ? (
             openingStalled ? (

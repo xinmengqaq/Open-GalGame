@@ -3,11 +3,21 @@ import type {
   SceneExportDestinationDTO
 } from '@application/scene-export/dto/ExportSavedSceneDTO'
 import type { SceneExportResultVO } from '@application/scene-export/vo/SceneExportVO'
+import { AppException } from '@common/errors/AppException'
+import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { SystemPathClient } from '@interfaces/system-path/client/SystemPathClient'
 
 import { requireSuccess } from '@presentation/feedback/failure'
 import type { SceneExportNotice } from './SceneExportNotice'
 import type { SavedSceneVersionFact } from './WorkbenchPreviewLayer'
+
+/**
+ * 只有明确的业务失败结果才能让教程宣告“这次没有导出成功”。
+ * 通信中断、响应缺失或本机异常都表示导出是否落地未知；普通导出页仍保留原反馈。
+ */
+export function isDefiniteExportFailure(error: unknown): boolean {
+  return error instanceof AppException && error.code !== ErrorCodes.communicationFailed
+}
 
 /**
  * 导出只带工程/场景身份、保存成功的内容依据、正式版本引用和目的地意向。
@@ -54,6 +64,8 @@ export function formatExportBytes(bytes: number): string {
 export async function openExportDirectory(
   client: Pick<SystemPathClient, 'openDirectory'>,
   directoryPath: string
-): Promise<void> {
-  requireSuccess(await client.openDirectory({ path: directoryPath }))
+): Promise<string> {
+  const result = await client.openDirectory({ path: directoryPath })
+  requireSuccess(result)
+  return result.msg
 }

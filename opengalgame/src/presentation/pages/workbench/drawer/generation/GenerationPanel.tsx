@@ -91,7 +91,6 @@ export function GenerationHeader({
       ) : (
         <div className="wb-gen-tokens wb-gen-tokens--idle">
           <span>尚未开始生成</span>
-          <small>开始后会显示本次操作的累计 Token</small>
         </div>
       )}
     </div>
@@ -300,6 +299,7 @@ export function GenerationPanel({
         <div className="wb-gen-stage">
           <GenerationConversation
             actionError={actionError}
+            cards={cards}
             draft={draft}
             exportDisabled={exportDisabled}
             exportHint={exportHint}

@@ -38,4 +38,7 @@ playwright/.cache/
 
 /docs/素材目录/
 
+# 字体文件体积大，由本地构建资源提供，不进入 Git
+/opengalgame/src/presentation/assets/fonts/
+
 harness/handoffs/evidence/

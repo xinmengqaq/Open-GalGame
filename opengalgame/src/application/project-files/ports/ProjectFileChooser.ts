@@ -1,3 +1,7 @@
+import type { ProjectFileAssetKind } from '../vo/ProjectInputSourceVO'
+
 export interface ProjectFileChooser {
-  chooseProjectFiles(): Promise<readonly string[] | null>
+  chooseProjectFiles(
+    mediaKinds?: readonly ProjectFileAssetKind[]
+  ): Promise<readonly string[] | null>
 }

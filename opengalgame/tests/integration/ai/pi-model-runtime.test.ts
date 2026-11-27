@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { normalizeContext } from '@earendil-works/pi-ai'
 
 import { PiModelFactory } from '@infrastructure/ai/pi/PiModelFactory'
-import { ConnectionErrorCodes } from '@domain/connections/errors/ConnectionErrorCodes'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import { ConnectionErrorCodes } from '@domain/settings/connections/errors/ConnectionErrorCodes'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 const saved: ConnectionSettingsInfo = {
   providerId: 'openai-compatible',
@@ -224,8 +224,7 @@ describe('Pi 模型运行时', () => {
       const extension = {
         defaultHeaders: { 'x-opencode-session': session, 'User-Agent': 'custom-agent' },
         defaultQuery: { trace: 'request-marker' },
-        fetchOptions: { cache: 'no-store', referrer: 'extension-referrer' },
-        logLevel: 'off'
+        fetchOptions: { cache: 'no-store', referrer: 'extension-referrer' }
       }
       const factory = new PiModelFactory(
         async () => ({

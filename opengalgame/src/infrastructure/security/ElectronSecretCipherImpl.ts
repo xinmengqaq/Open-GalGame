@@ -1,4 +1,4 @@
-import { ConnectionErrorCodes } from '@domain/connections/errors/ConnectionErrorCodes'
+import { ConnectionErrorCodes } from '@domain/settings/connections/errors/ConnectionErrorCodes'
 import { safeStorage } from 'electron'
 
 import type { SecretCipher } from './SecretCipher'

@@ -1,4 +1,9 @@
 import {
+  ArrowLeft,
+  Ban,
+  CalendarDays,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -6,7 +11,10 @@ import {
   GitBranch,
   History,
   LockKeyhole,
-  RefreshCw
+  Pause,
+  RefreshCw,
+  Sparkles,
+  X
 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactElement, type RefObject } from 'react'
 import { toast } from 'sonner'
@@ -83,6 +91,65 @@ interface GenerationHistoryProps {
   forkUnknown: ForkUnknownController
 }
 
+type HistoryDaySection = {
+  key: string
+  label: string
+  items: SceneGenerationHistorySummaryVO[]
+}
+
+function dayOf(value: string): { key: string; label: string } {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return { key: `unknown:${value}`, label: '时间未记录' }
+  return {
+    key: `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`,
+    label: `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
+  }
+}
+
+/** 只按后端已排好的顺序切日，不重排记录。 */
+function groupHistoryByDay(items: readonly SceneGenerationHistorySummaryVO[]): HistoryDaySection[] {
+  const sections: HistoryDaySection[] = []
+  for (const item of items) {
+    const day = dayOf(item.createdAt)
+    const section = sections.at(-1)
+    if (section?.key === day.key) {
+      section.items.push(item)
+      continue
+    }
+    sections.push({ ...day, items: [item] })
+  }
+  return sections
+}
+
+function historyTimeOfDay(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return historyClock(value)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+/** 时间线节点与详情页共用的状态图形；颜色由外层 data-tone 承担。 */
+function HistoryStatusGlyph({ status }: { status: string }): ReactElement {
+  switch (status) {
+    case '已提交':
+      return <Check aria-hidden="true" />
+    case '失败':
+      return <X aria-hidden="true" />
+    case '待核对':
+    case '等待审阅':
+    case '等待决定':
+      return <Clock3 aria-hidden="true" />
+    case '已暂停':
+      return <Pause aria-hidden="true" />
+    case '已取消':
+      return <Ban aria-hidden="true" />
+    case '候选已创建':
+    case '开始':
+      return <Sparkles aria-hidden="true" />
+    default:
+      return <span aria-hidden="true" className="wb-hist__node-dot" />
+  }
+}
+
 function HistoryStatusBadge({
   label,
   tone
@@ -100,14 +167,16 @@ function HistoryStatusBadge({
 function HistorySkeleton(): ReactElement {
   return (
     <div aria-label="正在读取 AI 历史" className="wb-hist__skeleton" role="status">
+      <span className="wb-hist__shimmer wb-hist__skeleton-day" />
       {[0, 1, 2, 3].map((row) => (
         <div className="wb-hist__skeleton-row" key={row}>
-          <span className="wb-hist__shimmer wb-hist__skeleton-node" />
           <span className="wb-hist__shimmer wb-hist__skeleton-time" />
+          <span className="wb-hist__shimmer wb-hist__skeleton-node" />
           <span className="wb-hist__skeleton-main">
             <span className="wb-hist__shimmer wb-hist__skeleton-badge" />
             <span className="wb-hist__shimmer wb-hist__skeleton-line" />
           </span>
+          <span className="wb-hist__shimmer wb-hist__skeleton-open" />
         </div>
       ))}
     </div>
@@ -127,9 +196,7 @@ function HistoryEmpty(): ReactElement {
         <rect className="wb-hist__empty-bar" height="7" rx="3.5" width="64" x="66" y="72" />
       </svg>
       <h3>还没有 AI 历史记录</h3>
-      <p>
-        这个场景还没有产生可记录的生成操作。开始生成后，每次开始、等待决定、审阅、暂停和提交都会留在这里。
-      </p>
+      <p>生成过的操作会按时间排列在这里。</p>
     </div>
   )
 }
@@ -162,12 +229,20 @@ function HistoryForkSection({
   if (error !== null) {
     return (
       <div className="wb-hist__fork wb-hist__fork--error" role="alert">
-        <p className="wb-hist__fork-title">
-          <CircleAlert aria-hidden="true" />
-          分叉资格没有读出来
-        </p>
-        <p className="wb-hist__fork-copy">{error}</p>
-        <Button className="wb-gen-secondary" onClick={onRetryDetail} type="button">
+        <div className="wb-hist__fork-head">
+          <span className="wb-hist__fork-icon">
+            <CircleAlert aria-hidden="true" />
+          </span>
+          <div className="wb-hist__fork-copy-block">
+            <p className="wb-hist__fork-title">分叉资格没有读出来</p>
+            <p className="wb-hist__fork-copy">{error}</p>
+          </div>
+        </div>
+        <Button
+          className="wb-gen-secondary wb-hist__fork-secondary"
+          onClick={onRetryDetail}
+          type="button"
+        >
           <RefreshCw aria-hidden="true" />
           重新核对
         </Button>
@@ -178,17 +253,18 @@ function HistoryForkSection({
   if (forkFeedback?.kind === 'unconfirmed') {
     return (
       <div className="wb-hist__fork wb-hist__fork--unconfirmed" role="status">
-        <p className="wb-hist__fork-title">
-          <CircleAlert aria-hidden="true" />
-          {historyForkUnconfirmedTitle}
-        </p>
-        <p className="wb-hist__fork-copy">{forkFeedback.message}</p>
+        <div className="wb-hist__fork-head">
+          <span className="wb-hist__fork-icon">
+            <CircleAlert aria-hidden="true" />
+          </span>
+          <div className="wb-hist__fork-copy-block">
+            <p className="wb-hist__fork-title">{historyForkUnconfirmedTitle}</p>
+            <p className="wb-hist__fork-copy">{forkFeedback.message}</p>
+          </div>
+        </div>
         <p className="wb-hist__fork-copy">{historyForkUnconfirmedMessage}</p>
         <p className="wb-hist__fork-copy wb-hist__fork-copy--quiet">
-          {historyForkUnconfirmedStatusCopy(
-            forkFeedback.checkStatus,
-            forkFeedback.failureMessage
-          )}
+          {historyForkUnconfirmedStatusCopy(forkFeedback.checkStatus, forkFeedback.failureMessage)}
         </p>
         <div className="wb-hist__fork-actions">
           <Button
@@ -214,11 +290,15 @@ function HistoryForkSection({
   if (forkFeedback?.kind === 'created') {
     return (
       <div className="wb-hist__fork wb-hist__fork--created" role="status">
-        <p className="wb-hist__fork-title">
-          <GitBranch aria-hidden="true" />
-          {historyForkCreatedTitle}
-        </p>
-        <p className="wb-hist__fork-copy">{historyForkCreatedMessage}</p>
+        <div className="wb-hist__fork-head">
+          <span className="wb-hist__fork-icon">
+            <GitBranch aria-hidden="true" />
+          </span>
+          <div className="wb-hist__fork-copy-block">
+            <p className="wb-hist__fork-title">{historyForkCreatedTitle}</p>
+            <p className="wb-hist__fork-copy">{historyForkCreatedMessage}</p>
+          </div>
+        </div>
         <Button
           className="wb-gen-primary wb-hist__fork-action"
           onClick={onRefreshHistory}
@@ -229,9 +309,7 @@ function HistoryForkSection({
           {historyForkRefreshAction}
         </Button>
         <p className="wb-hist__fork-copy wb-hist__fork-copy--quiet">
-          {forkFeedback.branchActive
-            ? historyForkCreatedActiveHint
-            : historyForkCreatedHint}
+          {forkFeedback.branchActive ? historyForkCreatedActiveHint : historyForkCreatedHint}
         </p>
         {forkFeedback.branchActive ? null : (
           <button className="wb-hist__fork-retry" onClick={onFork} type="button">
@@ -244,7 +322,10 @@ function HistoryForkSection({
 
   if (loading || detail === null) {
     return (
-      <div aria-live="polite" className="wb-hist__fork">
+      <div aria-live="polite" className="wb-hist__fork wb-hist__fork--loading">
+        <span className="wb-hist__fork-icon">
+          <RefreshCw aria-hidden="true" className="wb-hist__spin" />
+        </span>
         <p className="wb-hist__fork-loading" role="status">
           正在核对这条记录的复制资格…
         </p>
@@ -255,24 +336,30 @@ function HistoryForkSection({
   if (!detail.canFork) {
     return (
       <div className="wb-hist__fork wb-hist__fork--blocked">
-        <p className="wb-hist__fork-title">
+        <span className="wb-hist__fork-icon">
           <LockKeyhole aria-hidden="true" />
-          不能从这里分叉
-        </p>
-        <p className="wb-hist__fork-copy">{detail.forkReason ?? '这条记录不能分叉。'}</p>
+        </span>
+        <div className="wb-hist__fork-copy-block">
+          <p className="wb-hist__fork-title">不能从这里分叉</p>
+          <p className="wb-hist__fork-copy">{detail.forkReason ?? '这条记录不能分叉。'}</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="wb-hist__fork">
-      <p className="wb-hist__fork-title">
-        <GitBranch aria-hidden="true" />
-        从这里分叉
-      </p>
-      <p className="wb-hist__fork-copy">
-        会把这条记录的候选复制到新分支；原记录、原分支和正式作品都保持不变。
-      </p>
+    <div aria-label="从这里分叉" className="wb-hist__fork wb-hist__fork--ready">
+      <div className="wb-hist__fork-head">
+        <span className="wb-hist__fork-icon">
+          <GitBranch aria-hidden="true" />
+        </span>
+        <div className="wb-hist__fork-copy-block">
+          <p className="wb-hist__fork-title">保留原稿，另试一版</p>
+          <p className="wb-hist__fork-copy">
+            会把这条记录的候选复制到新分支；原记录、原分支和正式作品都保持不变。
+          </p>
+        </div>
+      </div>
       <Button
         aria-busy={forking}
         className="wb-gen-primary wb-hist__fork-action"
@@ -318,7 +405,8 @@ export function HistoryDetail({
   onFork,
   onRefreshHistory,
   onRecheckFork,
-  onRetryDetail
+  onRetryDetail,
+  onOpenRun
 }: {
   backRef: RefObject<HTMLButtonElement | null>
   onBack: () => void
@@ -332,8 +420,14 @@ export function HistoryDetail({
   onRefreshHistory: () => void
   onRecheckFork: () => void
   onRetryDetail: () => void
+  /** 失败记录只提供回到当前生成的入口；历史记录本身不能直接重试。 */
+  onOpenRun?: () => void
 }): ReactElement {
   const detailView = historyDetailViewOf(record)
+  const showStage = !(
+    detailView.stage === detailView.boundary ||
+    (detailView.boundary === '失败' && detailView.stage === '生成失败')
+  )
   const forkActionRef = useRef<HTMLButtonElement | null>(null)
   return (
     <div className="wb-hist__detail wb-hist-page">
@@ -342,10 +436,6 @@ export function HistoryDetail({
           <ChevronLeft aria-hidden="true" />
           返回列表
         </button>
-        <span className="wb-hist__readonly">
-          <LockKeyhole aria-hidden="true" />
-          只读记录
-        </span>
       </div>
       <div
         aria-label="AI 历史记录详情"
@@ -354,35 +444,59 @@ export function HistoryDetail({
         tabIndex={0}
       >
         <div className="wb-hist__detail-body">
-          <span aria-hidden="true" className="wb-hist__detail-node" />
-          <p className="wb-hist__detail-kicker">
-            <Clock3 aria-hidden="true" />
-            {detailView.clock}
-          </p>
-          <h2 className="wb-hist__detail-title">{detailView.summary}</h2>
-          <div className="wb-hist__detail-badges">
-            <HistoryStatusBadge label={detailView.boundary} tone={detailView.tone} />
-          </div>
-          <dl className="wb-hist__meta">
-            <div>
-              <dt>记录时间</dt>
-              <dd>{detailView.time}</dd>
-            </div>
-            <div>
-              <dt>操作边界</dt>
-              <dd>{detailView.boundary}</dd>
-            </div>
-            <div>
-              <dt>所处阶段</dt>
-              <dd>{detailView.stage}</dd>
-            </div>
-            {detailView.failureReason !== null ? (
-              <div data-tone="danger">
-                <dt>失败原因</dt>
-                <dd>{detailView.failureReason}</dd>
+          <article className="wb-hist__detail-hero" data-tone={detailView.tone}>
+            <span aria-hidden="true" className="wb-hist__detail-icon">
+              <HistoryStatusGlyph status={detailView.boundary} />
+            </span>
+            <div className="wb-hist__detail-copy">
+              <p className="wb-hist__detail-time">
+                <Clock3 aria-hidden="true" />
+                <span>记录时间</span>
+                <time dateTime={record.createdAt}>{detailView.time}</time>
+              </p>
+              <h2 className="wb-hist__detail-title">{detailView.summary}</h2>
+              <div className="wb-hist__detail-facts">
+                <span className="wb-hist__detail-fact">
+                  <span className="wb-hist__detail-fact-label">操作边界</span>
+                  <HistoryStatusBadge label={detailView.boundary} tone={detailView.tone} />
+                </span>
+                {showStage ? (
+                  <>
+                    <span aria-hidden="true" className="wb-hist__detail-fact-sep" />
+                    <span className="wb-hist__detail-fact">
+                      <span className="wb-hist__detail-fact-label">所处阶段</span>
+                      <span className="wb-hist__detail-fact-value">{detailView.stage}</span>
+                    </span>
+                  </>
+                ) : null}
               </div>
-            ) : null}
-          </dl>
+            </div>
+          </article>
+          {detailView.failureReason !== null ? (
+            <section aria-label="失败原因" className="wb-hist__failure">
+              <span aria-hidden="true" className="wb-hist__failure-icon">
+                <CircleAlert />
+              </span>
+              <div className="wb-hist__failure-copy">
+                <p className="wb-hist__failure-label">失败原因</p>
+                <p className="wb-hist__failure-reason">{detailView.failureReason}</p>
+              </div>
+            </section>
+          ) : null}
+          {detailView.tone === 'danger' && onOpenRun !== undefined ? (
+            <section aria-label="重新生成" className="wb-hist__recovery">
+              <div className="wb-hist__recovery-copy">
+                <p className="wb-hist__recovery-title">这条记录不能直接重试</p>
+                <p className="wb-hist__recovery-note">
+                  需要重新生成时，回到当前生成发起新的生成；原记录会保留。
+                </p>
+              </div>
+              <button className="wb-hist__recovery-action" onClick={onOpenRun} type="button">
+                <ArrowLeft aria-hidden="true" />
+                回到当前生成
+              </button>
+            </section>
+          ) : null}
           <HistoryForkSection
             actionRef={forkActionRef}
             detail={detail}
@@ -398,7 +512,9 @@ export function HistoryDetail({
           />
           <p className="wb-hist__note">
             <LockKeyhole aria-hidden="true" />
-            {detailView.readonlyNote}
+            <span className="wb-hist__note-copy">
+              <span className="wb-hist__note-label">只读记录</span> {detailView.readonlyNote}
+            </span>
           </p>
         </div>
       </div>
@@ -418,6 +534,7 @@ function HistoryDetailLoader({
   onBack,
   onForked,
   onHistoryReload,
+  onOpenRun,
   onRefreshDiscovery,
   unknownFork,
   onUnknownFork,
@@ -430,15 +547,12 @@ function HistoryDetailLoader({
   onBack: () => void
   onForked: (fork: SceneGenerationForkVO) => void
   onHistoryReload: () => void
+  onOpenRun?: () => void
   /** 刷新页面级场景发现；未知核对只在它真正结束后才更新状态。 */
   onRefreshDiscovery: () => Promise<DiscoveryRefreshResult>
   /** 这条记录仍有未确认的分叉结果；重开后继续保持未知，不回到普通分叉入口。 */
   unknownFork: ForkUnknownEntry | null
-  onUnknownFork: (
-    source: ForkUnknownSource,
-    sourceSummary: string,
-    message: string
-  ) => void
+  onUnknownFork: (source: ForkUnknownSource, sourceSummary: string, message: string) => void
   onRecheckFork: (source: ForkUnknownSource) => void
   record: SceneGenerationHistorySummaryVO
 }): ReactElement {
@@ -496,8 +610,7 @@ function HistoryDetailLoader({
         }
         toast.success(`已从「${label}」创建新分支`, {
           id: 'generation-fork-success',
-          description:
-            '原记录和正式作品保持不变；没有自动切换视图，新分支可从 AI 历史找到。',
+          description: '原记录和正式作品保持不变；没有自动切换视图，新分支可从 AI 历史找到。',
           duration: 8000
         })
         /* 只刷新发现列表，不抢当前视图；作者回到 AI 历史即可看到新分支。 */
@@ -535,6 +648,7 @@ function HistoryDetailLoader({
       forking={forking}
       onBack={onBack}
       onFork={() => void fork()}
+      onOpenRun={onOpenRun}
       onRecheckFork={recheckFork}
       onRefreshHistory={refreshAfterFork}
       onRetryDetail={retryDetail}
@@ -567,6 +681,7 @@ export function GenerationHistory({
 }: GenerationHistoryProps): ReactElement {
   const history = useGenerationHistory({ client, projectId, sceneId, refreshKey })
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [lastViewedId, setLastViewedId] = useState<string | null>(null)
   const backRef = useRef<HTMLButtonElement | null>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
   const lastOpened = useRef<string | null>(null)
@@ -575,8 +690,7 @@ export function GenerationHistory({
       ? null
       : (history.items.find((item) => item.checkpointId === selectedId) ?? null)
   const detailId = selected?.checkpointId ?? null
-  const selectedUnknownFork =
-    selected === null ? null : forkUnknown.find(selected)
+  const selectedUnknownFork = selected === null ? null : forkUnknown.find(selected)
   const historyError = history.error
   const historyCount = history.items.length
   const retryHistory = history.retry
@@ -586,6 +700,7 @@ export function GenerationHistory({
   )
   const showEmptyState =
     history.view === 'empty' && activeRow === null && visibleUnfinished.length === 0
+  const daySections = groupHistoryByDay(history.items)
 
   useEffect(() => {
     if (detailId !== null) {
@@ -628,6 +743,7 @@ export function GenerationHistory({
         onBack={() => setSelectedId(null)}
         onForked={onForked}
         onHistoryReload={history.reload}
+        onOpenRun={onOpenRun}
         onRecheckFork={recheckUnknownFork}
         onRefreshDiscovery={onRefreshDiscovery}
         onUnknownFork={forkUnknown.markUnknown}
@@ -641,18 +757,17 @@ export function GenerationHistory({
     <div className="wb-hist wb-hist-page">
       <div className="wb-hist__head">
         <div className="wb-hist__title">
-          <History aria-hidden="true" />
-          <h2>AI 历史</h2>
-          <p>
-            {history.items.length > 0
-              ? `当前场景 · 已读取 ${history.items.length} 条`
-              : '当前场景的生成记录'}
-          </p>
+          <span aria-hidden="true" className="wb-hist__title-icon">
+            <History />
+          </span>
+          <div className="wb-hist__title-copy">
+            <h2>AI 历史</h2>
+            <p>当前场景</p>
+          </div>
         </div>
-        <span className="wb-hist__readonly">
-          <LockKeyhole aria-hidden="true" />
-          只读摘要
-        </span>
+        {history.items.length > 0 ? (
+          <span className="wb-hist__head-count">已读取 {history.items.length} 条</span>
+        ) : null}
       </div>
 
       <div
@@ -670,9 +785,7 @@ export function GenerationHistory({
           >
             <div className="wb-hist__fork-unknown-head">
               <CircleAlert aria-hidden="true" />
-              <p className="wb-hist__fork-unknown-title">
-                {historyForkUnknownBannerTitle}
-              </p>
+              <p className="wb-hist__fork-unknown-title">{historyForkUnknownBannerTitle}</p>
               <span className="wb-hist__count">{forkUnknown.entries.length} 项</span>
             </div>
             <ul className="wb-hist__fork-unknown-list">
@@ -682,10 +795,7 @@ export function GenerationHistory({
                     来源「{entry.sourceSummary}」：{entry.message}
                   </p>
                   <p className="wb-hist__fork-unknown-copy">
-                    {historyForkUnknownBannerStatusCopy(
-                      entry.status,
-                      entry.failureMessage
-                    )}
+                    {historyForkUnknownBannerStatusCopy(entry.status, entry.failureMessage)}
                   </p>
                   <div className="wb-hist__fork-unknown-actions">
                     <button
@@ -720,8 +830,7 @@ export function GenerationHistory({
               <span className="wb-hist__count">{visibleUnfinished.length} 项</span>
             </div>
             <p className="wb-hist__unfinished-note">
-              会阻止新生成的进行中记录也能从这里打开；没有检查点的遗留可以继续，
-              写入或提交回执不明的记录可以重新核对。选择只切换当前视图，不会自动继续或调用模型。
+              这些操作会阻止新的生成。打开只切换当前视图，不会自动继续或调用模型。
             </p>
             <ol className="wb-hist__unfinished-list">
               {visibleUnfinished.map((operation) => {
@@ -803,42 +912,68 @@ export function GenerationHistory({
 
         {history.view === 'ready' ? (
           <>
-            <ol aria-label="当前场景的 AI 历史记录" className="wb-hist__list">
-              {history.items.map((item) => {
-                const row = historyRowViewOf(item)
-                return (
-                  <li className="wb-hist__item" key={item.checkpointId}>
-                    <span aria-hidden="true" className="wb-hist__node" />
-                    <button
-                      className="wb-hist__row"
-                      onClick={() => {
-                        lastOpened.current = item.checkpointId
-                        setSelectedId(item.checkpointId)
-                      }}
-                      ref={(node) => {
-                        if (node) {
-                          rowRefs.current.set(item.checkpointId, node)
-                          return
-                        }
-                        rowRefs.current.delete(item.checkpointId)
-                      }}
-                      title={row.summary}
-                      type="button"
-                    >
-                      <span className="wb-hist__time">{row.time}</span>
-                      <span className="wb-hist__main">
-                        <HistoryStatusBadge label={row.status} tone={row.tone} />
-                        <span className="wb-hist__message">{row.summary}</span>
-                      </span>
-                      <ChevronRight aria-hidden="true" className="wb-hist__chevron" />
-                    </button>
-                  </li>
-                )
-              })}
-            </ol>
+            <div className="wb-hist__timeline">
+              {daySections.map((section) => (
+                <section
+                  aria-label={`${section.label}的 AI 历史记录`}
+                  className="wb-hist__day"
+                  key={section.key}
+                >
+                  <div className="wb-hist__day-head">
+                    <CalendarDays aria-hidden="true" />
+                    <h3 className="wb-hist__day-label">{section.label}</h3>
+                    <span aria-hidden="true" className="wb-hist__day-line" />
+                  </div>
+                  <ol className="wb-hist__list">
+                    {section.items.map((item) => {
+                      const row = historyRowViewOf(item)
+                      return (
+                        <li className="wb-hist__item" key={item.checkpointId}>
+                          <button
+                            aria-label={`${row.time}，${row.status}，${row.summary}`}
+                            className="wb-hist__row"
+                            data-selected={lastViewedId === item.checkpointId}
+                            onClick={() => {
+                              lastOpened.current = item.checkpointId
+                              setLastViewedId(item.checkpointId)
+                              setSelectedId(item.checkpointId)
+                            }}
+                            ref={(node) => {
+                              if (node) {
+                                rowRefs.current.set(item.checkpointId, node)
+                                return
+                              }
+                              rowRefs.current.delete(item.checkpointId)
+                            }}
+                            title={row.summary}
+                            type="button"
+                          >
+                            <span className="wb-hist__time">
+                              <time dateTime={item.createdAt}>
+                                {historyTimeOfDay(item.createdAt)}
+                              </time>
+                            </span>
+                            <span aria-hidden="true" className="wb-hist__node" data-tone={row.tone}>
+                              <HistoryStatusGlyph status={row.status} />
+                            </span>
+                            <span className="wb-hist__main">
+                              <HistoryStatusBadge label={row.status} tone={row.tone} />
+                              <span className="wb-hist__message">{row.summary}</span>
+                            </span>
+                            <span aria-hidden="true" className="wb-hist__open">
+                              <span className="wb-hist__open-label">详情</span>
+                              <ChevronRight className="wb-hist__chevron" />
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                </section>
+              ))}
+            </div>
 
             <div className="wb-hist__footer">
-              <span className="wb-hist__count">已读取 {history.items.length} 条</span>
               {history.hasMore ? (
                 <button
                   className="wb-hist__more"
@@ -846,6 +981,7 @@ export function GenerationHistory({
                   onClick={history.loadMore}
                   type="button"
                 >
+                  <ChevronDown aria-hidden="true" />
                   {history.loadingMore ? '正在读取…' : '加载更多'}
                 </button>
               ) : (

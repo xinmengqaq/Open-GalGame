@@ -12,6 +12,70 @@
   font-size: 14px;
 }
 
+.host [data-sonner-toast] [data-description] {
+  white-space: pre-line;
+}
+
+.host:not(.embedded) [data-sonner-toast][data-type='success'][data-styled='true'] {
+  --normal-bg: color-mix(in srgb, var(--teal) 10%, var(--surface));
+  --normal-border: color-mix(in srgb, var(--teal) 42%, var(--line));
+  --normal-text: var(--teal-deep);
+  border-left: 3px solid var(--teal);
+}
+
+.host:not(.embedded) [data-sonner-toast][data-type='success'][data-styled='true'] [data-icon] {
+  color: var(--teal-deep);
+}
+
+.host:not(.embedded)
+  [data-sonner-toast][data-type='success'][data-styled='true']
+  [data-description] {
+  color: color-mix(in srgb, var(--teal-deep) 78%, var(--ink));
+}
+
+.host:not(.embedded) [data-sonner-toast][data-type='error'][data-styled='true'] {
+  --normal-bg: var(--surface-danger);
+  --normal-border: color-mix(in srgb, var(--rose) 44%, var(--line));
+  --normal-text: var(--error);
+  border-left: 3px solid var(--rose);
+}
+
+.host:not(.embedded) [data-sonner-toast][data-type='error'][data-styled='true'] [data-icon] {
+  color: var(--error);
+}
+
+.host:not(.embedded) [data-sonner-toast][data-type='error'][data-styled='true'] [data-description] {
+  color: color-mix(in srgb, var(--error) 82%, var(--ink));
+}
+
+.host:not(.embedded) [data-sonner-toast][data-styled='true'] [data-close-button] {
+  top: 0;
+  right: 0;
+  left: auto;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  transform: translate(35%, -35%);
+}
+
+.host:not(.embedded) [data-sonner-toast][data-styled='true'] [data-close-button]:hover {
+  border-color: var(--line-strong, var(--line));
+  background: var(--surface);
+  color: var(--ink-strong, var(--ink));
+}
+
+.host:not(.embedded) [data-sonner-toast][data-type='success'] [data-close-button] {
+  border-color: color-mix(in srgb, var(--teal) 34%, var(--line));
+  color: var(--teal-deep);
+}
+
+.host:not(.embedded) [data-sonner-toast][data-type='error'] [data-close-button] {
+  border-color: color-mix(in srgb, var(--rose) 38%, var(--line));
+  color: var(--error);
+}
+
 .host.embedded[data-sonner-toaster] {
   --normal-bg: transparent;
   --normal-border: transparent;
@@ -105,8 +169,104 @@
   height: 12px;
 }
 
+.host.embedded [data-sonner-toast][data-type='success'][data-styled='true'] {
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--wb-positive, var(--teal)) 7%, var(--wb-surface-solid, #fff)) 0%,
+    color-mix(in srgb, var(--wb-positive, var(--teal)) 14%, var(--lav)) 100%
+  );
+}
+
+.host.embedded [data-sonner-toast][data-type='error'][data-styled='true'] {
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--wb-danger, var(--rose)) 7%, var(--wb-surface-solid, #fff)) 0%,
+    color-mix(in srgb, var(--wb-danger, var(--rose)) 14%, var(--lav)) 100%
+  );
+}
+
+.host.embedded [data-sonner-toast][data-type='success'] [data-title] {
+  color: var(--wb-positive-strong, var(--teal-deep));
+}
+
+.host.embedded [data-sonner-toast][data-type='error'] [data-title] {
+  color: var(--wb-danger-strong, var(--error));
+}
+
+.host.embedded [data-sonner-toast][data-type='success'] [data-description] {
+  color: color-mix(
+    in srgb,
+    var(--wb-positive-strong, var(--teal-deep)) 74%,
+    var(--wb-text, var(--ink))
+  );
+}
+
+.host.embedded [data-sonner-toast][data-type='error'] [data-description] {
+  color: color-mix(in srgb, var(--wb-danger-strong, var(--error)) 74%, var(--wb-text, var(--ink)));
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .host.embedded [data-sonner-toast] {
+  :root:not([data-reduced-motion='full']) .host.embedded [data-sonner-toast] {
     transition: none;
+  }
+
+  /* Sonner 自带裸媒体查询会把系统 reduce 直接压成 transition/animation none。
+     显式关闭（根元素 full）时必须恢复 Sonner 的完整动效；显式开启或跟随
+     系统 reduce 仍由上面的规则和全局动效降级处理。 */
+  :root[data-reduced-motion='full'] .host [data-sonner-toast]:not([data-swiping='true']) {
+    transition:
+      transform 400ms,
+      opacity 400ms,
+      height 400ms,
+      box-shadow 200ms !important;
+  }
+
+  :root[data-reduced-motion='full']
+    .host
+    [data-sonner-toast][data-removed='true'][data-front='false'][data-expanded='false']:not(
+      [data-swiping='true']
+    ) {
+    transition:
+      transform 500ms,
+      opacity 200ms !important;
+  }
+
+  :root[data-reduced-motion='full'] .host [data-sonner-toast] > * {
+    transition: opacity 400ms !important;
+  }
+
+  :root[data-reduced-motion='full'] .host [data-sonner-toast] [data-close-button] {
+    transition:
+      opacity 100ms,
+      background 200ms,
+      border-color 200ms !important;
+  }
+
+  :root[data-reduced-motion='full'] .host [data-sonner-toast] [data-button] {
+    transition:
+      opacity 400ms,
+      box-shadow 200ms !important;
+  }
+
+  :root[data-reduced-motion='full'] .host [data-sonner-toast] .sonner-loader {
+    transition:
+      opacity 200ms,
+      transform 200ms !important;
+  }
+
+  :root[data-reduced-motion='full'] .host [data-sonner-toast] .sonner-loading-bar {
+    animation: sonner-spin 1.2s linear infinite !important;
+  }
+
+  :root[data-reduced-motion='full']
+    .host
+    [data-sonner-toast][data-promise='true']
+    [data-icon]
+    > svg {
+    animation: sonner-fade-in 300ms ease forwards !important;
+  }
+
+  :root[data-reduced-motion='full'] .host .sonner-loading-wrapper[data-visible='false'] {
+    animation: sonner-fade-out 0.2s ease forwards !important;
   }
 }

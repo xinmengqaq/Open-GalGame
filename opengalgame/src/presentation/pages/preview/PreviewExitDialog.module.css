@@ -102,9 +102,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .primary,
-  .secondary,
-  .quietDanger {
+  :root:not([data-reduced-motion='full']) .primary,
+  :root:not([data-reduced-motion='full']) .secondary,
+  :root:not([data-reduced-motion='full']) .quietDanger {
     transition: none;
   }
 }

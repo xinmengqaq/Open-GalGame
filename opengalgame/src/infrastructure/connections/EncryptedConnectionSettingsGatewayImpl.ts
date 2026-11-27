@@ -12,14 +12,14 @@ import {
   type StorageFailure
 } from '../storage/jsonDocument'
 import { parseUnknownValue } from '../validation/parseUnknownValue'
-import type { ConnectionSettingsGateway } from '@application/connections/ports/ConnectionSettingsGateway'
-import type { ConnectionSettingsVO } from '@application/connections/vo/ConnectionSettingsVO'
+import type { ConnectionSettingsGateway } from '@application/settings/connections/ports/ConnectionSettingsGateway'
+import type { ConnectionSettingsVO } from '@application/settings/connections/vo/ConnectionSettingsVO'
 import { AppException } from '@common/errors/AppException'
-import { ConnectionErrorCodes } from '@domain/connections/errors/ConnectionErrorCodes'
+import { ConnectionErrorCodes } from '@domain/settings/connections/errors/ConnectionErrorCodes'
 import type {
   ConnectionExtension,
   ConnectionSettingsInfo
-} from '@domain/connections/models/ConnectionSettings'
+} from '@domain/settings/connections/models/ConnectionSettings'
 
 const CONNECTION_MODELS_FILE_NAME = 'models.json'
 const CONNECTION_CREDENTIALS_FILE_NAME = 'credentials.json'

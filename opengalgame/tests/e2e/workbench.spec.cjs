@@ -1,6 +1,9 @@
 const { test, expect } = require('@playwright/test')
 
+const { seedGuidePreference } = require('./support/guide-preference.cjs')
+
 async function openWorkbench(page, search = '') {
+  await seedGuidePreference(page)
   await page.goto(`/${search}`)
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 10000 })
   await page.getByRole('button', { name: '项目选择' }).click()
@@ -179,6 +182,7 @@ test('浏览器只读夹具显示各类卡片与两条关联', async ({ page }) 
 })
 
 test('新建项目、重命名和编辑卡片弹窗视口居中，关闭重开仍居中', async ({ page }) => {
+  await seedGuidePreference(page)
   await page.goto('/')
   const newProject = page.getByRole('button', { name: /新建空白画布/ })
   await newProject.click()
@@ -245,10 +249,7 @@ test('导出与试玩预览在缺少可运行前置时保持禁用并给出可�
 
   const previewButton = page.getByRole('button', { name: '试玩预览', exact: true })
   await expect(previewButton).toBeDisabled()
-  await expect(previewButton).toHaveAttribute(
-    'title',
-    '暂时无法确认当前场景内容，不能打开试玩预览'
-  )
+  await expect(previewButton).toHaveAttribute('title', '暂时无法确认当前场景内容，不能打开试玩预览')
 
   const exportButton = page.getByRole('button', { name: '导出', exact: true })
   await expect(exportButton).toBeDisabled()

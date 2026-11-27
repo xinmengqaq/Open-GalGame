@@ -69,7 +69,7 @@ export function ImportResultDialog({
         )
       }
     >
-      {busy ? <StatusPanel status="busy" title="正在检查项目目录" detail="请稍候。" /> : null}
+      {busy ? <StatusPanel status="busy" title="正在检查项目目录" /> : null}
       {state === 'success' ? (
         <StatusPanel
           status="success"

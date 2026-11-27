@@ -1,5 +1,8 @@
-import { Check, CircleAlert, FolderOpen, Loader2, X } from 'lucide-react'
+import { Check, CircleAlert, FolderOpen, Info, Loader2, X } from 'lucide-react'
 import { useState, type ReactElement } from 'react'
+
+import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { failureOf } from '@presentation/feedback/failure'
 
 import styles from './SceneExportNotice.module.css'
 
@@ -11,14 +14,31 @@ export type SceneExportNotice = {
   directoryPath?: string | null
 }
 
-/** 打开目录失败时给用户的可执行下一步；具体失败不吞，仍由调用方保留异常。 */
-export const openDirectoryFailureNote = '无法打开文件夹，请手动打开上面的路径'
+/** 打开目录只代表请求已交给系统，窗口是否出现不在页面可观测范围内。 */
+export const openDirectoryRequestedHint = '请到系统窗口中查看'
+export const openDirectoryFailureInstruction = '请手动打开上面的路径'
+export const openDirectoryUnsupportedInstruction = '请手动复制上面的路径'
+
+export function openDirectoryFailureText(reason: string): string {
+  const detail = reason.trim()
+  return `${detail === '' ? '无法打开文件夹' : detail}；${openDirectoryFailureInstruction}`
+}
+
+export function openDirectoryUnsupportedText(reason: string): string {
+  const detail = reason.trim()
+  return `${detail === '' ? '当前环境不能打开本机目录' : detail}；${openDirectoryUnsupportedInstruction}`
+}
+
+type OpenDirectoryFeedback = {
+  state: 'opened' | 'failed' | 'unsupported'
+  message: string
+}
 
 interface SceneExportNoticeProps {
   notice: SceneExportNotice | null
   onDismiss: () => void
-  /** 交给系统打开产物目录；缺省时只展示路径，不显示打开按钮。 */
-  onOpenDirectory?: (directoryPath: string) => Promise<void>
+  /** 交给系统打开产物目录；成功时返回该次请求的提示语，缺省时只展示路径。 */
+  onOpenDirectory?: (directoryPath: string) => Promise<string>
 }
 
 /**
@@ -45,7 +65,7 @@ export function SceneExportNoticeCard({
 interface SceneExportNoticeContentProps {
   notice: SceneExportNotice
   onDismiss: () => void
-  onOpenDirectory?: (directoryPath: string) => Promise<void>
+  onOpenDirectory?: (directoryPath: string) => Promise<string>
 }
 
 /** 每次导出提示变化都从头展示：旧的“打开中/失败”不带到新结果上。 */
@@ -55,20 +75,36 @@ function SceneExportNoticeContent({
   onOpenDirectory
 }: SceneExportNoticeContentProps): ReactElement {
   const [opening, setOpening] = useState(false)
-  const [openError, setOpenError] = useState<string | null>(null)
+  const [openFeedback, setOpenFeedback] = useState<OpenDirectoryFeedback | null>(null)
 
   const directoryPath = notice.tone === 'ok' ? (notice.directoryPath ?? null) : null
   const canDismiss = notice.tone !== 'busy'
   const title = notice.detail ?? notice.label
+  const openUnsupported = openFeedback?.state === 'unsupported'
 
   const openDirectory = async (): Promise<void> => {
-    if (opening || directoryPath === null || onOpenDirectory === undefined) return
+    if (opening || openUnsupported || directoryPath === null || onOpenDirectory === undefined) {
+      return
+    }
     setOpening(true)
-    setOpenError(null)
+    setOpenFeedback(null)
     try {
-      await onOpenDirectory(directoryPath)
-    } catch {
-      setOpenError(openDirectoryFailureNote)
+      const requestedMessage = await onOpenDirectory(directoryPath)
+      const detail = requestedMessage.trim()
+      setOpenFeedback({
+        state: 'opened',
+        message:
+          detail === ''
+            ? `已请求系统打开；${openDirectoryRequestedHint}`
+            : `${detail}；${openDirectoryRequestedHint}`
+      })
+    } catch (error) {
+      const failure = failureOf(error)
+      setOpenFeedback(
+        failure.code === ErrorCodes.forbidden
+          ? { state: 'unsupported', message: openDirectoryUnsupportedText(failure.msg) }
+          : { state: 'failed', message: openDirectoryFailureText(failure.msg) }
+      )
     } finally {
       setOpening(false)
     }
@@ -104,9 +140,20 @@ function SceneExportNoticeContent({
             </code>
           </div>
         )}
-        {openError === null ? null : (
-          <p className={styles.openError} role="alert">
-            {openError}
+        {openFeedback === null ? null : (
+          <p
+            className={styles.openFeedback}
+            data-state={openFeedback.state}
+            role={openFeedback.state === 'failed' ? 'alert' : undefined}
+          >
+            {openFeedback.state === 'opened' ? (
+              <Check aria-hidden="true" />
+            ) : openFeedback.state === 'failed' ? (
+              <CircleAlert aria-hidden="true" />
+            ) : (
+              <Info aria-hidden="true" />
+            )}
+            <span>{openFeedback.message}</span>
           </p>
         )}
         {directoryPath === null || onOpenDirectory === undefined ? null : (
@@ -114,16 +161,20 @@ function SceneExportNoticeContent({
             <button
               type="button"
               className={styles.openAction}
-              disabled={opening}
+              disabled={opening || openUnsupported}
               aria-busy={opening || undefined}
               onClick={() => void openDirectory()}
             >
               {opening ? (
                 <Loader2 className={styles.spinner} aria-hidden="true" />
+              ) : openUnsupported ? (
+                <Info aria-hidden="true" />
               ) : (
                 <FolderOpen aria-hidden="true" />
               )}
-              <span>{opening ? '正在打开…' : '打开所在文件夹'}</span>
+              <span>
+                {opening ? '正在打开…' : openUnsupported ? '当前环境不能打开' : '打开所在文件夹'}
+              </span>
             </button>
           </div>
         )}

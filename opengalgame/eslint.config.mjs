@@ -112,6 +112,8 @@ export default defineConfig(
         { type: 'presentation', pattern: 'src/presentation', mode: 'folder' },
         { type: 'application-contracts', pattern: 'src/application/*/dto', mode: 'folder' },
         { type: 'application-contracts', pattern: 'src/application/*/vo', mode: 'folder' },
+        { type: 'application-contracts', pattern: 'src/application/*/*/dto', mode: 'folder' },
+        { type: 'application-contracts', pattern: 'src/application/*/*/vo', mode: 'folder' },
         { type: 'interfaces', pattern: 'src/interfaces', mode: 'folder' },
         { type: 'application', pattern: 'src/application', mode: 'folder' },
         { type: 'domain', pattern: 'src/domain', mode: 'folder' },

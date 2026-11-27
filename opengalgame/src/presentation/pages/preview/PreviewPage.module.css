@@ -147,8 +147,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .statePrimary,
-  .stateSecondary {
+  :root:not([data-reduced-motion='full']) .statePrimary,
+  :root:not([data-reduced-motion='full']) .stateSecondary {
     transition: none;
   }
 }

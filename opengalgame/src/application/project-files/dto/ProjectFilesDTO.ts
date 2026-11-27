@@ -1,5 +1,11 @@
+import type { ProjectFileAssetKind } from '../vo/ProjectInputSourceVO'
+
 export type InspectProjectFilesDTO = {
   projectId: string
+}
+
+export type ChooseProjectFilesDTO = {
+  mediaKinds?: readonly ProjectFileAssetKind[]
 }
 
 export type ListProjectInputSourcesDTO = {

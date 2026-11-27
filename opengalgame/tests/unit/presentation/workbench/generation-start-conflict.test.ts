@@ -55,6 +55,7 @@ function renderConversation(
   return renderToStaticMarkup(
     createElement(GenerationConversation, {
       status: renderStatus,
+      cards: [],
       progress: [],
       draft: emptyDraft,
       pending: false,

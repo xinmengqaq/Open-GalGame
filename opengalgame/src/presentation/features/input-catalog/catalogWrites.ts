@@ -21,6 +21,7 @@ import { workbenchFeedback } from '../../feedback/workbenchFeedback'
 import { findFreeCanvasPosition } from '../scene-canvas/canvasPlacement'
 import { defaultCardSize, sourceCardKindOf } from '../workbench-session/contentKindLabel'
 import { getActiveWorkbenchCommands } from '../workbench-session/workbenchCommands'
+import type { ImportedSourcesHandler } from '../workbench-session/workbenchActionObservers'
 import { useWorkbenchSessionStore } from '../workbench-session/workbenchSession.store'
 import {
   catalogVersion,
@@ -28,15 +29,20 @@ import {
   reloadCatalog,
   stillCurrentProject
 } from './catalogSession'
-import type { CatalogFolderId, CatalogNameDialog } from './inputCatalog.types'
+import { inputCatalogMediaKindOf } from './inputCatalogMediaAvailability'
+import type {
+  CatalogFolderId,
+  CatalogImportedSource,
+  CatalogImportOptions,
+  CatalogImportOutcome,
+  CatalogNameDialog
+} from './inputCatalog.types'
 
 let writeInFlight = false
 const unresolvedCatalogProjects = new Map<string, Set<string>>()
 
 export function isUncertainCatalogWrite(failure: FailureState): boolean {
-  return (
-    failure.code === COMMIT_UNCLEAR_CODE || failure.code === COMMUNICATION_FAILED_CODE
-  )
+  return failure.code === COMMIT_UNCLEAR_CODE || failure.code === COMMUNICATION_FAILED_CODE
 }
 
 function rememberUnresolved(projectId: string, operationId: string): void {
@@ -66,9 +72,7 @@ export async function resolveCatalogWrite(
     linked: boolean
   }
   try {
-    fact = requireSuccess(
-      await client.readProjectFileOperation({ projectId, operationId })
-    )
+    fact = requireSuccess(await client.readProjectFileOperation({ projectId, operationId }))
   } catch (error) {
     rememberUnresolved(projectId, operationId)
     throw new AppException({
@@ -134,8 +138,7 @@ export async function settleCatalogProjectAfterOpen(
         clearUnresolved(projectId, item.operationId)
       }
     }
-  } catch {
-  }
+  } catch {}
   if (catalogProjectNeedsRecovery(projectId) && stillCurrentProject(projectId)) {
     toast(workbenchFeedback.catalogWriteNeedsRecovery)
   }
@@ -168,7 +171,8 @@ export async function importDroppedFiles(
   parentFolderId: CatalogFolderId,
   fileList: FileList,
   busy: boolean,
-  setBusy: (value: boolean) => void
+  setBusy: (value: boolean) => void,
+  onImported?: ImportedSourcesHandler
 ): Promise<void> {
   if (projectId.length === 0 || fileList.length === 0) return
   if (!beginCatalogWrite(projectId, busy, setBusy)) return
@@ -185,7 +189,7 @@ export async function importDroppedFiles(
     if (!stillCurrentProject(projectId)) return
     for (const failure of conversionFailures) toast(failure.msg)
     if (paths.length === 0) return
-    await importLocalPaths(client, queryClient, projectId, parentFolderId, paths)
+    await importLocalPaths(client, queryClient, projectId, parentFolderId, paths, onImported)
   } finally {
     endCatalogWrite(projectId, setBusy)
   }
@@ -197,20 +201,39 @@ export async function chooseAndImport(
   projectId: string,
   parentFolderId: CatalogFolderId,
   busy: boolean,
-  setBusy: (value: boolean) => void
-): Promise<void> {
-  if (projectId.length === 0) return
-  if (!beginCatalogWrite(projectId, busy, setBusy)) return
+  setBusy: (value: boolean) => void,
+  onImported?: ImportedSourcesHandler,
+  options?: CatalogImportOptions
+): Promise<CatalogImportOutcome> {
+  if (projectId.length === 0) return { status: 'not-started' }
+  if (!beginCatalogWrite(projectId, busy, setBusy)) return { status: 'not-started' }
   try {
-    const chosen = requireSuccess(await client.chooseProjectFiles())
-    if (chosen === null || !stillCurrentProject(projectId)) return
-    await importLocalPaths(client, queryClient, projectId, parentFolderId, chosen)
+    let chosen: readonly string[] | null
+    try {
+      const request =
+        options?.mediaKinds && options.mediaKinds.length > 0
+          ? { mediaKinds: options.mediaKinds }
+          : null
+      chosen = requireSuccess(
+        request === null
+          ? await client.chooseProjectFiles()
+          : await client.chooseProjectFiles(request)
+      )
+    } catch (error) {
+      // 选择器或浏览器暂存失败发生在工程写入之前，不能算作写入结果不明。
+      if (!stillCurrentProject(projectId)) return { status: 'not-started' }
+      toast(failureOf(error).msg)
+      return { status: 'failed' }
+    }
+    if (chosen === null) return { status: 'cancelled' }
+    if (!stillCurrentProject(projectId)) return { status: 'not-started' }
+    return await importLocalPaths(client, queryClient, projectId, parentFolderId, chosen, onImported)
   } catch (error) {
     const failure = failureOf(error)
-    if (isUncertainCatalogWrite(failure) || failure.code === CATALOG_WRITE_FAILED_CODE) {
-      throw error
-    }
+    if (isUncertainCatalogWrite(failure)) return { status: 'unconfirmed' }
+    if (failure.code === CATALOG_WRITE_FAILED_CODE) throw error
     if (stillCurrentProject(projectId)) toast(failure.msg)
+    return { status: 'failed' }
   } finally {
     endCatalogWrite(projectId, setBusy)
   }
@@ -252,9 +275,7 @@ async function resolveImportOperations(
       pending: true
     }
   }
-  const states = new Map(
-    (resolved ?? []).map((item) => [item.operationId, item.state] as const)
-  )
+  const states = new Map((resolved ?? []).map((item) => [item.operationId, item.state] as const))
   let committed = 0
   const definiteFailed: string[] = []
   const unverified: string[] = []
@@ -280,14 +301,23 @@ async function resolveImportOperations(
   return { committed, definiteFailed, unverified, pending }
 }
 
+/**
+ * 提交不明时按操作标识恢复。恢复结果只有操作状态，没有操作到来源明细的可靠
+ * 映射；因此即使有已提交项也只重载目录并返回 unconfirmed，不按目录差集推断
+ * 本次目标类别，也不发布假的 sourceImported。重载后的来源仍可供用户实际拖卡。
+ */
 async function importLocalPaths(
   client: ProjectFilesClient,
   queryClient: QueryClient,
   projectId: string,
   parentFolderId: CatalogFolderId,
-  localFilePaths: readonly string[]
-): Promise<void> {
+  localFilePaths: readonly string[],
+  onImported?: ImportedSourcesHandler
+): Promise<CatalogImportOutcome> {
   const operationIds = importOperationIds(localFilePaths)
+  let recovery: ImportRecovery | null = null
+  let pendingError: AppException | null = null
+  let outcome: CatalogImportOutcome = { status: 'none' }
   try {
     const catalog = queryClient.getQueryData<ProjectInputCatalogVO>(
       projectInputSourcesQueryKey(projectId)
@@ -301,16 +331,18 @@ async function importLocalPaths(
         expectedCatalogVersion: catalog?.catalogVersion ?? ''
       })
     )
-    if (stillCurrentProject(projectId)) toastImportResult(result)
+    if (stillCurrentProject(projectId)) {
+      toastImportResult(result)
+      const sources = importedSourcesOf(projectId, result)
+      if (sources.length > 0) {
+        onImported?.(sources)
+        outcome = { status: 'imported', sources }
+      }
+    }
   } catch (error) {
     const failure = failureOf(error)
     if (isUncertainCatalogWrite(failure)) {
-      const recovery = await resolveImportOperations(
-        client,
-        projectId,
-        operationIds,
-        localFilePaths
-      )
+      recovery = await resolveImportOperations(client, projectId, operationIds, localFilePaths)
       if (stillCurrentProject(projectId)) {
         if (recovery.committed > 0) {
           toast(workbenchFeedback.importImported(recovery.committed))
@@ -324,7 +356,7 @@ async function importLocalPaths(
         if (recovery.pending) toast(workbenchFeedback.catalogWriteNeedsRecovery)
       }
       if (recovery.pending) {
-        throw new AppException({
+        pendingError = new AppException({
           code: COMMIT_UNCLEAR_CODE,
           msg: workbenchFeedback.catalogWriteNeedsRecovery
         })
@@ -335,7 +367,15 @@ async function importLocalPaths(
   }
   if (stillCurrentProject(projectId)) {
     await reloadCatalog(client, queryClient, projectId)
+    if (recovery) {
+      outcome =
+        recovery.pending || recovery.committed > 0
+          ? { status: 'unconfirmed' }
+          : { status: 'none' }
+    }
   }
+  if (pendingError) throw pendingError
+  return outcome
 }
 
 function toastImportResult(result: ImportProjectFilesVO): void {
@@ -345,6 +385,18 @@ function toastImportResult(result: ImportProjectFilesVO): void {
   for (const file of result.failedFiles) {
     toast(workbenchFeedback.importFailedItem(file.fileName, file.message))
   }
+}
+
+function importedSourcesOf(
+  projectId: string,
+  result: ImportProjectFilesVO
+): readonly CatalogImportedSource[] {
+  return result.importedFiles.map((source) => ({
+    projectId,
+    sourceId: source.sourceId,
+    contentKind: source.contentKind,
+    candidateKind: inputCatalogMediaKindOf(source)
+  }))
 }
 
 export async function openSourceFile(

@@ -350,7 +350,7 @@ export class FileVersionOperationRecordGateway implements VersionOperationRecord
       try {
         root = await resolveProjectWorkRoot(this.userDirectory, registration.id)
       } catch (error) {
-        if (error instanceof AppException) throw unreadableRecord()
+        if (projectLocationMissing(error)) continue
         throw error
       }
       if (!(await repositoryMetadataReadable(root))) continue
@@ -470,6 +470,14 @@ function unreadableRecord(): AppException {
     msg: '版本记录无法读取'
   })
 }
+
+function projectLocationMissing(error: unknown): boolean {
+  if (!(error instanceof AppException)) return false
+  if (error.code !== ProjectVersioningErrorCodes.gitUnavailable) return false
+  const code = (error.cause as NodeJS.ErrnoException | undefined)?.code
+  return code === 'ENOENT' || code === 'ENOTDIR'
+}
+
 async function repositoryMetadataReadable(projectRoot: string): Promise<boolean> {
   let stats
   try {

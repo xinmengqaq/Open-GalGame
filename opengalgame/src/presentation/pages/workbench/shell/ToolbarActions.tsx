@@ -64,6 +64,7 @@ export function ToolbarActions({
           <button
             type="button"
             className={styles.saveButton}
+            data-guide-target="canvas-save"
             data-saving={saving}
             aria-busy={saving || undefined}
             disabled={save.disabled}

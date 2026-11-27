@@ -13,20 +13,31 @@
 }
 
 .backButton {
-  display: grid;
-  width: 38px;
-  height: 38px;
+  display: inline-flex;
+  min-height: 38px;
   flex: none;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px 0 11px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--paper-strong) 48%, transparent);
   color: var(--ink-strong);
+  font-family: var(--font-sans);
   box-shadow: 0 10px 22px -20px var(--purple-shadow);
   transition:
     background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
     transform var(--duration-fast) var(--ease-out);
+}
+
+.backLabel {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .backButton:hover:not(:disabled) {
@@ -41,7 +52,8 @@
 }
 
 .backButton:focus-visible {
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--purple) 72%, transparent);
+  outline-offset: 3px;
   box-shadow:
     0 0 0 2px var(--paper-strong),
     0 0 0 5px color-mix(in srgb, var(--purple) 55%, transparent);
@@ -275,13 +287,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .backButton,
-  .historyButton,
-  .saveButton {
+  :root:not([data-reduced-motion='full']) .backButton,
+  :root:not([data-reduced-motion='full']) .historyButton,
+  :root:not([data-reduced-motion='full']) .saveButton {
     transition: none;
   }
 
-  .spin {
+  :root:not([data-reduced-motion='full']) .spin {
     animation: none;
   }
 }

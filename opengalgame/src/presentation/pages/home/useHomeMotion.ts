@@ -2,6 +2,7 @@ import { useGSAP } from '@gsap/react'
 import gsap from 'gsap'
 import type { RefObject } from 'react'
 
+import { prefersReducedMotion, subscribeReducedMotion } from '../../effects/motion'
 import { useNavigationStore } from '../../stores/navigation.store'
 
 interface HomeMotionRefs {
@@ -47,23 +48,60 @@ export function useHomeMotion(refs: HomeMotionRefs): void {
       const gearIcon = refs.gearIcon.current
       const plusHalo = createButton?.querySelector('[data-plus-halo]')
       const listLines = projectsButton?.querySelectorAll('[data-list-line]') ?? []
+      const starA = root.querySelector('[data-parallax="star-a"]')
+      const starB = root.querySelector('[data-parallax="star-b"]')
       const safe = contextSafe!
 
-      gsap.set([plusIcon, gearIcon, downloadIcon, arrowIcon], { transformOrigin: '50% 50%' })
+      gsap.set([plusIcon, gearIcon, downloadIcon, arrowIcon], {
+        transformOrigin: '50% 50%'
+      })
       gsap.set(listLines, { transformOrigin: 'left center' })
 
-      const mm = gsap.matchMedia()
-
-      mm.add('(prefers-reduced-motion: reduce)', () => {
-        if (useNavigationStore.getState().hasPlayedHomeIntro) return
-        gsap.from([chrome, title1, title2, entries, hero, speech], {
-          autoAlpha: 0,
-          duration: 0.2
+      const resetMotion = (): void => {
+        gsap.killTweensOf([
+          chrome,
+          title1,
+          title2,
+          accent,
+          hero,
+          circle,
+          speech,
+          entries,
+          importButton,
+          projectsButton,
+          createButton,
+          settingsButton,
+          downloadIcon,
+          arrowIcon,
+          plusIcon,
+          gearIcon,
+          plusHalo,
+          listLines,
+          starA,
+          starB
+        ])
+        gsap.set([chrome, title1, title2, accent, hero, circle, speech, entries, starA, starB], {
+          clearProps: 'transform,opacity,visibility'
         })
-        useNavigationStore.getState().markHomeIntroPlayed()
-      })
+        gsap.set([importButton, arrowIcon, plusIcon, gearIcon, downloadIcon], {
+          clearProps: 'transform,opacity,visibility'
+        })
+        gsap.set(listLines, { clearProps: 'transform,opacity,visibility' })
+        if (plusHalo) gsap.set(plusHalo, { clearProps: 'transform,opacity' })
+      }
 
-      mm.add('(prefers-reduced-motion: no-preference)', () => {
+      const runReduced = (): (() => void) => {
+        if (!useNavigationStore.getState().hasPlayedHomeIntro) {
+          gsap.from([chrome, title1, title2, entries, hero, speech], {
+            autoAlpha: 0,
+            duration: 0.2
+          })
+          useNavigationStore.getState().markHomeIntroPlayed()
+        }
+        return resetMotion
+      }
+
+      const runFull = (): (() => void) => {
         const { hasPlayedHomeIntro: played, markHomeIntroPlayed: markPlayed } =
           useNavigationStore.getState()
         if (!played) {
@@ -164,8 +202,6 @@ export function useHomeMotion(refs: HomeMotionRefs): void {
         settingsButton?.addEventListener('pointerleave', onGearLeave, listenerOptions)
 
         const visual = refs.visual.current
-        const starA = root.querySelector('[data-parallax="star-a"]')
-        const starB = root.querySelector('[data-parallax="star-b"]')
         if (visual) {
           const layers = [
             { el: circle, amp: 6 },
@@ -214,8 +250,24 @@ export function useHomeMotion(refs: HomeMotionRefs): void {
         }
         document.addEventListener('visibilitychange', onVisibility, listenerOptions)
 
-        return () => listeners.abort()
-      })
+        return () => {
+          listeners.abort()
+          resetMotion()
+        }
+      }
+
+      let cleanup: (() => void) | undefined
+      const applyMotion = (reduced: boolean): void => {
+        cleanup?.()
+        cleanup = reduced ? runReduced() : runFull()
+      }
+      applyMotion(prefersReducedMotion())
+      const unsubscribe = subscribeReducedMotion(applyMotion)
+
+      return () => {
+        unsubscribe()
+        cleanup?.()
+      }
     },
     { scope: refs.root }
   )

@@ -79,8 +79,18 @@ export function useCandidatePreview(options: {
   readonly previewClient: CandidateReadClient | null
   readonly target: CandidatePreviewTarget | null
   readonly active?: boolean
+  /** 候选预览会话真正打开后调用；打开失败不调用。 */
+  readonly onOpened?: (candidateSnapshotId: string) => void
+  /** 离开候选视图或组件卸载导致预览会话关闭时调用；换候选不发。 */
+  readonly onReturned?: (candidateSnapshotId: string) => void
 }): CandidatePreviewController {
   const { generationClient, previewClient, target, active = true } = options
+  const onOpenedRef = useRef(options.onOpened)
+  const onReturnedRef = useRef(options.onReturned)
+  useEffect(() => {
+    onOpenedRef.current = options.onOpened
+    onReturnedRef.current = options.onReturned
+  }, [options.onOpened, options.onReturned])
   const [state, dispatch] = useReducer(candidatePreviewReducer, initialCandidatePreviewState)
   const [reopenNonce, setReopenNonce] = useState(0)
   const sessionRef = useRef<ActiveSession | null>(null)
@@ -90,6 +100,7 @@ export function useCandidatePreview(options: {
   const targetRef = useRef(target)
   const openedTargetRef = useRef('')
   const reopenRequestedRef = useRef(false)
+  const openedCandidateRef = useRef<string | null>(null)
   const phase = candidatePreviewPhaseOf(state)
 
   useEffect(() => {
@@ -231,6 +242,12 @@ export function useCandidatePreview(options: {
         stageUrl: opened.data.url,
         expiresAt: Number.isFinite(expiresAt) ? expiresAt : null
       })
+      openedCandidateRef.current = opened.data.candidateSnapshotId
+      try {
+        onOpenedRef.current?.(opened.data.candidateSnapshotId)
+      } catch {
+        // 指引观察者异常不能打断候选预览。
+      }
       stop = subscribeCandidateStage(
         previewClient,
         {
@@ -262,6 +279,37 @@ export function useCandidatePreview(options: {
       }
     }
   }, [active, generationClient, previewClient, readFromSession, reopenNonce, targetKey])
+
+  useEffect(() => {
+    if (active) return
+    const opened = openedCandidateRef.current
+    if (!opened) return
+    openedCandidateRef.current = null
+    try {
+      onReturnedRef.current?.(opened)
+    } catch {
+      // 指引观察者异常不能改变离开候选视图的行为。
+    }
+  }, [active])
+
+  useEffect(() => {
+    // 被新候选替换不是“返回”，旧候选的返回事实不应补发。
+    openedCandidateRef.current = null
+  }, [targetKey])
+
+  useEffect(
+    () => () => {
+      const opened = openedCandidateRef.current
+      if (!opened) return
+      openedCandidateRef.current = null
+      try {
+        onReturnedRef.current?.(opened)
+      } catch {
+        // 指引观察者异常不能改变抽屉关闭行为。
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     if (phase !== 'opening' || state.openingStalled) return

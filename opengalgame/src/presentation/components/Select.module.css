@@ -6,10 +6,10 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid #d7c8e8;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: #fff;
-  color: #3b365f;
+  background: var(--surface);
+  color: var(--text-primary);
   text-align: left;
   font: inherit;
   font-weight: 500;
@@ -17,8 +17,8 @@
 
 .trigger:focus-visible,
 .trigger[aria-expanded='true'] {
-  border-color: #9a5abd;
-  box-shadow: 0 0 0 3px #9a5abd33;
+  border-color: var(--accent);
+  box-shadow: var(--ring-focus);
   outline: none;
 }
 
@@ -52,12 +52,12 @@
 .menu {
   z-index: 12;
   width: var(--radix-select-trigger-width);
-  border: 1px solid #d7c8e8;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: #fffcf7;
+  background: var(--surface-raised);
   box-shadow:
     0 16px 36px #3b365f28,
-    3px 3px 0 #cbb6de;
+    3px 3px 0 var(--border-strong);
 }
 
 .viewport {
@@ -72,19 +72,19 @@
   min-height: 40px;
   padding: 8px 12px;
   border-radius: 6px;
-  color: #3b365f;
+  color: var(--text-primary);
   text-align: left;
   font: inherit;
   cursor: pointer;
 }
 
 .option[data-highlighted] {
-  background: #f3eaf8;
+  background: var(--accent-soft);
   outline: none;
 }
 
 .option[data-state='checked'] {
-  color: #4a3e6e;
+  color: var(--accent-strong);
   font-weight: 700;
 }
 
@@ -182,8 +182,96 @@
   font-weight: 700;
 }
 
+:global([data-theme='home']) .trigger {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-color: transparent;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper-strong) 62%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 72%, transparent);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 500;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+:global([data-theme='home']) .trigger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--paper-strong) 78%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+:global([data-theme='home']) .trigger:focus-visible,
+:global([data-theme='home']) .trigger[aria-expanded='true'] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--paper-strong) 88%, transparent);
+  box-shadow:
+    0 0 0 2px var(--paper-strong),
+    0 0 0 5px color-mix(in srgb, var(--purple) 44%, transparent);
+  outline: none;
+}
+
+:global([data-theme='home']) .trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+:global([data-theme='home']) .chevron {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+:global([data-theme='home']) .menu {
+  z-index: 12;
+  width: var(--radix-select-trigger-width);
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--paper-strong) 92%, var(--lav));
+  box-shadow: var(--shadow-panel);
+  font-family: var(--font-sans);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: menuIn var(--duration-fast) var(--ease-out);
+}
+
+:global([data-theme='home']) .viewport {
+  max-height: min(240px, var(--radix-select-content-available-height));
+  padding: 6px;
+}
+
+:global([data-theme='home']) .option {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+:global([data-theme='home']) .option[data-highlighted] {
+  background: var(--purple-wash);
+  color: var(--ink-strong);
+  outline: none;
+}
+
+:global([data-theme='home']) .option[data-state='checked'] {
+  color: var(--purple-deep);
+  font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  :global([data-theme='workbench']) .menu {
+  :root:not([data-reduced-motion='full']) :global([data-theme='workbench']) .menu,
+  :root:not([data-reduced-motion='full']) :global([data-theme='home']) .menu {
     animation: none;
   }
 }

@@ -1,4 +1,4 @@
-import { CircleAlert, FolderOpen, HardDrive, Loader2 } from 'lucide-react'
+import { Check, CircleAlert, Clapperboard, FolderOpen, HardDrive, Loader2 } from 'lucide-react'
 import { useId, type ReactElement } from 'react'
 
 import { Button } from '@presentation/components/Button'
@@ -12,6 +12,12 @@ import theme from '@presentation/pages/workbench/workbenchTheme.module.css'
 
 import type { WorkbenchExportDestinationDialog } from './useWorkbenchExportController'
 import styles from './SceneExportDialog.module.css'
+
+export interface SceneExportDialogProps extends WorkbenchExportDestinationDialog {
+  /** 导出源的真实工程与场景身份；不展示路径或版本号。 */
+  readonly projectName?: string
+  readonly sceneLabel?: string
+}
 
 /**
  * 两个导出入口共用的目的地弹窗。
@@ -31,8 +37,10 @@ export function SceneExportDialog({
   selectMode,
   choose,
   confirm,
-  close
-}: WorkbenchExportDestinationDialog): ReactElement {
+  close,
+  projectName,
+  sceneLabel
+}: SceneExportDialogProps): ReactElement {
   const missingSelection = mode === 'selected' && selection === null
   const feedbackId = useId()
   const feedback = dialogFeedbackOf({
@@ -69,9 +77,20 @@ export function SceneExportDialog({
           </div>
         </header>
         <div className={styles.body}>
-          <p className={styles.intro}>
-            选择产物存放位置。导出只读取已保存的当前场景，不会改动作品内容。
-          </p>
+          <div className={styles.source}>
+            <span aria-hidden="true" className={styles.sourceArt}>
+              <Clapperboard />
+            </span>
+            <span className={styles.sourceCopy}>
+              <span className={styles.sourceLabel}>导出源</span>
+              <strong>{projectName || '当前工程'}</strong>
+              <span className={styles.sourceScene}>{sceneLabel || '当前场景'}</span>
+            </span>
+            <span className={styles.sourceState}>
+              <Check aria-hidden="true" />
+              已保存版本
+            </span>
+          </div>
           <fieldset className={styles.options}>
             <legend className={styles.legend}>导出位置</legend>
             <label className={styles.option} data-selected={mode === 'workspace'}>
@@ -144,6 +163,7 @@ export function SceneExportDialog({
             取消
           </Button>
           <Button
+            data-guide-target="export-confirm"
             onClick={confirm}
             disabled={choosing || missingSelection}
             aria-describedby={feedback === null ? undefined : feedbackId}

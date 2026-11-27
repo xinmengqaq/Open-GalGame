@@ -48,7 +48,11 @@ export const rendererConfig: UserConfig = {
     'import.meta.env.VITE_OPENGALGAME_BROWSER_FILES': JSON.stringify(browserFiles),
     __APP_VERSION__: JSON.stringify(appVersion)
   },
-  plugins: [react(), tailwindcss(), ...(browserFiles === 'real' ? [browserDevFilesPlugin()] : [])],
+  plugins: [
+    react({ exclude: [/\/node_modules\//, /\/vendor\/md-blockkit\//] }),
+    tailwindcss(),
+    ...(browserFiles === 'real' ? [browserDevFilesPlugin()] : [])
+  ],
   resolve: {
     alias: rendererAliases,
     dedupe: ['react', 'react-dom']

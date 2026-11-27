@@ -10,7 +10,7 @@ import { useShallow } from 'zustand/react/shallow'
 
 import { DocumentContentView } from './DocumentContentView'
 import { DocumentLayerHeader } from './DocumentLayerHeader'
-import { useDocumentBody } from './useDocumentLayer'
+import { documentBodyDisplayable, useDocumentBody } from './useDocumentLayer'
 import { useDocumentBodyEditor } from './useDocumentBodyEditor'
 import { useDocumentLayerMotion } from './useDocumentLayerMotion'
 import styles from './DocumentLayer.module.css'
@@ -45,10 +45,18 @@ function DocumentLayerContent({
   const backButtonRef = useRef<HTMLButtonElement>(null)
   const titleId = `document-layer-title-${card.cardId}`
   const dirtyRef = useRef(editor.dirty)
+  const bodyDisplayable = documentBodyDisplayable(view)
 
   useEffect(() => {
     dirtyRef.current = editor.dirty
   }, [editor.dirty])
+
+  // 打开文档层不等同于读到正文：等缓存或异步读取真正产出可显示正文后再上报。
+  // 加载失败、加载中、空正文都不上报；关闭/切卡后由命令层按当前文档层丢弃。
+  useEffect(() => {
+    if (!bodyDisplayable) return
+    commands.reportDocumentBodyReady(card.cardId)
+  }, [bodyDisplayable, card.cardId, commands])
 
   const close = useCallback(() => {
     if (dirtyRef.current && !window.confirm('正文有未保存的改动，确定关闭文档层吗？')) return
@@ -70,6 +78,9 @@ function DocumentLayerContent({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
+        // 教程/业务原生 dialog 在 top layer 且是更上层的模态；让它的 cancel
+        // 处理 Esc，否则文档层会先吞掉按键并错误关闭自己。
+        if (document.querySelector('dialog[open]')) return
         event.preventDefault()
         event.stopImmediatePropagation()
         close()

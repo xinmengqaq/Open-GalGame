@@ -484,7 +484,6 @@
   height: 16px;
 }
 
-
 .moreWrap {
   position: static;
 }
@@ -812,25 +811,25 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .back,
-  .secondaryAction,
-  .saveButton,
-  .moreTrigger,
-  .moreChevron,
-  .menuItem,
-  .shelf,
-  .toastSlot,
-  .sceneToolHint {
+  :root:not([data-reduced-motion='full']) .back,
+  :root:not([data-reduced-motion='full']) .secondaryAction,
+  :root:not([data-reduced-motion='full']) .saveButton,
+  :root:not([data-reduced-motion='full']) .moreTrigger,
+  :root:not([data-reduced-motion='full']) .moreChevron,
+  :root:not([data-reduced-motion='full']) .menuItem,
+  :root:not([data-reduced-motion='full']) .shelf,
+  :root:not([data-reduced-motion='full']) .toastSlot,
+  :root:not([data-reduced-motion='full']) .sceneToolHint {
     transition: none;
   }
 
-  .back:hover,
-  .secondaryAction:hover:not(:disabled),
-  .saveButton:hover:not(:disabled) {
+  :root:not([data-reduced-motion='full']) .back:hover,
+  :root:not([data-reduced-motion='full']) .secondaryAction:hover:not(:disabled),
+  :root:not([data-reduced-motion='full']) .saveButton:hover:not(:disabled) {
     transform: none;
   }
 
-  .saveSpinner {
+  :root:not([data-reduced-motion='full']) .saveSpinner {
     animation: none;
   }
 }

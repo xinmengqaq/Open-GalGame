@@ -14,7 +14,7 @@ import { LangChainAgentFactoryImpl } from '@infrastructure/ai/factories/LangChai
 import { LangChainModelFactory } from '@infrastructure/ai/models/LangChainModelFactory'
 import { FilePromptLoader } from '@infrastructure/ai/prompts/FilePromptLoader'
 import { createWorkspaceFileTools } from '@infrastructure/ai/tools/WorkspaceFileTools'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 const enabled = process.env.OPENGALGAME_RUN_REAL_MODEL === '1'
 

@@ -28,7 +28,6 @@ export function InputCatalogHeader({ status, error }: InputCatalogHeaderProps): 
             场景来源
           </p>
           <h2>输入目录</h2>
-          <p className={styles.headerHint}>拖入画布使用，双击打开来源。</p>
         </div>
         <div className={styles.headerTools}>
           {readState.kind === 'reading' ||

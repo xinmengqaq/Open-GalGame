@@ -20,7 +20,13 @@ import {
 } from './previewPresentation'
 import styles from './PreviewPage.module.css'
 import { usePreviewShellMotion } from './usePreviewMotion'
-import { useScenePreview, type PreviewSavedVersion } from './useScenePreview'
+import {
+  useScenePreview,
+  type PreviewSaveCleared,
+  type PreviewSaveStarted,
+  type PreviewSaveUnsettled,
+  type PreviewSavedVersion
+} from './useScenePreview'
 
 export interface PreviewPageProps {
   readonly client: ScenePreviewClient
@@ -30,6 +36,10 @@ export interface PreviewPageProps {
   readonly sceneLabel: string
   readonly onExit: () => void
   readonly onSavedVersion?: (saved: PreviewSavedVersion) => void
+  readonly onSaveStarted?: (event: PreviewSaveStarted) => void
+  readonly onSaveUnsettled?: (event: PreviewSaveUnsettled) => void
+  readonly onSaveCleared?: (event: PreviewSaveCleared) => void
+  readonly onDraftDirtyChange?: (dirty: boolean) => void
 }
 
 export function PreviewPage({
@@ -39,10 +49,32 @@ export function PreviewPage({
   projectName,
   sceneLabel,
   onExit,
-  onSavedVersion
+  onSavedVersion,
+  onSaveStarted,
+  onSaveUnsettled,
+  onSaveCleared,
+  onDraftDirtyChange
 }: PreviewPageProps): ReactElement {
-  const preview = useScenePreview({ client, projectId, sceneId, onSavedVersion })
-  const { save: savePreview, closeSession, reopen, undo, redo, canUndo, canRedo } = preview
+  const preview = useScenePreview({
+    client,
+    projectId,
+    sceneId,
+    onSavedVersion,
+    onSaveStarted,
+    onSaveUnsettled,
+    onSaveCleared,
+    onDraftDirtyChange
+  })
+  const {
+    save: savePreview,
+    closeSession,
+    reopen,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    abandonUnsettled
+  } = preview
   const previewClosing = preview.closing
   const previewSession = preview.session
   const rootRef = useRef<HTMLDivElement>(null)
@@ -118,15 +150,26 @@ export function PreviewPage({
     saveState: preview.saveState
   })
 
-  const closeAndExit = useCallback(async () => {
-    const closed = await closeSession()
-    if (closed) {
-      setExitOpen(false)
-      onExit()
-      return
-    }
-    setExitOpen(true)
-  }, [closeSession, onExit])
+  const closeAndExit = useCallback(
+    async (discardUnsettled = false) => {
+      const closed = await closeSession()
+      if (closed) {
+        /* 未处理失败或待核对即使草稿已撤回到基线，也要在明确退出时清除；
+           没有未处理保存时该方法本身不产生事实。 */
+        abandonUnsettled(discardUnsettled)
+        setExitOpen(false)
+        onExit()
+        return
+      }
+      setExitOpen(true)
+    },
+    [abandonUnsettled, closeSession, onExit]
+  )
+
+  const handleLeave = useCallback(() => {
+    const discardedDrafts = preview.dirtyCount > 0
+    void closeAndExit(discardedDrafts)
+  }, [closeAndExit, preview.dirtyCount])
 
   const handleBack = useCallback(() => {
     if (previewClosing) return
@@ -313,15 +356,25 @@ export function PreviewPage({
           title={emptySceneCopy.title}
           copy={emptySceneCopy.copy}
           actions={
-            <button
-              type="button"
-              className={styles.statePrimary}
-              onClick={() => {
-                void closeAndExit()
-              }}
-            >
-              返回工作台
-            </button>
+            <>
+              <button
+                type="button"
+                className={styles.statePrimary}
+                onClick={preview.refreshAvailability}
+              >
+                <RefreshCw size={14} strokeWidth={1.9} />
+                重新检查
+              </button>
+              <button
+                type="button"
+                className={styles.stateSecondary}
+                onClick={() => {
+                  void closeAndExit()
+                }}
+              >
+                返回工作台
+              </button>
+            </>
           }
         />
       )
@@ -448,9 +501,7 @@ export function PreviewPage({
         canSave={preview.lockState === 'editable' && preview.saveBlockedReason === null}
         closeError={preview.closeError}
         onCancel={() => setExitOpen(false)}
-        onLeave={() => {
-          void closeAndExit()
-        }}
+        onLeave={handleLeave}
         onSaveAndLeave={() => {
           void handleSaveAndLeave()
         }}

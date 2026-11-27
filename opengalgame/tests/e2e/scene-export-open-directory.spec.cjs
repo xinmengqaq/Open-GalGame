@@ -5,6 +5,8 @@ const net = require('node:net')
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
 
+const { seedGuidePreference } = require('./support/guide-preference.cjs')
+
 const appRoot = resolve(__dirname, '..', '..')
 const evidenceDir = process.env.OPENGALGAME_SCENE_EXPORT_EVIDENCE_DIR
   ? resolve(process.env.OPENGALGAME_SCENE_EXPORT_EVIDENCE_DIR)
@@ -64,7 +66,9 @@ const historySummary = {
   message: '场景生成已完成',
   createdAt: '2026-11-20T00:00:00.000Z'
 }
-const openDirectoryFailureNote = '无法打开文件夹，请手动打开上面的路径'
+const openDirectoryRequestedHint = '请到系统窗口中查看'
+const openDirectoryFailureInstruction = '请手动打开上面的路径'
+const openDirectoryUnsupportedInstruction = '请手动复制上面的路径'
 
 const screenViewport = (() => {
   if (process.platform !== 'win32') return null
@@ -206,14 +210,14 @@ async function stopChildren() {
     if (child.exitCode === null) {
       try {
         execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' })
-      } catch {
-      }
+      } catch {}
     }
   }
   children.clear()
 }
 
 async function openWorkbench(page) {
+  await seedGuidePreference(page)
   await page.goto(baseUrl)
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 30000 })
   await page.getByRole('button', { name: '项目选择' }).click()
@@ -343,7 +347,7 @@ async function startDefaultExport(page) {
 }
 
 function openDirectoryButton(notice) {
-  return notice.getByRole('button', { name: /打开所在文件夹|正在打开…/ })
+  return notice.getByRole('button', { name: /打开所在文件夹|正在打开…|当前环境不能打开/ })
 }
 
 async function installExportRoutes(page, directoryPath, onOpenDirectory) {
@@ -412,17 +416,23 @@ test('打开所在文件夹时显示进行中并禁用重复操作，成功后�
   await expect(openButton).toBeEnabled()
   await expect(notice.getByText('正在打开…')).toHaveCount(0)
   await expect(notice.getByRole('alert')).toHaveCount(0)
+  await expect(notice.getByText(`目录已交给系统打开；${openDirectoryRequestedHint}`)).toBeVisible()
   await expect(notice).toContainText(world.exportDirectory)
   expect(openRequests).toEqual([{ path: world.exportDirectory }])
   await page.screenshot({ path: join(evidenceDir, 'open-directory-success.png') })
 
   await writeEvidence('open-directory-success', {
     viewport: page.viewportSize(),
-    boundary: '成功路径截断 openDirectory 的 dev 调用；真实资源管理器未启动。',
+    boundary:
+      '成功路径截断 openDirectory 的 dev 调用；页面只显示请求已交给系统，不证明资源管理器窗口出现。',
     directoryPath: world.exportDirectory,
     openRequests: openRequests.length,
     pendingState: { label: '正在打开…', disabled: true, busy: true },
-    settledState: { alertVisible: false, buttonEnabled: true }
+    settledState: {
+      alertVisible: false,
+      buttonEnabled: true,
+      requestedFeedback: `目录已交给系统打开；${openDirectoryRequestedHint}`
+    }
   })
 })
 
@@ -447,7 +457,7 @@ test('目录不存在时保留导出结果并显示内联失败提示', async ({
   expect(rejected).toMatchObject({ code: 4701, msg: '只能打开本机已有的目录' })
 
   const alert = notice.getByRole('alert')
-  await expect(alert).toHaveText(openDirectoryFailureNote)
+  await expect(alert).toHaveText(`只能打开本机已有的目录；${openDirectoryFailureInstruction}`)
   await expect(openDirectoryButton(notice)).toBeEnabled()
   await expect(notice).toContainText(world.missingDirectory)
   await expect(notice).toHaveAttribute('title', '已生成 WebGAL.exe（2.5 MB）')
@@ -459,9 +469,44 @@ test('目录不存在时保留导出结果并显示内联失败提示', async ({
     boundary: '缺失目录在 LocalDirectoryOpenGateway 校验阶段被拒绝，未到达系统打开。',
     directoryPath: world.missingDirectory,
     response: rejected,
-    failureNote: openDirectoryFailureNote,
+    failureNote: `只能打开本机已有的目录；${openDirectoryFailureInstruction}`,
     noticePreserved: true,
     buttonEnabledAfterFailure: true
+  })
+})
+
+test('当前环境不能打开本机目录时给出明确说明并禁用打开动作', async ({ page }) => {
+  const openRequests = []
+
+  await installExportRoutes(page, world.exportDirectory, async (route, input) => {
+    openRequests.push(input)
+    return fulfillJson(route, { code: 4102, msg: '当前环境不能打开本机目录' })
+  })
+  await openWorkbench(page)
+
+  const notice = await openExportedScene(page)
+  const openButton = openDirectoryButton(notice)
+  await openButton.click()
+
+  await expect(
+    notice.getByText(`当前环境不能打开本机目录；${openDirectoryUnsupportedInstruction}`)
+  ).toBeVisible()
+  await expect(openButton).toBeDisabled()
+  await expect(openButton).toContainText('当前环境不能打开')
+  await expect(notice).not.toContainText('已交给系统打开')
+  await expect(notice).toContainText(world.exportDirectory)
+  expect(openRequests).toEqual([{ path: world.exportDirectory }])
+  await page.screenshot({ path: join(evidenceDir, 'open-directory-unsupported.png') })
+
+  await writeEvidence('open-directory-unsupported', {
+    viewport: page.viewportSize(),
+    boundary:
+      '受控 403 响应对应夹具/无 dev 后端形态；真实 dev:web real 模式走 openDirectory 系统调用。',
+    directoryPath: world.exportDirectory,
+    response: { code: 4102, msg: '当前环境不能打开本机目录' },
+    feedback: `当前环境不能打开本机目录；${openDirectoryUnsupportedInstruction}`,
+    buttonDisabled: true,
+    successClaimVisible: false
   })
 })
 
@@ -494,7 +539,7 @@ test('打开进行中收起提示，迟到的失败不恢复旧结果', async ({
   expect(rejected).toMatchObject({ code: 4701, msg: '只能打开本机已有的目录' })
   await page.waitForTimeout(250)
   await expect(page.getByText('产物位置')).toHaveCount(0)
-  await expect(page.getByText(openDirectoryFailureNote)).toHaveCount(0)
+  await expect(page.getByText(openDirectoryFailureInstruction)).toHaveCount(0)
   await expect(exportButton(page)).toBeEnabled()
   await page.screenshot({ path: join(evidenceDir, 'open-directory-cancelled.png') })
 

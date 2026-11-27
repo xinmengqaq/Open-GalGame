@@ -23,10 +23,19 @@ export function PromptInputCard({ card }: { card: SessionPromptCard }): ReactEle
         “
       </span>
       {editing ? null : (
-        <span className={styles.promptEditHint} aria-hidden="true">
-          <CardEditIcon className={styles.promptEditHintIcon} />
-          双击编辑
-        </span>
+        <button
+          type="button"
+          className={`${styles.promptEditAction} nodrag nopan`}
+          aria-label="编辑提示词"
+          title="编辑提示词"
+          onClick={(event) => {
+            event.stopPropagation()
+            setEditing(true)
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          <CardEditIcon />
+        </button>
       )}
       <PromptEditor
         cardId={card.cardId}

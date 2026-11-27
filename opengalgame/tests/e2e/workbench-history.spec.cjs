@@ -1,6 +1,9 @@
 const { test, expect } = require('@playwright/test')
 
+const { seedGuidePreference } = require('./support/guide-preference.cjs')
+
 async function openWorkbench(page, search = '') {
+  await seedGuidePreference(page)
   await page.goto(`/${search}`)
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 10000 })
   await page.getByRole('button', { name: '项目选择' }).click()
@@ -33,26 +36,49 @@ test('历史抽屉显示工程历史、自动保存分组和记录详情', async
   const worksPanel = dialog.getByRole('tabpanel', { name: '作品历史' })
   await expect(worksPanel.getByText('未寄出的第二封信', { exact: true })).toBeVisible()
   await expect(worksPanel.getByRole('heading', { name: '作品历史' })).toBeVisible()
+  await expect(worksPanel.getByText('20 条已加载')).toBeVisible()
+  await expect(worksPanel.getByText(/AI 生成 2/).first()).toBeVisible()
+  await expect(worksPanel.getByText(/已回退 1/).first()).toBeVisible()
+  await expect(worksPanel.getByText('手工操作')).toHaveCount(0)
+  await expect(worksPanel.locator('.works-stats')).toHaveCount(0)
   await expect(dialog.getByRole('button', { name: '全部' })).toHaveAttribute('aria-pressed', 'true')
   await expect(dialog.getByRole('button', { name: '手动保存', exact: true })).toBeVisible()
   await expect(dialog.getByRole('button', { name: '自动保存', exact: true })).toBeVisible()
   await expect(dialog.getByRole('button', { name: /确认生成候选/ })).toBeVisible()
   await expect(dialog.getByRole('button', { name: /AI 生成/ }).first()).toBeVisible()
 
-  const group = dialog.getByRole('button', { name: /4 条/ }).first()
+  const group = dialog.getByRole('button', { name: /1 条已回退/ }).first()
   await expect(group).toBeVisible()
+  await expect(group.getByText(/\d{2}:\d{2} — \d{2}:\d{2}/)).toBeVisible()
+  await expect(group.getByText(/展开查看单条|收起单条记录/)).toHaveCount(0)
   await group.click()
   await expect(group).toHaveAttribute('aria-expanded', 'true')
   await expect(dialog.getByRole('button', { name: /周期自动保存/ }).first()).toBeVisible()
+  await expect(dialog.getByRole('button', { name: /生成前自动保存/ }).first()).toBeVisible()
+  const times = await dialog.locator('.works-subrow__time').allTextContents()
+  expect(times).toEqual([...times].sort().reverse())
+  await expect(
+    dialog.locator('.works-subrow[data-reverted="true"]').getByText('已回退')
+  ).toBeVisible()
 
   await dialog.getByRole('button', { name: /保存场景编排/ }).click()
   const detail = dialog.getByRole('region', { name: '记录详情' })
   await expect(detail).toBeVisible()
-  await expect(detail.getByRole('button', { name: '撤销这次操作' })).toBeEnabled()
-  await expect(detail.getByRole('button', { name: '清理此条', exact: true })).toBeVisible()
-  await expect(detail.getByRole('button', { name: /清理此条及更早的手动保存/ })).toBeVisible()
-  await expect(detail.getByText('手动保存', { exact: true })).toBeVisible()
+  await expect(detail.locator('.works-detail__grid')).toHaveCount(0)
+  await expect(detail.getByText('本次变化')).toBeVisible()
   await expect(detail.getByText('更新了 4 张输入卡片、1 条关联和画布视口。')).toBeVisible()
+  await expect(detail.getByText('手动保存', { exact: true })).toBeVisible()
+  await expect(detail.getByText('创作操作', { exact: true })).toBeVisible()
+  await expect(detail.getByText('可清理这条历史')).toBeVisible()
+  await expect(detail.getByRole('button', { name: '撤销这次操作' })).toBeEnabled()
+
+  await detail.getByRole('button', { name: '清理记录' }).click()
+  const clearMenu = page.locator('.works-clear-menu')
+  await expect(clearMenu.locator('.works-clear-menu__item')).toHaveCount(2)
+  await expect(clearMenu.locator('.works-clear-menu__item').first()).toContainText('清理此条')
+  await expect(clearMenu.locator('.works-clear-menu__item').nth(1)).toContainText(
+    '清理此条及更早的手动保存'
+  )
 })
 
 test('筛选重置记录区并保留分页追加', async ({ page }) => {
@@ -100,7 +126,8 @@ test('撤销保留未保存编辑并显示恢复条', async ({ page }) => {
     confirm.getByText('当前未保存的编辑会先保留为本会话草稿，再执行撤销。')
   ).toBeVisible()
   await confirm.getByRole('button', { name: '撤销这次操作' }).click()
-  await expect(detail.getByText('已回退')).toBeVisible()
+  await expect(detail.locator('.works-reverted')).toBeVisible()
+  await expect(detail.getByText('回退已生效，不能再次撤销。')).toBeVisible()
 
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(page.getByText('已保留撤销前的编辑')).toBeVisible()
@@ -122,7 +149,9 @@ test('撤销后视图刷新失败保留撤销事实，自动重读后恢复草�
     .click()
   const confirm = page.getByRole('alertdialog', { name: '撤销这次操作' })
   await confirm.getByRole('button', { name: '撤销这次操作' }).click()
-  await expect(dialog.getByRole('region', { name: '记录详情' }).getByText('已回退')).toBeVisible()
+  await expect(
+    dialog.getByRole('region', { name: '记录详情' }).getByText('回退已生效，不能再次撤销。')
+  ).toBeVisible()
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
 
   const stale = page.getByRole('status').filter({ hasText: '撤销已完成，正在重新读取视图…' })
@@ -168,7 +197,8 @@ test('清理单条历史后显示实际数量并从列表移除', async ({ page 
   const dialog = await openHistory(page)
   await dialog.getByRole('button', { name: /确认生成候选/ }).click()
   const detail = dialog.getByRole('region', { name: '记录详情' })
-  await detail.getByRole('button', { name: '清理此条', exact: true }).click()
+  await detail.getByRole('button', { name: '清理记录' }).click()
+  await page.locator('.works-clear-menu__item').first().click()
 
   const confirm = page.getByRole('alertdialog', { name: '清理这条历史记录' })
   await expect(confirm).toBeVisible()
@@ -176,6 +206,25 @@ test('清理单条历史后显示实际数量并从列表移除', async ({ page 
   await confirm.getByRole('button', { name: '清理历史' }).click()
   await expect(page.getByText('已清理 1 条历史记录').first()).toBeVisible()
   await expect(dialog.getByRole('button', { name: /确认生成候选/ })).toHaveCount(0)
+})
+
+test('键盘展开自动保存组并查看已回退记录', async ({ page }) => {
+  await openWorkbench(page, '?history=fixture')
+  const dialog = await openHistory(page)
+  const group = dialog.locator('.works-group').filter({ hasText: '1 条已回退' }).first()
+  await group.focus()
+  await page.keyboard.press('Space')
+  await expect(group).toHaveAttribute('aria-expanded', 'true')
+
+  const reverted = dialog.locator('.works-subrow[data-reverted="true"]')
+  await expect(reverted).toBeVisible()
+  await reverted.focus()
+  await page.keyboard.press('Enter')
+  const detail = dialog.getByRole('region', { name: '记录详情' })
+  await expect(detail).toBeVisible()
+  await expect(detail.getByText('回退已生效，不能再次撤销。')).toBeVisible()
+  await expect(detail.getByRole('button', { name: '撤销这次操作' })).toHaveCount(0)
+  await expect(detail.getByRole('button', { name: '清理记录' })).toBeEnabled()
 })
 
 test('Esc 关闭抽屉并把焦点还给历史入口', async ({ page }) => {

@@ -25,9 +25,15 @@ interface EditCanvasCardDialogProps {
 }
 
 const mediaSummaryHints: Record<Exclude<SessionSourceCard['kind'], 'document'>, string> = {
-  image: '例如：背景、立绘、CG、头像。生成时会按这段说明选用这张图片。',
-  audio: '例如：片尾音乐、点击音效、角色配音。生成时会按这段说明选用这段音频。',
-  video: '例如：开场动画、过场镜头、结局 CG。生成时会按这段说明选用这段视频。'
+  image: '生成时会按这段说明选用这张图片。',
+  audio: '生成时会按这段说明选用这段音频。',
+  video: '生成时会按这段说明选用这段视频。'
+}
+
+const mediaSummaryExamples: Record<Exclude<SessionSourceCard['kind'], 'document'>, string> = {
+  image: '例如：背景、立绘、CG、头像',
+  audio: '例如：片尾音乐、点击音效、角色配音',
+  video: '例如：开场动画、过场镜头、结局 CG'
 }
 
 export function EditCanvasCardDialog({ card, onClose }: EditCanvasCardDialogProps): ReactElement {
@@ -64,6 +70,7 @@ function TitleCardForm({
 }): ReactElement {
   const commands = useWorkbenchCommands()
   const summaryHint = card.kind === 'document' ? null : mediaSummaryHints[card.kind]
+  const summaryPlaceholder = card.kind === 'document' ? undefined : mediaSummaryExamples[card.kind]
   const [title, setTitle] = useState(card.title)
   const [summary, setSummary] = useState(card.summary)
   const [error, setError] = useState<string | undefined>()
@@ -111,7 +118,7 @@ function TitleCardForm({
           <Button variant="secondary" onClick={onClose} disabled={applying}>
             取消
           </Button>
-          <Button onClick={() => void submit()} disabled={applying}>
+          <Button data-guide-target="usage-apply" onClick={() => void submit()} disabled={applying}>
             {applying ? '正在应用' : '应用'}
           </Button>
         </>
@@ -139,8 +146,10 @@ function TitleCardForm({
       >
         <TextArea
           id="edit-card-summary"
+          data-card-id={card.cardId}
           value={summary}
           rows={4}
+          placeholder={summaryPlaceholder}
           aria-describedby={summaryHint ? 'edit-card-purpose-hint' : undefined}
           onChange={(event) => setSummary(event.target.value)}
         />

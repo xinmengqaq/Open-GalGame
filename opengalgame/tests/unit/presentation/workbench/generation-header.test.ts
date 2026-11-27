@@ -262,7 +262,7 @@ describe('GenerationHeader 重新生成与 start 失败', () => {
       const html = renderHeader(oldStatus, { pendingStart: true })
 
       expect(html).toContain('尚未开始生成')
-      expect(html).toContain('开始后会显示本次操作的累计 Token')
+      expect(html).not.toContain('累计 Token')
       expect(html).not.toContain('>输入<')
       expect(html).not.toContain('>总计<')
       expect(html).not.toContain('69,187')
@@ -275,7 +275,7 @@ describe('GenerationHeader 重新生成与 start 失败', () => {
       const html = renderHeader(oldStatus, { startFailure })
 
       expect(html).toContain('尚未开始生成')
-      expect(html).toContain('开始后会显示本次操作的累计 Token')
+      expect(html).not.toContain('累计 Token')
       expect(html).not.toContain('>输入<')
       expect(html).not.toContain('>总计<')
       expect(html).not.toContain('69,187')

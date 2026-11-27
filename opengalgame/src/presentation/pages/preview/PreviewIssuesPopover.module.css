@@ -140,7 +140,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .popover {
+  :root:not([data-reduced-motion='full']) .popover {
     animation: none;
   }
 }

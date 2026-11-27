@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { EncryptedConnectionSettingsGatewayImpl } from '@infrastructure/connections/EncryptedConnectionSettingsGatewayImpl'
 import type { SecretCipher } from '@infrastructure/security/SecretCipher'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 const secret = 'session-secret-value'
 

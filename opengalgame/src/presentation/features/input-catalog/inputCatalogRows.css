@@ -103,10 +103,6 @@
   cursor: grabbing;
 }
 
-.guide {
-  display: none;
-}
-
 .chevron {
   display: grid;
   width: 18px;
@@ -186,7 +182,6 @@
 .iconTile[data-tone='prompt'] {
   color: var(--wb-accent);
 }
-
 
 .mediaTile {
   position: relative;
@@ -422,7 +417,6 @@
   font-weight: 800;
 }
 
-
 .filterEmpty,
 .folderEmpty {
   display: flex;
@@ -583,14 +577,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .row,
-  .row::before,
-  .chevron,
-  .chevron svg,
-  .iconTile,
-  .rowActions,
-  .rowAction,
-  .textButton {
+  :root:not([data-reduced-motion='full']) .row,
+  :root:not([data-reduced-motion='full']) .row::before,
+  :root:not([data-reduced-motion='full']) .chevron,
+  :root:not([data-reduced-motion='full']) .chevron svg,
+  :root:not([data-reduced-motion='full']) .iconTile,
+  :root:not([data-reduced-motion='full']) .rowActions,
+  :root:not([data-reduced-motion='full']) .rowAction,
+  :root:not([data-reduced-motion='full']) .textButton {
     transition: none;
   }
 }

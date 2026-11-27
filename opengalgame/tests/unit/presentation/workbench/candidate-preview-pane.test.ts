@@ -142,7 +142,7 @@ describe('CandidatePreviewPane', () => {
     expect(html).toContain('1 个读取问题')
     expect(html).toContain('缺少背景素材')
     expect(html).toContain('重新载入画面')
-    expect(html).toContain('画面已就绪。没听到音乐时，先点“重新载入画面”，再点画面里的“开始游戏”。')
+    expect(html).not.toContain('没听到音乐')
     expect(html).not.toContain('声音还没有确认')
     expect(html).not.toContain('接受')
     expect(html).not.toContain('保存候选')

@@ -61,9 +61,12 @@ export function PreviewTopbar({
         onClick={onBack}
         aria-label="返回工作台"
         title="返回工作台"
+        data-guide-return="preview"
+        data-guide-target="preview-return"
         disabled={closing}
       >
-        <ArrowLeft size={18} strokeWidth={1.9} />
+        <ArrowLeft size={17} strokeWidth={1.9} aria-hidden="true" />
+        <span className={styles.backLabel}>返回工作台</span>
       </button>
 
       <div className={styles.identity}>
@@ -112,6 +115,7 @@ export function PreviewTopbar({
             <button
               type="button"
               className={styles.saveButton}
+              data-guide-target="dialogue-save"
               onClick={onSave}
               disabled={saveDisabled}
               title={saveHint ?? (saveDisabled ? '没有可保存的修改' : '保存当前修改（Ctrl+S）')}

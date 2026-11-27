@@ -196,56 +196,6 @@
   font-size: 12px;
 }
 
-.wb-candidate__sound {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: var(--wb-wash-ink);
-  color: var(--wb-text-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.wb-candidate__sound > svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-  margin-top: 2px;
-  color: var(--wb-accent-strong);
-}
-
-.wb-candidate__sound > span {
-  min-width: 0;
-  flex: 1;
-}
-
-.wb-candidate__sound button {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  flex: none;
-  margin-top: -1px;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--wb-text-faint);
-  cursor: pointer;
-}
-
-.wb-candidate__sound button:hover {
-  background: var(--wb-wash-lilac);
-  color: var(--wb-accent-strong);
-}
-
-.wb-candidate__sound button svg {
-  width: 12px;
-  height: 12px;
-}
-
 .wb-candidate__bar {
   display: flex;
   min-width: 0;
@@ -410,8 +360,7 @@
 
 .wb-candidate__action:focus-visible,
 .wb-candidate__issues-toggle:focus-visible,
-.wb-candidate__issues-head button:focus-visible,
-.wb-candidate__sound button:focus-visible {
+.wb-candidate__issues-head button:focus-visible {
   outline: none;
   box-shadow: var(--wb-focus);
 }
@@ -423,13 +372,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wb-candidate__pending svg {
+  :root:not([data-reduced-motion='full']) .wb-candidate__pending svg {
     animation: none;
   }
 
-  .wb-candidate__issues,
-  .wb-candidate__action,
-  .wb-candidate__issues-toggle {
+  :root:not([data-reduced-motion='full']) .wb-candidate__issues,
+  :root:not([data-reduced-motion='full']) .wb-candidate__action,
+  :root:not([data-reduced-motion='full']) .wb-candidate__issues-toggle {
     transition-duration: 90ms;
   }
 }
@@ -566,8 +515,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wb-gen-candidate-entry,
-  .wb-gen-candidate-entry__arrow {
+  :root:not([data-reduced-motion='full']) .wb-gen-candidate-entry,
+  :root:not([data-reduced-motion='full']) .wb-gen-candidate-entry__arrow {
     transition-duration: 90ms;
   }
 }

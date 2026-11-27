@@ -1,9 +1,9 @@
 import { describe, expect, it, vi, type Mock } from 'vitest'
 
-import { ManageConnectionSettings } from '@application/connections/services/impl/ManageConnectionSettings'
-import type { ConnectionSettingsDTO } from '@application/connections/dto/ConnectionSettingsDTO'
+import { ManageConnectionSettings } from '@application/settings/connections/services/impl/ManageConnectionSettings'
+import type { ConnectionSettingsDTO } from '@application/settings/connections/dto/ConnectionSettingsDTO'
 import { AppException } from '@common/errors/AppException'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 const secret = 'session-secret-value'
 const stored: ConnectionSettingsInfo = {

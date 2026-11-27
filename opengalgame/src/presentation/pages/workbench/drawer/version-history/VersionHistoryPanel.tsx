@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { ChevronDown, RefreshCw, Sparkles, X } from 'lucide-react'
+import { ChevronDown, PenLine, RefreshCw, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { toast } from 'sonner'
 
@@ -11,9 +11,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger
 } from '@presentation/components/ui/collapsible'
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger
+} from '@presentation/components/ui/popover'
 import type { SessionSnapshot } from '@presentation/features/workbench-session/workbenchSession.types'
 import { ClearIcon, HistoryIcon, UndoIcon } from '../../WorkbenchIcons'
-import { CountUp } from '../CountUp'
 import { TicksGlyph, TimelineGlyph } from '../drawerIcons'
 import type { WorkbenchDrawerBusy } from '../workbenchDrawer.types'
 import { ClearConfirmDialog, UndoConfirmDialog } from './VersionHistoryDialogs'
@@ -110,12 +115,14 @@ function WorksRow({
         </span>
         {entry.summary ? <span className="works-row__summary">{entry.summary}</span> : null}
         <span className="works-row__meta">
+          <span>{contentSourceLabel(entry.contentSource)}</span>
           <span>{sourceModuleLabel(entry.sourceModule)}</span>
           <span>{saveModeLabel(entry.saveMode)}</span>
-          <span>{contentSourceLabel(entry.contentSource)}</span>
         </span>
       </span>
-      <ChevronDown className="works-row__chevron" />
+      <span aria-hidden="true" className="works-row__chevron">
+        <ChevronDown />
+      </span>
     </button>
   )
 }
@@ -135,52 +142,89 @@ function SystemGroup({
 }): ReactElement {
   const newest = item.entries[0]
   const oldest = item.entries.at(-1) ?? newest
+  const revertedCount = item.entries.filter((entry) => entry.state === '已回退').length
   return (
     <Collapsible onOpenChange={onToggle} open={expanded}>
       <CollapsibleTrigger asChild>
-        <button className="works-group" data-works-motion="row" type="button">
-          <span className="works-group__time">{formatHistoryClock(oldest.createdAt)}</span>
+        <button
+          className="works-group"
+          data-works-motion="row"
+          title={expanded ? '收起自动保存组' : '展开自动保存组'}
+          type="button"
+        >
+          <span className="works-group__time">
+            <time dateTime={oldest.createdAt}>{formatHistoryClock(oldest.createdAt)}</time>
+          </span>
           <TimelineNode kind="auto" />
           <span className="works-row__main">
             <span className="works-group__title">
               {historyFeedback.system}
               <span className="works-group__count">{item.entries.length} 条</span>
+              {revertedCount > 0 ? (
+                <span className="works-group__reverted">{revertedCount} 条已回退</span>
+              ) : null}
             </span>
-            <span className="works-row__summary">
-              连续编排快照 · {formatHistoryRange(item.entries)}
+            <span className="works-row__summary works-group__range">
+              {formatHistoryRange(item.entries)}
             </span>
             <span className="works-row__meta">
-              <span>{sourceModuleLabel(newest.sourceModule)}</span>
-              <span>{expanded ? '收起单条记录' : '展开查看单条'}</span>
+              <span>
+                {[
+                  ...new Set(item.entries.map((entry) => contentSourceLabel(entry.contentSource)))
+                ].join(' / ')}
+              </span>
+              <span>
+                {[
+                  ...new Set(item.entries.map((entry) => sourceModuleLabel(entry.sourceModule)))
+                ].join(' / ')}
+              </span>
             </span>
           </span>
-          <ChevronDown className="works-group__chevron" />
+          <span aria-hidden="true" className="works-group__chevron">
+            <ChevronDown />
+          </span>
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent className="works-group__content">
-        {item.entries.map((entry) => (
-          <button
-            aria-pressed={selectedId === entry.historyId}
-            className="works-subrow"
-            data-selected={selectedId === entry.historyId}
-            data-works-motion="subrow"
-            key={entry.historyId}
-            onClick={() => onSelect(entry.historyId)}
-            type="button"
-          >
-            <span className="works-subrow__time">
-              <time dateTime={entry.createdAt}>{formatHistoryClock(entry.createdAt)}</time>
-            </span>
-            <span className="works-subrow__main">
-              <span className="works-subrow__title">{entry.title}</span>
-              <span className="works-subrow__meta">
-                {sourceModuleLabel(entry.sourceModule)} · {contentSourceLabel(entry.contentSource)}
-                {entry.state === '已回退' ? ` · ${historyFeedback.reverted}` : ''}
+        {item.entries.map((entry) => {
+          const reverted = entry.state === '已回退'
+          return (
+            <button
+              aria-pressed={selectedId === entry.historyId}
+              className="works-subrow"
+              data-reverted={reverted}
+              data-selected={selectedId === entry.historyId}
+              data-works-motion="subrow"
+              key={entry.historyId}
+              onClick={() => onSelect(entry.historyId)}
+              type="button"
+            >
+              <span className="works-subrow__time">
+                <time dateTime={entry.createdAt}>{formatHistoryClock(entry.createdAt)}</time>
               </span>
-            </span>
-            <ChevronDown className="works-subrow__chevron" />
-          </button>
-        ))}
+              <span className="works-subrow__main">
+                <span className="works-subrow__title-line">
+                  <span className="works-subrow__title">{entry.title}</span>
+                  {entry.contentSource === 'ai' ? (
+                    <span className="works-badge works-badge--ai">{historyFeedback.ai}</span>
+                  ) : null}
+                  {reverted ? (
+                    <span className="works-reverted works-reverted--small">
+                      {historyFeedback.reverted}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="works-subrow__meta">
+                  {contentSourceLabel(entry.contentSource)} ·{' '}
+                  {sourceModuleLabel(entry.sourceModule)}
+                </span>
+              </span>
+              <span aria-hidden="true" className="works-subrow__chevron">
+                <ChevronDown />
+              </span>
+            </button>
+          )
+        })}
       </CollapsibleContent>
     </Collapsible>
   )
@@ -218,14 +262,13 @@ function WorksDetail({
           <h3 className="works-detail__title">{entry.title}</h3>
           <p className="works-detail__meta">
             <time dateTime={entry.createdAt}>{formatHistoryTime(entry.createdAt)}</time>
-            <span aria-hidden="true">·</span>
-            <span>{contentSourceLabel(entry.contentSource)}</span>
           </p>
         </div>
         <div className="works-detail__badges">
           {entry.contentSource === 'ai' ? (
             <span className="works-badge works-badge--ai">{historyFeedback.ai}</span>
           ) : null}
+          {reverted ? <span className="works-reverted">{historyFeedback.reverted}</span> : null}
         </div>
         <button aria-label="收起详情" className="works-icon-button" onClick={onClose} type="button">
           <X />
@@ -233,35 +276,66 @@ function WorksDetail({
       </div>
 
       <div className="works-detail__scroll" tabIndex={0}>
-        <p className="works-detail__summary">{entry.summary || '这条记录没有摘要。'}</p>
-        <dl className="works-detail__grid">
-          <div className="works-detail__field">
-            <dt>保存方式</dt>
-            <dd>{saveModeLabel(entry.saveMode)}</dd>
+        <div className="works-detail__change">
+          <span className="works-detail__change-label">本次变化</span>
+          <p className="works-detail__summary">{entry.summary || '这条记录没有摘要。'}</p>
+        </div>
+        <div className="works-detail__facts">
+          <div className="works-detail__fact">
+            <span
+              className="works-detail__fact-icon"
+              data-tone={entry.contentSource === 'ai' ? 'ai' : 'operation'}
+            >
+              {entry.contentSource === 'ai' ? <Sparkles /> : <PenLine />}
+            </span>
+            <div className="works-detail__fact-copy">
+              <span className="works-detail__fact-label">来源</span>
+              <p className="works-detail__fact-value">
+                <strong>{contentSourceLabel(entry.contentSource)}</strong>
+                <span>{sourceModuleLabel(entry.sourceModule)}</span>
+                <span>{saveModeLabel(entry.saveMode)}</span>
+              </p>
+            </div>
           </div>
-          <div className="works-detail__field">
-            <dt>内容来源</dt>
-            <dd>{contentSourceLabel(entry.contentSource)}</dd>
+          <div className="works-detail__fact">
+            <span className="works-detail__fact-icon" data-tone={reverted ? 'danger' : 'recovery'}>
+              <RotateCcw />
+            </span>
+            <div className="works-detail__fact-copy">
+              <span className="works-detail__fact-label">恢复</span>
+              <p className="works-detail__fact-value">
+                {reverted ? '已回退' : entry.canUndo ? '已提交 · 可撤销' : '已提交 · 不可撤销'}
+              </p>
+              <p className="works-detail__fact-note">
+                {reverted
+                  ? '回退已生效，不能再次撤销。'
+                  : entry.canUndo
+                    ? '只回退这一条操作，不恢复任意旧版本；目标已有后续修改时会拒绝。'
+                    : historyFeedback.cannotUndo}
+              </p>
+            </div>
           </div>
-          <div className="works-detail__field">
-            <dt>来源模块</dt>
-            <dd>{sourceModuleLabel(entry.sourceModule)}</dd>
+          <div className="works-detail__fact">
+            <span className="works-detail__fact-icon" data-tone="cleanup">
+              <Trash2 />
+            </span>
+            <div className="works-detail__fact-copy">
+              <span className="works-detail__fact-label">清理</span>
+              <p className="works-detail__fact-value">
+                {entry.canClear ? '可清理这条历史' : '这条记录受保护'}
+              </p>
+              <p className="works-detail__fact-note">
+                {entry.canClear
+                  ? '只移除历史条目，不改变作品内容；底层受保护的操作记录仍会保留。'
+                  : '没有清理入口，底层记录仍受保护。'}
+              </p>
+            </div>
           </div>
-          <div className="works-detail__field">
-            <dt>状态</dt>
-            <dd>{entry.state}</dd>
-          </div>
-        </dl>
-        {!entry.canUndo && !reverted ? (
-          <p className="works-detail__note">{historyFeedback.cannotUndo}</p>
-        ) : null}
+        </div>
         {hasAction && blockedReason ? (
           <p className="works-detail__blocked" role="status">
             {blockedReason}
           </p>
-        ) : null}
-        {entry.canClear ? (
-          <p className="works-detail__note">清理只影响历史记录，不改变作品内容。</p>
         ) : null}
       </div>
 
@@ -280,30 +354,59 @@ function WorksDetail({
             </button>
           ) : null}
           {entry.canClear ? (
-            <div className="works-detail__danger-actions">
-              <button
-                className="works-danger"
-                disabled={!canWrite}
-                onClick={onClearEntry}
-                title={blockedReason ?? undefined}
-                type="button"
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className="works-danger works-danger--menu"
+                  disabled={!canWrite}
+                  title={blockedReason ?? undefined}
+                  type="button"
+                >
+                  <ClearIcon />
+                  清理记录
+                  <ChevronDown className="works-danger__chevron" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="works-clear-menu"
+                collisionPadding={12}
+                side="top"
+                sideOffset={8}
               >
-                <ClearIcon />
-                {historyFeedback.clearEntry}
-              </button>
-              <button
-                className="works-danger works-danger--quiet"
-                disabled={!canWrite}
-                onClick={onClearCategory}
-                title={blockedReason ?? undefined}
-                type="button"
-              >
-                <ClearIcon />
-                {entry.saveMode === 'manual'
-                  ? historyFeedback.clearManualBefore
-                  : historyFeedback.clearSystemBefore}
-              </button>
-            </div>
+                <p className="works-clear-menu__title">清理历史</p>
+                <PopoverClose asChild>
+                  <button className="works-clear-menu__item" onClick={onClearEntry} type="button">
+                    <span className="works-clear-menu__mark">
+                      <ClearIcon />
+                    </span>
+                    <span className="works-clear-menu__copy">
+                      <strong>{historyFeedback.clearEntry}</strong>
+                      <small>只移除这条历史记录</small>
+                    </span>
+                  </button>
+                </PopoverClose>
+                <PopoverClose asChild>
+                  <button
+                    className="works-clear-menu__item"
+                    onClick={onClearCategory}
+                    type="button"
+                  >
+                    <span className="works-clear-menu__mark">
+                      <ClearIcon />
+                    </span>
+                    <span className="works-clear-menu__copy">
+                      <strong>
+                        {entry.saveMode === 'manual'
+                          ? historyFeedback.clearManualBefore
+                          : historyFeedback.clearSystemBefore}
+                      </strong>
+                      <small>包含这条及更早的同类记录</small>
+                    </span>
+                  </button>
+                </PopoverClose>
+              </PopoverContent>
+            </Popover>
           ) : null}
         </div>
       ) : null}
@@ -344,10 +447,8 @@ function WorksEmpty({ onOpenAi }: { onOpenAi?: () => void }): ReactElement {
         <span className="works-empty__label">{historyFeedback.empty}</span>
       </div>
       <div className="works-empty__copy">
-        <h3>第一次保存后，时间线会从这里开始。</h3>
-        <p>
-          手动保存会成为里程碑，连续的自动保存会折叠成计数分组。作品历史只读取已保存的记录，不展示候选或草稿。
-        </p>
+        <h3>还没有保存记录</h3>
+        <p>只显示已保存的记录，不包含候选或草稿。</p>
         {onOpenAi ? (
           <button className="works-secondary" onClick={onOpenAi} type="button">
             <Sparkles />
@@ -533,49 +634,28 @@ export function VersionHistoryPanel({
           <h2 className="works-head__title">作品历史</h2>
           <p className="works-head__note">工程级保存记录 · 仅统计已加载范围</p>
         </div>
-        <span className="works-head__scope">
-          {loading
-            ? historyFeedback.loading
-            : history.status === 'failed'
-              ? '读取失败'
-              : `${stats.total} 条已加载`}
-        </span>
+        <div className="works-head__scope">
+          <span>
+            {loading
+              ? historyFeedback.loading
+              : history.status === 'failed'
+                ? '读取失败'
+                : `${stats.total} 条已加载`}
+          </span>
+          {!countsUnknown && stats.total > 0 ? (
+            <span className="works-head__signals">
+              <span className="works-signal works-signal--ai">
+                <Sparkles aria-hidden="true" />
+                AI 生成 <strong>{stats.ai}</strong>
+              </span>
+              <span className="works-signal works-signal--reverted">
+                <RotateCcw aria-hidden="true" />
+                已回退 <strong>{stats.reverted}</strong>
+              </span>
+            </span>
+          ) : null}
+        </div>
       </div>
-
-      <dl aria-label="已加载记录统计" className="works-stats">
-        <div className="works-stat">
-          <dt>已加载</dt>
-          <dd>{countsUnknown ? '—' : <CountUp value={stats.total} />}</dd>
-        </div>
-        <div className="works-stat">
-          <dt>手动</dt>
-          <dd>
-            {countsUnknown || filterCount('manual') === null ? (
-              '—'
-            ) : (
-              <CountUp value={stats.manual} />
-            )}
-          </dd>
-        </div>
-        <div className="works-stat">
-          <dt>自动</dt>
-          <dd>
-            {countsUnknown || filterCount('system') === null ? (
-              '—'
-            ) : (
-              <CountUp value={stats.system} />
-            )}
-          </dd>
-        </div>
-        <div className="works-stat">
-          <dt>AI / 操作</dt>
-          <dd>{countsUnknown ? '—' : <CountUp value={stats.ai} />}</dd>
-        </div>
-        <div className="works-stat works-stat--danger">
-          <dt>已回退</dt>
-          <dd>{countsUnknown ? '—' : <CountUp value={stats.reverted} />}</dd>
-        </div>
-      </dl>
 
       <div className="works-toolbar">
         <div aria-label="保存方式筛选" className="works-filter" role="group">

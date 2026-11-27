@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
 import { ProjectClientImpl } from '@interfaces/client/ProjectClientImpl'
 import { desktopBridgeChannels } from '@interfaces/contracts/desktopBridgeChannels'
-import { ConnectionSettingsController } from '@interfaces/ipc/controllers/ConnectionSettingsController'
+import { ConnectionSettingsController } from '@interfaces/settings/connections/ipc/ConnectionSettingsController'
 import { ProjectController } from '@interfaces/ipc/controllers/ProjectController'
 import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
@@ -428,6 +428,8 @@ const INVOKE_CHANNELS = {
   testConnection: 'connection:test',
   saveSettings: 'connection:save',
   listModels: 'connection:list-models',
+  readAppearance: 'settings:read-appearance',
+  saveAppearance: 'settings:save-appearance',
   listVersionHistory: 'project-versioning:list-history',
   undoVersionHistoryEntry: 'project-versioning:undo-history-entry',
   clearVersionHistory: 'project-versioning:clear-history',
@@ -485,7 +487,7 @@ const expectedMethods = [
 ].sort()
 
 describe('DesktopBridge 单一通道清单基线', () => {
-  it('preload 的 88 个 invoke、7 个订阅和 94 个唯一通道与冻结清单一致', () => {
+  it('preload 的 90 个 invoke、7 个订阅和 96 个唯一通道与冻结清单一致', () => {
     const bridge = createDesktopBridge({
       invoke: async () => ({ code: 2000, msg: '成功' }),
       subscribe: () => () => undefined
@@ -495,9 +497,9 @@ describe('DesktopBridge 单一通道清单基线', () => {
 
     const invokeChannels = Object.values(INVOKE_CHANNELS)
     const eventChannels = Object.values(EVENT_CHANNELS)
-    expect(invokeChannels).toHaveLength(88)
+    expect(invokeChannels).toHaveLength(90)
     expect(eventChannels).toHaveLength(7)
-    expect(new Set([...invokeChannels, ...eventChannels]).size).toBe(94)
+    expect(new Set([...invokeChannels, ...eventChannels]).size).toBe(96)
     expect(invokeChannels.filter((channel) => (eventChannels as readonly string[]).includes(channel))).toEqual([
       'scene-generation:progress'
     ])

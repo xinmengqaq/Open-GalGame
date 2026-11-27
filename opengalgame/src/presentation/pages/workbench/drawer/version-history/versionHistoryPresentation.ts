@@ -198,7 +198,7 @@ export function sourceModuleLabel(sourceModule: string): string {
 }
 
 export function contentSourceLabel(source: VersionContentSource): string {
-  return source === 'ai' ? historyFeedback.ai : '手工操作'
+  return source === 'ai' ? historyFeedback.ai : '创作操作'
 }
 
 export function formatHistoryClock(value: string): string {
@@ -225,9 +225,15 @@ export function formatHistoryRange(
   now = new Date()
 ): string {
   if (entries.length === 0) return ''
-  const newest = formatHistoryTime(entries[0].createdAt, now)
-  const oldest = formatHistoryTime(entries.at(-1)?.createdAt ?? entries[0].createdAt, now)
-  return newest === oldest ? newest : `${oldest} — ${newest}`
+  const newestEntry = entries[0]
+  const oldestEntry = entries.at(-1) ?? newestEntry
+  const newest = formatHistoryTime(newestEntry.createdAt, now)
+  const oldest = formatHistoryTime(oldestEntry.createdAt, now)
+  if (newest === oldest) return newest
+  if (historyDayKey(newestEntry.createdAt) === historyDayKey(oldestEntry.createdAt)) {
+    return `${formatHistoryClock(oldestEntry.createdAt)} — ${formatHistoryClock(newestEntry.createdAt)}`
+  }
+  return `${oldest} — ${newest}`
 }
 
 export function saveModeLabel(mode: VersionSaveMode): string {

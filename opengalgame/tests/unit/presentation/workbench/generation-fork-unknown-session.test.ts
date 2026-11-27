@@ -275,7 +275,7 @@ async function click(container: HTMLElement, text: string): Promise<void> {
 
 async function openDetail(container: HTMLElement, text: string): Promise<void> {
   await click(container, text)
-  await waitFor(() => (container.textContent ?? '').includes('只读记录'))
+  await waitFor(() => (container.textContent ?? '').includes('记录时间'))
 }
 
 async function forkUnknown(host: Host, source: string, message: string): Promise<void> {

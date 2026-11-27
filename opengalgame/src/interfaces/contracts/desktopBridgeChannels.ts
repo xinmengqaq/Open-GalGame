@@ -70,6 +70,8 @@ export const desktopBridgeChannels = {
     testConnection: 'connection:test',
     saveSettings: 'connection:save',
     listModels: 'connection:list-models',
+    readAppearance: 'settings:read-appearance',
+    saveAppearance: 'settings:save-appearance',
     listVersionHistory: 'project-versioning:list-history',
     undoVersionHistoryEntry: 'project-versioning:undo-history-entry',
     clearVersionHistory: 'project-versioning:clear-history',

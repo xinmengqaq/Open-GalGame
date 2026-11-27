@@ -39,7 +39,15 @@ export interface CreateFlow {
   rebuildWorkspace: () => Promise<void>
 }
 
-export function useProjectCreate(client: ProjectClient): CreateFlow {
+export interface ProjectCreateCallbacks {
+  /** 新建工程成功；只交出工程 id，不交出名称、路径或内容。 */
+  onProjectCreated?: (projectId: string) => void
+}
+
+export function useProjectCreate(
+  client: ProjectClient,
+  callbacks: ProjectCreateCallbacks = {}
+): CreateFlow {
   const queryClient = useQueryClient()
   const [state, setState] = useState<CreateViewState>('closed')
   const [name, setName] = useState('')
@@ -130,6 +138,7 @@ export function useProjectCreate(client: ProjectClient): CreateFlow {
     }
     if (ajax.code === 2000 && ajax.data?.status === 'completed') {
       const completed = ajax.data
+      callbacks.onProjectCreated?.(completed.projectId)
       void queryClient.invalidateQueries({ queryKey: projectListQueryKey })
       reset()
       useNavigationStore.getState().openWorkbench({

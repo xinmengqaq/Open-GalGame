@@ -2,7 +2,7 @@ import type {
   ConnectionExtensionInput,
   ConnectionSettingsDTO,
   ListModelsDTO
-} from '@application/connections/dto/ConnectionSettingsDTO'
+} from '@application/settings/connections/dto/ConnectionSettingsDTO'
 
 export type ConnectionExtensionMode = 'keep' | 'set' | 'clear'
 
@@ -85,6 +85,41 @@ export function connectionExtensionRequest(
 
 export function connectionExtensionFingerprint(state: ConnectionExtensionDraft): string {
   return JSON.stringify([state.hasExtension, state.mode, state.mode === 'set' ? state.draft : ''])
+}
+
+/**
+ * 配置指纹：与设置弹窗里「测试成功是否仍对应当前输入」使用同一组字段。
+ * 输出不含密钥或完整设置内容，只用于判断两次确认是否针对同一份配置。
+ */
+export function connectionConfigFingerprint(
+  fields: ConnectionDraftFields,
+  extension: ConnectionExtensionDraft
+): string {
+  const payload = JSON.stringify([
+    fields.providerId,
+    fields.baseUrl,
+    fields.model,
+    fields.apiKey,
+    fields.contextWindow,
+    fields.maxOutputTokens,
+    fields.temperature,
+    fields.topP,
+    connectionExtensionFingerprint(extension)
+  ])
+  return digestConnectionPayload(payload)
+}
+
+function digestConnectionPayload(payload: string): string {
+  let hashA = 0x811c9dc5
+  let hashB = 0x9e3779b9
+  for (let index = 0; index < payload.length; index += 1) {
+    const code = payload.charCodeAt(index)
+    hashA = Math.imul(hashA ^ code, 0x01000193)
+    hashB = Math.imul(hashB ^ code, 0x85ebca6b)
+  }
+  return `cfg-${(hashA >>> 0).toString(16).padStart(8, '0')}-${(hashB >>> 0)
+    .toString(16)
+    .padStart(8, '0')}-${payload.length.toString(16)}`
 }
 
 export interface ConnectionDraftFields {

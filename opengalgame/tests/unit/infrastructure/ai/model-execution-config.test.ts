@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { assembleModelExecutionProfile } from '@infrastructure/ai/config/modelExecutionConfig'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 const saved = {
   providerId: 'openai-compatible' as const,

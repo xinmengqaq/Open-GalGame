@@ -3,29 +3,9 @@ import type { ReactElement } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { ErrorIcon } from '../../components/Icons'
-import { AppUpdateSection, ManualDownloadLink } from './AppUpdateSection'
+import { ManualDownloadLink } from './AppUpdateSection'
 import styles from './AppSettingsDialog.module.css'
 import type { AppUpdateFlow } from './useAppUpdate'
-
-export function AppSettingsDialog({ flow }: { flow: AppUpdateFlow }): ReactElement {
-  return (
-    <Dialog
-      open={flow.settingsOpen}
-      title="应用设置"
-      subtitle="版本与更新"
-      size="wide"
-      allowClose
-      onClose={flow.closeSettings}
-      actions={
-        <Button variant="secondary" onClick={flow.closeSettings}>
-          关闭
-        </Button>
-      }
-    >
-      <AppUpdateSection flow={flow} />
-    </Dialog>
-  )
-}
 
 export function AppUpdateErrorDialog({ flow }: { flow: AppUpdateFlow }): ReactElement {
   const error = flow.error
@@ -33,13 +13,19 @@ export function AppUpdateErrorDialog({ flow }: { flow: AppUpdateFlow }): ReactEl
     <Dialog
       open={error !== null}
       title={error?.title ?? '更新失败'}
+      surface="glass"
       size="narrow"
       allowClose
       onClose={flow.dismissError}
       actions={
         error === null ? null : (
           <>
-            <Button variant="secondary" onClick={flow.dismissError}>
+            <Button
+              variant="secondary"
+              className={styles.safeAction}
+              data-autofocus
+              onClick={flow.dismissError}
+            >
               关闭
             </Button>
             {error.retryable ? <Button onClick={() => void flow.retry()}>重试</Button> : null}
@@ -58,7 +44,6 @@ export function AppUpdateErrorDialog({ flow }: { flow: AppUpdateFlow }): ReactEl
           {error.showManualDownload ? (
             <ManualDownloadLink className={styles.errorDownload} />
           ) : null}
-          <p className={styles.errorHint}>更新操作不会改动你的工程与本地文件。</p>
         </div>
       )}
     </Dialog>

@@ -22,19 +22,24 @@ import {
   recordedFailureOf
 } from '@application/scene-generation/services/impl/SceneGenerationFailureFacts'
 import { assertUserDirectory } from './userDirectory'
-import { ManageConnectionSettings } from '@application/connections/services/impl/ManageConnectionSettings'
+import { ManageAppearanceSettings } from '@application/settings/appearance/services/impl/ManageAppearanceSettings'
+import { ManageConnectionSettings } from '@application/settings/connections/services/impl/ManageConnectionSettings'
 import { AiProjectFileSystemImpl } from '@infrastructure/ai/filesystem/AiProjectFileSystemImpl'
 import { EncryptedConnectionSettingsGatewayImpl } from '@infrastructure/connections/EncryptedConnectionSettingsGatewayImpl'
 import { PinoLoggerGatewayImpl } from '@infrastructure/logging/PinoLoggerGatewayImpl'
 import { GitCandidatePreviewGatewayImpl } from '@infrastructure/scene-generation/preview/GitCandidatePreviewGatewayImpl'
 import { RegisteredSceneProductionContext } from '@infrastructure/scene-generation/inputs/RegisteredSceneProductionContext'
-import { LangChainModelConnectionGatewayImpl } from '@infrastructure/connections/LangChainModelConnectionGatewayImpl'
+import { PiModelConnectionGatewayImpl } from '@infrastructure/ai/pi/PiModelConnectionGatewayImpl'
+import { PiModelFactory } from '@infrastructure/ai/pi/PiModelFactory'
 import { FileConfigurationGatewayImpl } from '@infrastructure/config/FileConfigurationGatewayImpl'
 import { ElectronProjectFileChooser } from '@infrastructure/project-files/ElectronProjectFileChooser'
 import { ElectronProjectFileDialogGatewayImpl } from '@infrastructure/projects/ElectronProjectFileDialogGatewayImpl'
 import { registerProcessExceptionHandler } from '@infrastructure/runtime/ProcessExceptionHandler'
 import { ElectronSecretCipherImpl } from '@infrastructure/security/ElectronSecretCipherImpl'
-import { ConnectionSettingsController } from '@interfaces/ipc/controllers/ConnectionSettingsController'
+import { AppearanceSettingsGatewayImpl } from '@infrastructure/settings/AppearanceSettingsGatewayImpl'
+import { AppearanceSettingsController } from '@interfaces/settings/appearance/ipc/AppearanceSettingsController'
+import { ConnectionSettingsController } from '@interfaces/settings/connections/ipc/ConnectionSettingsController'
+import { registerSettingsIpc } from '@interfaces/settings/ipc/registerSettingsIpc'
 import { ProjectController } from '@interfaces/ipc/controllers/ProjectController'
 import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
@@ -81,7 +86,14 @@ export async function createHomeBackend(options: {
   )
   const connections = new ManageConnectionSettings({
     settings: settingsGateway,
-    model: new LangChainModelConnectionGatewayImpl(config.requestTimeoutMs)
+    model: new PiModelConnectionGatewayImpl(
+      new PiModelFactory(() => settingsGateway.loadSettings()),
+      config.requestTimeoutMs
+    )
+  })
+  const appearance = new ManageAppearanceSettings({
+    settings: new AppearanceSettingsGatewayImpl(userDirectory),
+    logger
   })
   const require = createRequire(import.meta.url)
   const repositoryRoot = resolve(dirname(require.resolve('webgal-parser/package.json')), '../../..')
@@ -303,11 +315,16 @@ export async function createHomeBackend(options: {
       }
     }
   )
+  const detachSettingsIpc = registerSettingsIpc({
+    getWindow: options.getWindow,
+    rendererUrl: options.rendererUrl,
+    connections: new ConnectionSettingsController(connections, exceptions),
+    appearance: new AppearanceSettingsController(appearance, exceptions)
+  })
   const detachIpc = registerHomeIpc({
     getWindow: options.getWindow,
     rendererUrl: options.rendererUrl,
-    projects: projectController,
-    connections: new ConnectionSettingsController(connections, exceptions)
+    projects: projectController
   })
   return async () => {
     detachAppUpdateIpc()
@@ -318,6 +335,7 @@ export async function createHomeBackend(options: {
     detachSceneCanvasIpc()
     detachProjectFilesIpc()
     detachVersioningIpc()
+    detachSettingsIpc()
     detachIpc()
     detachProcess()
     appUpdateRelease.dispose()

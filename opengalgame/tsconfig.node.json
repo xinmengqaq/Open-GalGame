@@ -14,6 +14,7 @@
     "src/domain/**/*",
     "src/infrastructure/**/*",
     "src/interfaces/ipc/**/*",
+    "src/interfaces/settings/**/ipc/**/*",
     "src/interfaces/project-files/ipc/**/*",
     "src/interfaces/project-versioning/ipc/**/*",
     "src/interfaces/scene-canvas/ipc/**/*",

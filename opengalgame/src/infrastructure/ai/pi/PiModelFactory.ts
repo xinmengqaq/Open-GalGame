@@ -8,8 +8,8 @@ import type {
 import type { StreamFn } from '@earendil-works/pi-agent-core'
 
 import { AppException } from '@common/errors/AppException'
-import { ConnectionErrorCodes } from '@domain/connections/errors/ConnectionErrorCodes'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import { ConnectionErrorCodes } from '@domain/settings/connections/errors/ConnectionErrorCodes'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 import { validateProviderOptions } from '@infrastructure/connections/validateProviderOptions'
 
 import {

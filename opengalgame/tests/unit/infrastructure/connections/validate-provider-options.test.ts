@@ -12,14 +12,14 @@ describe('供应商扩展配置校验', () => {
         validateProviderOptions(providerId, {
           defaultHeaders: { 'x-opencode-session': secret, 'User-Agent': 'custom-agent' },
           defaultQuery: { version: '1' },
-          fetchOptions: { cache: 'no-store', headers: { 'x-trace': '1' } },
-          logLevel: 'warn'
+          fetchOptions: { cache: 'no-store', headers: { 'x-trace': '1' } }
         })
       ).not.toThrow()
     }
   )
 
   it.each([
+    'logLevel',
     'timeout',
     'maxRetries',
     'apiKey',

@@ -27,8 +27,8 @@
   border-radius: 50%;
   background: radial-gradient(
     ellipse at 50% 48%,
-    color-mix(in srgb, var(--wb-accent) 17%, transparent) 0%,
-    color-mix(in srgb, var(--wb-positive) 8%, transparent) 42%,
+    color-mix(in srgb, var(--content-image) 17%, transparent) 0%,
+    color-mix(in srgb, var(--content-animation) 8%, transparent) 42%,
     transparent 70%
   );
   pointer-events: none;
@@ -42,50 +42,50 @@
 }
 
 .emptyCardBack rect {
-  fill: color-mix(in srgb, var(--wb-surface-solid) 44%, transparent);
-  stroke: color-mix(in srgb, var(--wb-positive) 34%, transparent);
+  fill: color-mix(in srgb, var(--content-surface) 44%, transparent);
+  stroke: color-mix(in srgb, var(--content-animation) 34%, transparent);
   stroke-width: 1;
 }
 
 .emptyCardBack path {
   fill: none;
-  stroke: color-mix(in srgb, var(--wb-positive) 38%, transparent);
+  stroke: color-mix(in srgb, var(--content-animation) 38%, transparent);
   stroke-width: 1.6;
   stroke-linecap: round;
 }
 
 .emptyCardFront rect {
-  fill: color-mix(in srgb, var(--wb-surface-solid) 68%, transparent);
-  stroke: color-mix(in srgb, var(--wb-accent) 44%, transparent);
+  fill: color-mix(in srgb, var(--content-surface) 68%, transparent);
+  stroke: color-mix(in srgb, var(--content-image) 44%, transparent);
   stroke-width: 1;
 }
 
 .emptyCardFront path {
   fill: none;
-  stroke: color-mix(in srgb, var(--wb-accent) 46%, transparent);
+  stroke: color-mix(in srgb, var(--content-image) 46%, transparent);
   stroke-width: 1.6;
   stroke-linecap: round;
 }
 
 .emptyLink {
   fill: none;
-  stroke: color-mix(in srgb, var(--wb-accent) 42%, transparent);
+  stroke: color-mix(in srgb, var(--content-image) 42%, transparent);
   stroke-width: 1.4;
   stroke-dasharray: 3 6;
   stroke-linecap: round;
 }
 
 .emptyNode {
-  fill: color-mix(in srgb, var(--wb-accent) 82%, transparent);
+  fill: color-mix(in srgb, var(--content-image) 82%, transparent);
 }
 
 .emptySpark {
-  fill: color-mix(in srgb, var(--wb-warning) 62%, transparent);
+  fill: color-mix(in srgb, var(--content-audio) 62%, transparent);
 }
 
 .emptyEyebrow {
   margin: 0;
-  color: var(--wb-text-faint);
+  color: var(--content-text-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -93,21 +93,12 @@
 
 .empty h2 {
   margin: 0;
-  color: var(--wb-text-strong);
+  color: var(--content-text);
   font-family: var(--wb-font);
   font-size: clamp(26px, 2.8vw, 32px);
   font-weight: 800;
   letter-spacing: -0.012em;
   line-height: 1.26;
-}
-
-.emptyGuide {
-  max-width: 460px;
-  margin: 2px 0 0;
-  color: var(--wb-text);
-  font-size: 14.5px;
-  font-weight: 500;
-  line-height: 1.75;
 }
 
 .emptyActions {
@@ -128,10 +119,9 @@
   padding: 0 22px;
   border: 0;
   border-radius: var(--wb-radius-pill);
-  background: var(--wb-accent);
-  box-shadow: 0 18px 34px -22px
-    color-mix(in srgb, var(--wb-purple-shadow, #65487f) 70%, transparent);
-  color: var(--wb-surface-solid);
+  background: var(--content-image);
+  box-shadow: 0 18px 34px -22px color-mix(in srgb, var(--content-focus) 70%, transparent);
+  color: var(--content-surface);
   font-family: var(--wb-font);
   font-size: 13.5px;
   font-weight: 700;
@@ -143,9 +133,8 @@
 
 .emptyActions button:hover:not(:disabled) {
   border: 0;
-  background: var(--wb-accent-strong);
-  box-shadow: 0 22px 38px -22px
-    color-mix(in srgb, var(--wb-purple-shadow, #65487f) 78%, transparent);
+  background: var(--content-focus);
+  box-shadow: 0 22px 38px -22px color-mix(in srgb, var(--content-focus) 78%, transparent);
   transform: translateY(-1px);
 }
 
@@ -154,7 +143,7 @@
 }
 
 .emptyActions button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--wb-accent) 62%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--content-image) 62%, transparent);
   outline-offset: 3px;
 }
 
@@ -163,20 +152,11 @@
   height: 16px;
 }
 
-.emptyHint {
-  max-width: 400px;
-  margin: 0;
-  color: var(--wb-text-muted);
-  font-size: 12.5px;
-  line-height: 1.65;
-}
-
 .emptyNote {
   margin: 1px 0 0;
-  color: var(--wb-text-faint);
+  color: var(--content-text-muted);
   font-size: 11.5px;
 }
-
 
 .dropZone {
   position: absolute;
@@ -189,10 +169,10 @@
   background:
     radial-gradient(
       ellipse 70% 68% at 50% 46%,
-      color-mix(in srgb, var(--wb-positive) 20%, transparent) 0%,
+      color-mix(in srgb, var(--content-animation) 20%, transparent) 0%,
       transparent 68%
     ),
-    color-mix(in srgb, var(--wb-positive) 8%, transparent);
+    color-mix(in srgb, var(--content-animation) 8%, transparent);
   backdrop-filter: blur(1.5px);
   pointer-events: none;
 }
@@ -203,7 +183,7 @@
   gap: 5px;
   justify-items: center;
   text-align: center;
-  color: var(--wb-positive-strong);
+  color: var(--content-document);
 }
 
 .dropZoneIcon {
@@ -214,8 +194,8 @@
   place-items: center;
   border: 0;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--wb-positive) 18%, transparent);
-  box-shadow: 0 0 0 12px color-mix(in srgb, var(--wb-positive) 7%, transparent);
+  background: color-mix(in srgb, var(--content-animation) 18%, transparent);
+  box-shadow: 0 0 0 12px color-mix(in srgb, var(--content-animation) 7%, transparent);
 }
 
 .dropZoneIcon svg {
@@ -229,7 +209,7 @@
 }
 
 .dropZoneHint {
-  color: var(--wb-text-muted);
+  color: var(--content-text-muted);
   font-size: 12px;
 }
 
@@ -265,18 +245,17 @@
 }
 
 @media (max-width: 520px) {
-  .emptyHint,
   .emptyNote {
     max-width: 100%;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .emptyActions button {
+  :root:not([data-reduced-motion='full']) .emptyActions button {
     transition: none;
   }
 
-  .emptyActions button:hover:not(:disabled) {
+  :root:not([data-reduced-motion='full']) .emptyActions button:hover:not(:disabled) {
     transform: none;
   }
 }

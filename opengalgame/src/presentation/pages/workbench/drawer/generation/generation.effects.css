@@ -78,31 +78,31 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wb-gen-art__glow.is-animated,
-  .wb-gen-art__dust.is-animated .wb-gen-art__mote,
-  .wb-gen-run__pulse::after,
-  .wb-gen-spinner {
+  :root:not([data-reduced-motion='full']) .wb-gen-art__glow.is-animated,
+  :root:not([data-reduced-motion='full']) .wb-gen-art__dust.is-animated .wb-gen-art__mote,
+  :root:not([data-reduced-motion='full']) .wb-gen-run__pulse::after,
+  :root:not([data-reduced-motion='full']) .wb-gen-spinner {
     animation: none;
   }
 
-  .wb-gen-art__glow.is-animated {
+  :root:not([data-reduced-motion='full']) .wb-gen-art__glow.is-animated {
     opacity: 1;
   }
 
-  .wb-gen-option,
-  .wb-gen-primary,
-  .wb-gen-empty__primary,
-  .wb-gen-run__orb,
-  .wb-gen-details__step,
-  .wb-gen-details__line::after {
+  :root:not([data-reduced-motion='full']) .wb-gen-option,
+  :root:not([data-reduced-motion='full']) .wb-gen-primary,
+  :root:not([data-reduced-motion='full']) .wb-gen-empty__primary,
+  :root:not([data-reduced-motion='full']) .wb-gen-run__orb,
+  :root:not([data-reduced-motion='full']) .wb-gen-details__step,
+  :root:not([data-reduced-motion='full']) .wb-gen-details__line::after {
     transition: none;
   }
 
-  .wb-gen-primary:hover:not(:disabled),
-  .wb-gen-primary:active:not(:disabled),
-  .wb-gen-empty__primary:hover:not(:disabled),
-  .wb-gen-empty__primary:active:not(:disabled),
-  .wb-gen-option__radio i {
+  :root:not([data-reduced-motion='full']) .wb-gen-primary:hover:not(:disabled),
+  :root:not([data-reduced-motion='full']) .wb-gen-primary:active:not(:disabled),
+  :root:not([data-reduced-motion='full']) .wb-gen-empty__primary:hover:not(:disabled),
+  :root:not([data-reduced-motion='full']) .wb-gen-empty__primary:active:not(:disabled),
+  :root:not([data-reduced-motion='full']) .wb-gen-option__radio i {
     transform: none;
   }
 }

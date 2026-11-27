@@ -46,6 +46,10 @@ export type UseSceneGenerationOptions = {
   pageBlocked: boolean
   canvasReady: boolean
   saveCanvas: () => Promise<SaveCanvasOutcome>
+  onGenerationStarted?: (event: { operationId: string }) => void
+  onCandidateAccepted?: (event: { operationId: string; candidateSnapshotId: string }) => void
+  onCandidateRevised?: (event: { operationId: string; candidateSnapshotId: string }) => void
+  onCandidateDiscarded?: (event: { operationId: string; candidateSnapshotId: string }) => void
 }
 
 export type SceneGenerationController = {
@@ -105,7 +109,11 @@ export function useSceneGeneration(options: UseSceneGenerationOptions): SceneGen
     saveState,
     pageBlocked,
     canvasReady,
-    saveCanvas
+    saveCanvas,
+    onGenerationStarted,
+    onCandidateAccepted,
+    onCandidateRevised,
+    onCandidateDiscarded
   } = options
 
   // 唯一实例：status 写入，draft/actions 只读；pending 由 actions 自己的请求登记表持有。
@@ -131,7 +139,11 @@ export function useSceneGeneration(options: UseSceneGenerationOptions): SceneGen
     canvasReady,
     saveCanvas,
     status,
-    draft
+    draft,
+    onGenerationStarted,
+    onCandidateAccepted,
+    onCandidateRevised,
+    onCandidateDiscarded
   })
 
   return {

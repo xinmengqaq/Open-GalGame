@@ -1,0 +1,489 @@
+.section {
+  display: grid;
+  gap: 0;
+}
+
+.preview {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  padding: 17px 19px 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 17%, transparent);
+  border-radius: 20px;
+  background:
+    radial-gradient(
+      120% 150% at 0% 0%,
+      color-mix(in srgb, var(--accent) 13%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      88% 120% at 100% 0%,
+      color-mix(in srgb, var(--cream) 62%, transparent) 0%,
+      transparent 64%
+    ),
+    color-mix(in srgb, var(--surface-glass) 82%, var(--surface-raised));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 62%, transparent),
+    0 20px 44px -38px color-mix(in srgb, var(--purple-shadow) 62%, transparent);
+  animation: appearance-preview-in 280ms var(--ease-out) both;
+}
+
+.previewWash {
+  position: absolute;
+  inset: auto -34px -56px auto;
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--teal) 12%, transparent) 0%,
+    transparent 68%
+  );
+  pointer-events: none;
+}
+
+.previewHead {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.previewLabel {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.previewDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.previewQuote {
+  position: absolute;
+  top: 38px;
+  right: 18px;
+  color: color-mix(in srgb, var(--accent) 13%, transparent);
+  font-family: var(--font-display);
+  font-size: 74px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.previewText {
+  position: relative;
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--preview-font);
+  font-size: var(--preview-size);
+  font-weight: 650;
+  letter-spacing: 0.015em;
+  line-height: 1.6;
+  text-wrap: pretty;
+  transition: font-size 140ms var(--ease-out);
+}
+
+.previewAside {
+  position: relative;
+  margin: 0;
+  color: color-mix(in srgb, var(--text-primary) 58%, var(--text-muted));
+  font-family: var(--preview-font);
+  font-size: var(--preview-size);
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  line-height: 1.6;
+  text-wrap: pretty;
+  transition: font-size 140ms var(--ease-out);
+}
+
+.preview[data-fallback='true'] .previewText {
+  color: color-mix(in srgb, var(--text-primary) 82%, var(--text-muted));
+}
+
+.previewMeta {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.previewFontName,
+.previewSizeName {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface-raised) 66%, transparent);
+}
+
+.previewSizeName {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.previewFallback {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.loadingPanel {
+  display: grid;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.skeletonPreview {
+  height: 132px;
+  border-radius: 20px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 25%,
+    var(--surface-raised) 50%,
+    var(--surface-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: appearance-skeleton 1.4s ease-in-out infinite;
+}
+
+.skeletonRow {
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 25%,
+    var(--surface-raised) 50%,
+    var(--surface-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: appearance-skeleton 1.4s ease-in-out infinite;
+}
+
+.errorBox {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: 14px;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.errorTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.errorText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.errorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settingRow {
+  display: grid;
+  gap: 8px;
+  padding: 12px 1px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.switchRow,
+.staticRow {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 1px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.rowHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rowLabelGroup {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.rowTail {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.label {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.levelValue {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.warningGlyph {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.sizeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 60px;
+  gap: 12px;
+  align-items: center;
+}
+
+.range {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.range:focus-visible {
+  outline: none;
+  border-radius: 6px;
+  box-shadow: var(--ring-focus);
+}
+
+.numberInput {
+  width: 100%;
+  min-height: 36px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 66%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.numberInput:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-strong));
+}
+
+.numberInput:focus-visible {
+  outline: none;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  box-shadow: var(--ring-focus);
+}
+
+.numberInput[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.rangeMeta,
+.rangeLabels {
+  display: flex;
+  min-height: 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.inlineError {
+  margin: 0 auto;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.switchButton {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 26px;
+  align-items: center;
+  flex: none;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface-muted) 56%, transparent);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.switchButton[aria-checked='true'] {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+.switchButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+}
+
+.switchThumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 26%, transparent);
+  transform: translateX(0);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.switchButton[aria-checked='true'] .switchThumb {
+  transform: translateX(18px);
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-muted) 64%, transparent);
+}
+
+.segmentOption {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--text-primary) 62%, var(--text-muted));
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.segmentOption:hover {
+  color: var(--text-primary);
+}
+
+.segmentOption input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmentOption[data-checked='true'] {
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.segmentOption:has(input:focus-visible) {
+  box-shadow: var(--ring-focus);
+}
+
+.themeBadge {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@keyframes appearance-preview-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes appearance-skeleton {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+:root[data-reduced-motion='reduce'] .preview {
+  animation: none;
+}
+
+:root[data-reduced-motion='reduce'] .previewText,
+:root[data-reduced-motion='reduce'] .previewAside,
+:root[data-reduced-motion='reduce'] .switchButton,
+:root[data-reduced-motion='reduce'] .switchThumb,
+:root[data-reduced-motion='reduce'] .numberInput,
+:root[data-reduced-motion='reduce'] .segmentOption {
+  transition: none;
+}
+
+:root[data-reduced-motion='reduce'] .skeletonPreview,
+:root[data-reduced-motion='reduce'] .skeletonRow {
+  animation: none;
+}

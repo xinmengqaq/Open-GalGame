@@ -18,6 +18,8 @@ type CandidatePreviewProviderProps = {
   readonly target: CandidatePreviewTarget | null
   readonly active?: boolean
   readonly onActivate: () => void
+  readonly onCandidateOpened?: (candidateSnapshotId: string) => void
+  readonly onCandidateReturned?: (candidateSnapshotId: string) => void
   readonly children: ReactNode
 }
 
@@ -27,9 +29,18 @@ export function CandidatePreviewProvider({
   target,
   active,
   onActivate,
+  onCandidateOpened,
+  onCandidateReturned,
   children
 }: CandidatePreviewProviderProps): ReactElement {
-  const controller = useCandidatePreview({ generationClient, previewClient, target, active })
+  const controller = useCandidatePreview({
+    generationClient,
+    previewClient,
+    target,
+    active,
+    onOpened: onCandidateOpened,
+    onReturned: onCandidateReturned
+  })
   const value = useMemo<CandidatePreviewTabController>(
     () => ({
       ...controller,

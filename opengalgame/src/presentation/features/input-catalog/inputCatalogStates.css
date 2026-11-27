@@ -121,7 +121,6 @@
   background: color-mix(in srgb, var(--wb-surface-solid) 84%, transparent);
 }
 
-
 .state {
   display: flex;
   flex: 1 1 auto;
@@ -360,7 +359,6 @@
   height: 26px;
 }
 
-
 .skeleton {
   display: flex;
   flex: 1 1 auto;
@@ -490,7 +488,6 @@
   content: '';
 }
 
-
 .dropOverlay {
   position: absolute;
   z-index: 5;
@@ -583,15 +580,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeletonLabel::before,
-  .skeletonIcon,
-  .skeletonLine,
-  .skeletonLineShort {
+  :root:not([data-reduced-motion='full']) .skeletonLabel::before,
+  :root:not([data-reduced-motion='full']) .skeletonIcon,
+  :root:not([data-reduced-motion='full']) .skeletonLine,
+  :root:not([data-reduced-motion='full']) .skeletonLineShort {
     animation: none;
   }
 
-  .clipClose,
-  .bannerAction {
+  :root:not([data-reduced-motion='full']) .clipClose,
+  :root:not([data-reduced-motion='full']) .bannerAction {
     transition: none;
   }
 }

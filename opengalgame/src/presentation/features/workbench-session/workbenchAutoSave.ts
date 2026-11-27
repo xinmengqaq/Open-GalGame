@@ -4,12 +4,17 @@ import type { WorkbenchSaveState } from './workbenchSession.types'
 
 const AUTO_SAVE_DELAY_MS = 30_000
 
+/** 一次保存请求的附带语义；当前只用于区分是否把 manual 保存报告给新手引导。 */
+export interface WorkbenchSaveRequestOptions {
+  reportGuide?: boolean
+}
+
 export interface WorkbenchAutoSave {
   noteLocalEdit(): void
   noteServerResult(): void
   noteSaved(): void
   noteSaveFailure(saveState: WorkbenchSaveState): void
-  requestSave(reason: SceneCanvasSaveReason): Promise<void>
+  requestSave(reason: SceneCanvasSaveReason, options?: WorkbenchSaveRequestOptions): Promise<void>
   setSaveHold(hold: boolean): void
   cancelScheduledSave(): void
 }
@@ -17,7 +22,7 @@ export interface WorkbenchAutoSave {
 interface WorkbenchAutoSaveDeps {
   enqueue<T>(task: () => Promise<T>): Promise<T>
   flushPromptEdits(): Promise<void>
-  performSave(reason: SceneCanvasSaveReason): Promise<void>
+  performSave(reason: SceneCanvasSaveReason, reportGuide?: boolean): Promise<void>
 }
 
 export function createWorkbenchAutoSave(deps: WorkbenchAutoSaveDeps): WorkbenchAutoSave {
@@ -26,6 +31,7 @@ export function createWorkbenchAutoSave(deps: WorkbenchAutoSaveDeps): WorkbenchA
   let queuedSave: Promise<void> | null = null
   let pendingSaveReason: SceneCanvasSaveReason = 'periodic'
   let manualSaveRequested = false
+  let manualSaveReportGuide = true
   let autoSaveStopped: 'none' | 'failed' | 'unverified' = 'none'
   let saveHold = false
 
@@ -68,23 +74,35 @@ export function createWorkbenchAutoSave(deps: WorkbenchAutoSaveDeps): WorkbenchA
     autoSaveStopped = saveState === 'unverified' ? 'unverified' : 'failed'
   }
 
-  function runSave(reason: SceneCanvasSaveReason): Promise<void> {
+  function markManualSave(reportGuide: boolean): void {
+    manualSaveReportGuide = manualSaveRequested ? manualSaveReportGuide || reportGuide : reportGuide
+    manualSaveRequested = true
+  }
+
+  function runSave(
+    reason: SceneCanvasSaveReason,
+    options?: WorkbenchSaveRequestOptions
+  ): Promise<void> {
     if (queuedSave !== null) {
-      if (reason === 'manual') manualSaveRequested = true
+      if (reason === 'manual') markManualSave(options?.reportGuide !== false)
       return queuedSave
     }
     pendingSaveReason = reason
     const run = deps.enqueue(async () => {
       const effectiveReason = manualSaveRequested ? 'manual' : pendingSaveReason
+      const reportGuide = manualSaveRequested ? manualSaveReportGuide : true
       manualSaveRequested = false
-      await deps.performSave(effectiveReason)
+      manualSaveReportGuide = true
+      await deps.performSave(effectiveReason, reportGuide)
     })
     queuedSave = run
     void run.finally(() => {
       if (queuedSave === run) queuedSave = null
       if (manualSaveRequested) {
+        const reportGuide = manualSaveReportGuide
         manualSaveRequested = false
-        void requestSave('manual')
+        manualSaveReportGuide = true
+        void requestSave('manual', { reportGuide })
         return
       }
       if (autoSaveStopped === 'none' && sessionIsDirty(store.getState())) scheduleAutoSave()
@@ -92,11 +110,14 @@ export function createWorkbenchAutoSave(deps: WorkbenchAutoSaveDeps): WorkbenchA
     return run
   }
 
-  function requestSave(reason: SceneCanvasSaveReason): Promise<void> {
+  function requestSave(
+    reason: SceneCanvasSaveReason,
+    options?: WorkbenchSaveRequestOptions
+  ): Promise<void> {
     if (saveHold) return Promise.resolve()
     clearAutoSaveTimer()
-    if (reason === 'manual') manualSaveRequested = true
-    return deps.flushPromptEdits().then(() => runSave(reason))
+    if (reason === 'manual') markManualSave(options?.reportGuide !== false)
+    return deps.flushPromptEdits().then(() => runSave(reason, options))
   }
 
   function setSaveHold(hold: boolean): void {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ProjectErrorCodes } from '@domain/projects/errors/ProjectErrorCodes'
-import { ConnectionErrorCodes } from '@domain/connections/errors/ConnectionErrorCodes'
+import { ConnectionErrorCodes } from '@domain/settings/connections/errors/ConnectionErrorCodes'
 
 const networkStatusCodes = [200, 400, 403, 409, 500]
 

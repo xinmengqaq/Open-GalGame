@@ -1,0 +1,11 @@
+@import '../assets/fonts/noto-sans-sc/400.css';
+@import '../assets/fonts/noto-serif-sc/400.css';
+@import '../assets/fonts/wenkai-gb/result.css';
+
+@font-face {
+  font-family: 'Smiley Sans';
+  src: url('../assets/fonts/smiley-sans/SmileySans-Oblique.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}

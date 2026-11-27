@@ -123,6 +123,13 @@
   font-weight: 650;
 }
 
+.noteIcon {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
 .list {
   position: relative;
   z-index: 0;
@@ -291,10 +298,10 @@
   display: block;
   margin: 0;
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--body-text-size, 15px);
   font-weight: 500;
   letter-spacing: 0.01em;
-  line-height: 1.74;
+  line-height: var(--body-line-height, 24px);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -314,10 +321,10 @@
   background: transparent;
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--body-text-size, 15px);
   font-weight: 500;
   letter-spacing: 0.01em;
-  line-height: 1.74;
+  line-height: var(--body-line-height, 24px);
   overflow: hidden;
   resize: none;
 }
@@ -345,13 +352,33 @@
   padding-top: 3px;
 }
 
-.dirtyMark {
-  width: 6px;
-  height: 6px;
+.stateChip {
+  display: inline-flex;
+  height: 19px;
   flex: none;
-  border-radius: 50%;
-  background: var(--warning);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cream) 64%, transparent);
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.stateChip[data-tone='selected'] {
+  background: color-mix(in srgb, var(--purple) 10%, transparent);
+  color: var(--purple-deep);
+}
+
+.stateChip[data-tone='editing'] {
+  background: color-mix(in srgb, var(--purple) 16%, transparent);
+  color: var(--purple-deep);
+}
+
+.stateChip[data-tone='dirty'] {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: color-mix(in srgb, var(--warning) 82%, var(--ink-strong));
 }
 
 .issueMark {
@@ -381,7 +408,8 @@
 }
 
 .row:hover .editButton,
-.row:focus-within .editButton {
+.row:focus-within .editButton,
+.editButton[data-guide-current] {
   opacity: 1;
 }
 
@@ -444,12 +472,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .row,
-  .editButton {
+  :root:not([data-reduced-motion='full']) .row,
+  :root:not([data-reduced-motion='full']) .editButton {
     transition: none;
   }
 
-  .positionBars span {
+  :root:not([data-reduced-motion='full']) .positionBars span {
     animation: none;
     opacity: 1;
     transform: none;

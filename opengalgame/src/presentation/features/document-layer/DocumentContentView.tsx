@@ -126,9 +126,6 @@ export function DocumentContentView({
         ) : null}
         {showEditor ? (
           <>
-            {view.status === 'empty' ? (
-              <p className={styles.emptyHint}>这篇文档还没有正文，可以直接开始写。</p>
-            ) : null}
             <div
               ref={documentGuardRef}
               className={styles.documentGuard}
@@ -145,7 +142,7 @@ export function DocumentContentView({
                 value={draft ?? view.body}
                 onChange={onChange}
                 onSaveShortcut={() => onSave()}
-                placeholder="编辑正文，保存后写回工程文件"
+                placeholder="编辑正文，保存后写回工程"
               />
             </div>
           </>
@@ -172,24 +169,43 @@ export function DocumentContentView({
       </article>
       <aside className={styles.rail}>
         <p className={styles.railEyebrow}>阅读信息</p>
-        <dl className={styles.railList}>
-          <div>
-            <dt>来源</dt>
-            <dd>{sourceName}</dd>
-          </div>
-          <div>
-            <dt>格式</dt>
-            <dd>{format}</dd>
-          </div>
-          <div>
-            <dt>主题</dt>
-            <dd>{topics.length > 0 ? topics.join(' · ') : '未标注'}</dd>
-          </div>
-        </dl>
+        <div
+          className={styles.railSource}
+          data-unavailable={source.disconnected || !source.readable ? true : undefined}
+        >
+          <span aria-hidden="true" className={styles.railSourceIcon}>
+            <ContentKindIcon contentKind="text" textKind="document" />
+          </span>
+          <span className={styles.railSourceCopy}>
+            <strong>{sourceName}</strong>
+            <span className={styles.railSourceMeta}>
+              <span className={styles.railFormat}>{format}</span>
+              <span className={styles.railSourceState}>
+                <i aria-hidden="true" />
+                {source.disconnected
+                  ? '来源不可用'
+                  : source.readable
+                    ? '来源可读取'
+                    : '来源不可读取'}
+              </span>
+            </span>
+          </span>
+        </div>
+        <div className={styles.railTopics}>
+          <span className={styles.railTopicsLabel}>主题</span>
+          {topics.length > 0 ? (
+            <ul className={styles.railTopicList}>
+              {topics.map((topic) => (
+                <li key={topic}>{topic}</li>
+              ))}
+            </ul>
+          ) : (
+            <span className={styles.railTopicsEmpty}>未标注</span>
+          )}
+        </div>
         <p className={styles.railNote}>
           {editable ? '正文保存后会写回工程文件。' : '正文来自工程文件，此处只读。'}
         </p>
-        <p className={styles.railShortcut}>Esc 返回画布</p>
       </aside>
     </div>
   )

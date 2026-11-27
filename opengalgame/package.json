@@ -1,7 +1,8 @@
 {
   "name": "opengalgame",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "本地优先的 Galgame 桌面创作工具",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/xinmengqaq/Open-GalGame.git"
@@ -76,10 +77,8 @@
     "@earendil-works/pi-agent-core": "1.5.2",
     "@earendil-works/pi-ai": "1.5.2",
     "@gsap/react": "^2.1.2",
-    "@langchain/anthropic": "^1.5.11",
     "@langchain/core": "1.2.14",
     "@langchain/langgraph-checkpoint": "1.1.5",
-    "@langchain/openai": "^1.6.0",
     "@radix-ui/react-select": "^2.3.7",
     "@streamdown/cjk": "^1.0.4",
     "@tanstack/react-query": "^5.104.0",

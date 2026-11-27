@@ -29,11 +29,13 @@ function renderBubble(
 describe('GenerationCompletedBubble', () => {
   it('显示已提交结果与按画布重新生成入口', () => {
     const html = renderBubble()
+    expect(html).toContain('生成结果')
     expect(html).toContain('已提交')
-    expect(html).toContain('这一场已经写入作品，可以到作品历史查看。')
+    expect(html).toContain('已写入作品。')
+    expect(html).not.toContain('可以到作品历史查看')
     expect(html).toContain('查看作品历史')
     expect(html).toContain('按画布重新生成')
-    expect(html).toContain('重新读取已保存编排，不沿用上一候选。')
+    expect(html).toContain('重新生成不会沿用上一候选。')
     expect(html).not.toContain('正在准备生成…')
     expect(html.match(/<button/g)).toHaveLength(2)
     expect(html).not.toContain('disabled=""')

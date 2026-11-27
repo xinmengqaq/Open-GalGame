@@ -40,7 +40,7 @@ export const workbenchFeedback = {
   catalogScanFailed: '输入来源读取失败',
   arrangementFailed: '画布编排读取失败',
   ownershipBlocked: '无法读取该工程文件，已阻止显示错误工程内容。',
-  sessionEdit: '修改会写入本次画布编排，保存后保持。',
+  sessionEdit: '修改会写入当前画布，保存后保留。',
   saveAction: '保存',
   saveSucceeded: '已保存',
   documentSaveTooLong: '正文超过 20 万字符，无法保存',
@@ -54,8 +54,6 @@ export const workbenchFeedback = {
   saveUnverified: '结果待核对：提交结果不明，请先核对持久事实。',
   saveFailed: '保存失败',
   canvasLayout: '画布位置仅用于整理，不代表剧情顺序。',
-  emptyGuide: '从输入目录拖入文本和文件素材',
-  emptyHint: '动画和特效在画布上添加卡片后选择。',
   emptyCatalog: '还没有可用输入来源',
   disconnected: '来源已断开'
 } as const

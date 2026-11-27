@@ -1,13 +1,11 @@
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 
-import type { ConnectionSettingsController } from './controllers/ConnectionSettingsController'
 import { createIpcRequestAccess, isTrustedIpcSender } from './createIpcRequestAccess'
 import type { ProjectController } from './controllers/ProjectController'
 import type { ProjectProgressVO } from '@application/projects/vo/ProjectVO'
 
 export function registerHomeIpc(options: {
   projects: ProjectController
-  connections: ConnectionSettingsController
   getWindow: () => BrowserWindow | null
   rendererUrl: string
 }): () => void {
@@ -37,13 +35,7 @@ export function registerHomeIpc(options: {
       'project:ensure-workspace': (event, input) =>
         options.projects.ensureProjectWorkspace(input, access(event)),
       'project:inspect-workspace': (event, input) =>
-        options.projects.inspectProjectWorkspace(input, access(event)),
-      'connection:get-summary': (event, input) =>
-        options.connections.getSettingsSummary(input, access(event)),
-      'connection:test': (event, input) => options.connections.testConnection(input, access(event)),
-      'connection:save': (event, input) => options.connections.saveSettings(input, access(event)),
-      'connection:list-models': (event, input) =>
-        options.connections.listModels(input, access(event))
+        options.projects.inspectProjectWorkspace(input, access(event))
     }
 
   for (const [channel, handler] of Object.entries(handlers)) ipcMain.handle(channel, handler)

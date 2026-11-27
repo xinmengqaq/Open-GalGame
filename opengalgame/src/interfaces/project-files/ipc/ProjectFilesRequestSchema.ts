@@ -18,7 +18,9 @@ export const readProjectMediaSchema = z.strictObject({
   sourceId: z.string()
 })
 
-export const chooseProjectFilesSchema = z.strictObject({})
+export const chooseProjectFilesSchema = z.strictObject({
+  mediaKinds: z.array(z.enum(['image', 'audio', 'video'])).optional()
+})
 
 const catalogWriteScope = {
   projectId: z.string(),

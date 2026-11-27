@@ -10,8 +10,8 @@
   padding: 3px 9px;
   border: 0;
   border-radius: var(--wb-radius-pill);
-  background: color-mix(in srgb, var(--wb-accent) 10%, transparent);
-  color: var(--wb-accent-strong);
+  background: color-mix(in srgb, var(--content-image) 10%, transparent);
+  color: var(--content-focus);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.55;
@@ -41,15 +41,15 @@
   background:
     radial-gradient(
       ellipse 62% 86% at 26% 12%,
-      color-mix(in srgb, var(--card-accent, var(--wb-accent)) 20%, transparent) 0%,
+      color-mix(in srgb, var(--card-accent, var(--content-image)) 20%, transparent) 0%,
       transparent 66%
     ),
-    color-mix(in srgb, var(--wb-surface-soft) 74%, transparent);
-  color: color-mix(in srgb, var(--card-accent, var(--wb-accent)) 82%, transparent);
+    color-mix(in srgb, var(--content-surface-raised) 74%, transparent);
+  color: color-mix(in srgb, var(--card-accent, var(--content-image)) 82%, transparent);
 }
 
 .presetEmblem[data-has-preset='false'] {
-  color: color-mix(in srgb, var(--wb-text-muted) 72%, transparent);
+  color: color-mix(in srgb, var(--content-text-muted) 72%, transparent);
 }
 
 .presetEmblem > svg {
@@ -105,8 +105,8 @@
   border: 0;
   border-radius: var(--wb-radius-control);
   outline: 0;
-  background: color-mix(in srgb, var(--wb-accent) 7%, transparent);
-  color: var(--wb-text-strong);
+  background: color-mix(in srgb, var(--content-image) 7%, transparent);
+  color: var(--content-text);
   font-family: var(--wb-font);
   font-size: 12.5px;
   font-weight: 600;
@@ -117,11 +117,11 @@
 }
 
 .presetSelect:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--wb-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--content-image) 12%, transparent);
 }
 
 .presetSelect:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--wb-accent) 62%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--content-image) 62%, transparent);
   outline-offset: 2px;
 }
 
@@ -136,8 +136,8 @@
   right: 12px;
   width: 6px;
   height: 6px;
-  border-right: 1.5px solid color-mix(in srgb, var(--wb-accent-strong) 76%, transparent);
-  border-bottom: 1.5px solid color-mix(in srgb, var(--wb-accent-strong) 76%, transparent);
+  border-right: 1.5px solid color-mix(in srgb, var(--content-focus) 76%, transparent);
+  border-bottom: 1.5px solid color-mix(in srgb, var(--content-focus) 76%, transparent);
   transform: translateY(-68%) rotate(45deg);
   pointer-events: none;
 }
@@ -152,7 +152,7 @@
   border: 0;
   border-radius: var(--wb-radius-control);
   background: transparent;
-  color: var(--wb-text-muted);
+  color: var(--content-text-muted);
   font-family: var(--wb-font);
   font-size: 11.5px;
   font-weight: 600;
@@ -167,8 +167,8 @@
 }
 
 .clearPreset:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--wb-danger) 10%, transparent);
-  color: var(--wb-danger-strong);
+  background: color-mix(in srgb, var(--content-video) 10%, transparent);
+  color: color-mix(in srgb, var(--content-video) 70%, var(--content-text));
 }
 
 .clearPreset:disabled {
@@ -185,8 +185,8 @@
   padding: 9px 11px;
   border: 0;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--wb-danger) 10%, transparent);
-  color: color-mix(in srgb, var(--wb-danger-strong) 88%, var(--wb-text));
+  background: color-mix(in srgb, var(--content-video) 10%, transparent);
+  color: color-mix(in srgb, var(--content-video) 62%, var(--content-text));
   font-size: 12px;
   font-weight: 600;
   line-height: 1.65;
@@ -197,7 +197,7 @@
   height: 14px;
   flex: none;
   margin-top: 2px;
-  color: var(--wb-danger);
+  color: var(--content-video);
 }
 
 .visuallyHidden {
@@ -220,12 +220,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .presetSelect,
-  .clearPreset {
+  :root:not([data-reduced-motion='full']) .presetSelect,
+  :root:not([data-reduced-motion='full']) .clearPreset {
     transition: none;
   }
 
-  .presetBadge[data-tone='busy']::before {
+  :root:not([data-reduced-motion='full']) .presetBadge[data-tone='busy']::before {
     animation: none;
   }
 }

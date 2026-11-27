@@ -5,6 +5,8 @@ const net = require('node:net')
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
 
+const { seedGuidePreference } = require('./support/guide-preference.cjs')
+
 const appRoot = resolve(__dirname, '..', '..')
 const evidenceDir = join(appRoot, 'artifacts', 'preview-r03')
 const originalScene = '小明:第一句;\n旁白:第二句;\n小明:第三句;\n'
@@ -165,8 +167,7 @@ async function stopChildren() {
     if (child.exitCode === null) {
       try {
         execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' })
-      } catch {
-      }
+      } catch {}
     }
   }
   children.clear()
@@ -179,6 +180,7 @@ async function resetScene() {
 }
 
 async function openWorkbench(page) {
+  await seedGuidePreference(page)
   await page.goto(baseUrl)
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 20000 })
   await page.getByRole('button', { name: '项目选择' }).click()
@@ -280,8 +282,7 @@ test('关闭后迟到的打开响应会被关闭，不把关闭的会话留在�
   )
   const closeRequest = page.waitForRequest(
     (request) =>
-      request.url().includes('/__opengalgame/dev/call') &&
-      isDevCall(request, 'closeScenePreview')
+      request.url().includes('/__opengalgame/dev/call') && isDevCall(request, 'closeScenePreview')
   )
   await page.locator('[data-action="preview"]').click()
   const layer = page.getByTestId('preview-page')
@@ -354,9 +355,9 @@ test('保存通信失败时进入待确认，查看结算后保留草稿并明�
   await page.screenshot({ path: join(evidenceDir, 'preview-pending.png') })
 
   await layer.getByRole('button', { name: '查看结果' }).click()
-  await expect(
-    layer.getByText('没有找到这次保存记录，内容仍保留在左侧。').first()
-  ).toBeVisible({ timeout: 20000 })
+  await expect(layer.getByText('没有找到这次保存记录，内容仍保留在左侧。').first()).toBeVisible({
+    timeout: 20000
+  })
   await expect(layer.locator('[data-dialogue-id]').first()).toContainText('待确认草稿')
   expect(await readFile(join(world.projectRoot, 'game', 'scene', 'start.txt'), 'utf8')).toBe(
     originalScene

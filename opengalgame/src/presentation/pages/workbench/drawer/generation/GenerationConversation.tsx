@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   Check,
-  ChevronDown,
   CircleAlert,
   Clock3,
   Gamepad2,
@@ -28,11 +27,14 @@ import {
 } from '@presentation/components/ai-elements/conversation'
 import { Message, MessageContent } from '@presentation/components/ai-elements/message'
 import { Button } from '@presentation/components/ui/button'
+import { ContentKindIcon } from '@presentation/features/workbench-session/ContentKindIcon'
+import type { SessionCard } from '@presentation/features/workbench-session/workbenchSession.types'
 import { useCandidatePreviewTab } from '../candidate/candidatePreviewContext'
 import { SceneArt } from './SceneArt'
 import { GenerationInteraction } from './GenerationInteraction'
 import { GenerationRunDetails, GenerationRunStrip } from './GenerationRunDetails'
 import {
+  countCanvasCards,
   inputSourceTextOf,
   interruptionNoteOf,
   orderedOutcomeActions,
@@ -56,6 +58,7 @@ import { historySecondTime } from './generationHistoryPresentation'
 
 interface GenerationConversationProps {
   status: SceneGenerationRenderStatusVO | null
+  cards: readonly SessionCard[]
   progress: readonly GenerationProgressStep[]
   draft: GenerationDraft
   pending: boolean
@@ -168,7 +171,23 @@ function AssistantBubble({
   )
 }
 
+function DigestIcon({ kind }: { kind: string }): ReactElement {
+  switch (kind) {
+    case 'document':
+      return <ContentKindIcon contentKind="text" textKind="document" />
+    case 'prompt':
+      return <ContentKindIcon contentKind="text" textKind="prompt" />
+    case 'image':
+    case 'audio':
+    case 'video':
+      return <ContentKindIcon contentKind={kind} />
+    default:
+      return <Layers />
+  }
+}
+
 function EmptyGeneration({
+  cards,
   projectName,
   sceneLabel,
   loading,
@@ -182,6 +201,7 @@ function EmptyGeneration({
   onOpenHistory,
   onReload
 }: {
+  cards: readonly SessionCard[]
   projectName: string
   sceneLabel: string
   loading: boolean
@@ -197,6 +217,9 @@ function EmptyGeneration({
 }): ReactElement {
   const busy = pending && startPhase !== null
   const workspaceNotReady = failure?.workspaceNotReady === true
+  const digest = countCanvasCards(cards).filter(
+    (entry) => entry.count > 0 && entry.key !== 'animation' && entry.key !== 'effect'
+  )
   return (
     <ConversationEmptyState className="wb-gen-empty-host">
       <div className="wb-gen-empty">
@@ -220,16 +243,29 @@ function EmptyGeneration({
         <div className="wb-gen-empty__copy" data-gen-motion="copy">
           <p className="wb-gen-empty__scope">{projectName}</p>
           <h2>{sceneLabel}</h2>
-          <p>
-            让 AI
-            先按已保存的编排把这一场写出来，再一起决定需要你拍板的地方。打开抽屉不会自动开始生成。
-          </p>
         </div>
+
+        {digest.length > 0 ? (
+          <ul aria-label="已保存输入构成" className="wb-gen-empty__digest">
+            {digest.map((entry) => (
+              <li data-kind={entry.key} key={entry.key}>
+                <span aria-hidden="true" className="wb-gen-empty__digest-icon">
+                  <DigestIcon kind={entry.key} />
+                </span>
+                <span>{entry.label}</span>
+                <strong>{entry.count}</strong>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="wb-gen-empty__digest-empty">画布上还没有可纳入生成的输入。</p>
+        )}
 
         <div className="wb-gen-empty__actions" data-gen-motion="actions">
           <button
             className="wb-gen-empty__primary"
             disabled={pending || blockedReason !== null || workspaceNotReady}
+            data-guide-target="generation-start"
             onClick={onStart}
             type="button"
           >
@@ -253,7 +289,12 @@ function EmptyGeneration({
           </button>
           <div className="wb-gen-empty__links">
             {onOpenSummary ? (
-              <button className="wb-gen-empty__link" onClick={onOpenSummary} type="button">
+              <button
+                data-guide-target="generation-summary"
+                className="wb-gen-empty__link"
+                onClick={onOpenSummary}
+                type="button"
+              >
                 查看输入摘要
               </button>
             ) : null}
@@ -378,30 +419,28 @@ function RetryRepairConfirm({
   )
 }
 
-function FailureDiagnostics({
-  failure
+function FailureFacts({
+  failure,
+  hasPreviousCandidate
 }: {
   failure: NonNullable<GenerationRunView['failure']>
+  hasPreviousCandidate: boolean
 }): ReactElement {
   return (
-    <details className="wb-gen-outcome__diagnostics">
-      <summary>
-        <span>诊断信息</span>
-        <ChevronDown aria-hidden="true" />
-      </summary>
-      <dl>
-        <div>
-          <dt>故障指纹</dt>
-          <dd>{failure.reference ?? '没有可用的诊断编号'}</dd>
-        </div>
-        <div>
-          <dt>操作时间</dt>
-          <dd>
-            {failure.recordedAt ? historySecondTime(failure.recordedAt) : '没有可用的操作时间'}
-          </dd>
-        </div>
-      </dl>
-    </details>
+    <dl aria-label="失败诊断" className="wb-gen-outcome__facts">
+      <div>
+        <dt>操作时间</dt>
+        <dd>{failure.recordedAt ? historySecondTime(failure.recordedAt) : '没有可用的操作时间'}</dd>
+      </div>
+      <div>
+        <dt>故障指纹</dt>
+        <dd>{failure.reference ?? '没有可用的诊断编号'}</dd>
+      </div>
+      <div>
+        <dt>本轮候选</dt>
+        <dd>{hasPreviousCandidate ? '上一候选可只读查看' : '没有可查看的候选'}</dd>
+      </div>
+    </dl>
   )
 }
 
@@ -463,8 +502,7 @@ function outcomePendingLabel(
 ): string {
   if (!pending) return label
   if (action === 'resume' && pendingAction === 'resume') return '正在继续…'
-  if (action === 'resume-unfinished' && pendingAction === 'resumeUnfinished')
-    return '正在继续…'
+  if (action === 'resume-unfinished' && pendingAction === 'resumeUnfinished') return '正在继续…'
   if (action === 'retry-cleanup' && pendingAction === 'retryCleanup') return '正在重试清理…'
   if (action === 'verify-result' && pendingAction === 'verifyResult') return '正在核对…'
   if (action === 'cancel' && pendingAction === 'cancel') return '正在取消…'
@@ -573,6 +611,9 @@ export function GenerationOutcomeBubble({
       </div>
 
       <p className="wb-gen-outcome__reason">{reason}</p>
+      {phase === 'failed' && failure ? (
+        <FailureFacts failure={failure} hasPreviousCandidate={view.candidate.previous} />
+      ) : null}
       {verifyMessage ? (
         <div className="wb-gen-outcome__next" role="status">
           <span>核对结果</span>
@@ -581,7 +622,7 @@ export function GenerationOutcomeBubble({
       ) : null}
       {nextStep ? (
         <div className="wb-gen-outcome__next">
-          <span>下一步</span>
+          <span>{phase === 'failed' ? '恢复' : '下一步'}</span>
           <p>{nextStep}</p>
         </div>
       ) : null}
@@ -654,7 +695,6 @@ export function GenerationOutcomeBubble({
 
       <div className="wb-gen-outcome__footer">
         <GenerationRunDetails label="查看运行详情" variant="quiet" view={view} />
-        {phase === 'failed' && failure ? <FailureDiagnostics failure={failure} /> : null}
       </div>
     </div>
   )
@@ -701,8 +741,9 @@ export function GenerationCompletedBubble({
           <Check />
         </ResultOrb>
         <div className="wb-gen-result__copy">
+          <span className="wb-gen-result__eyebrow">生成结果</span>
           <strong>已提交</strong>
-          <span>这一场已经写入作品，可以到作品历史查看。</span>
+          <span>当前场景已写入作品。</span>
         </div>
         <button className="wb-gen-result__link" onClick={onOpenWorks} type="button">
           查看作品历史
@@ -740,6 +781,7 @@ export function GenerationCompletedBubble({
         <Button
           className="wb-gen-primary"
           disabled={pending || startBlockedReason !== null}
+          data-guide-target="generation-start"
           onClick={onStart}
           type="button"
         >
@@ -750,6 +792,7 @@ export function GenerationCompletedBubble({
           <Button
             className="wb-gen-secondary"
             disabled={exporting === true || exportDisabled === true}
+            data-guide-target="export-open"
             onClick={onExport}
             title={exportHint}
             type="button"
@@ -758,8 +801,8 @@ export function GenerationCompletedBubble({
             {exporting === true ? '正在导出…' : '导出当前场景'}
           </Button>
         ) : null}
-        <span className="wb-gen-result__hint">重新读取已保存编排，不沿用上一候选。</span>
       </div>
+      <p className="wb-gen-result__hint">重新生成不会沿用上一候选。</p>
     </>
   )
 }
@@ -781,6 +824,7 @@ export function GenerationStartRetry({
     <Button
       className="wb-gen-quiet"
       disabled={pending || startBlockedReason !== null || workspaceNotReady}
+      data-guide-target="generation-start"
       onClick={onStart}
       type="button"
     >
@@ -792,6 +836,7 @@ export function GenerationStartRetry({
 
 export function GenerationConversation({
   status,
+  cards,
   progress,
   draft,
   pending,
@@ -859,6 +904,7 @@ export function GenerationConversation({
       {status === null || view === null ? (
         <EmptyGeneration
           blockedReason={startBlockedReason}
+          cards={cards}
           failure={startFailure}
           loadError={loadError}
           loading={loading}
@@ -907,9 +953,7 @@ export function GenerationConversation({
                   <UserBubble>
                     <p className="wb-gen-answered__choice">{answer.label}</p>
                     <p className="wb-gen-answered__detail">{answer.description}</p>
-                    {answer.body ? (
-                      <p className="wb-gen-answered__body">{answer.body}</p>
-                    ) : null}
+                    {answer.body ? <p className="wb-gen-answered__body">{answer.body}</p> : null}
                   </UserBubble>
                 </div>
               ))

@@ -20,8 +20,16 @@ import {
   promptReferenceFailureOf,
   removePromptReferenceIds
 } from './promptReferences'
-import { createWorkbenchAutoSave } from './workbenchAutoSave'
+import {
+  createWorkbenchAutoSave,
+  type WorkbenchSaveRequestOptions
+} from './workbenchAutoSave'
 import { createWorkbenchCommandQueue } from './workbenchCommandQueue'
+import type {
+  RelationAction,
+  WorkbenchActionObservers,
+  WorkbenchActionScope
+} from './workbenchActionObservers'
 import { createWorkbenchPromptEdits } from './workbenchPromptEdits'
 import {
   draftArrangementOf,
@@ -34,6 +42,7 @@ import { sourceFactsOf, type SourceFactsView } from './workbenchSessionSelectors
 import type {
   SessionCard,
   SessionCardLayout,
+  SessionRelation,
   SessionViewport,
   WorkbenchSaveState
 } from './workbenchSession.types'
@@ -72,7 +81,10 @@ export interface WorkbenchCommands {
   editRelationName(relationId: string, specificName: string): Promise<ArrangementEditResult>
   attachRelationRecord(relationId: string, recordCardId: string): Promise<ArrangementEditResult>
   detachRelationRecord(relationId: string): Promise<ArrangementEditResult>
-  save(reason?: SceneCanvasSaveReason): Promise<void>
+  save(
+    reason?: SceneCanvasSaveReason,
+    options?: WorkbenchSaveRequestOptions
+  ): Promise<void>
   prepareHistoryWrite(): Promise<void>
   setSaveHold(hold: boolean): void
   undo(): void
@@ -83,18 +95,26 @@ export interface WorkbenchCommands {
   setViewport(viewport: SessionViewport): void
   selectCard(cardId: string | null): void
   openDocumentLayer(cardId: string): void
+  /** 文档层当前卡片已有可显示正文时由文档层上报阅读事实；打开本身不算。 */
+  reportDocumentBodyReady(cardId: string): void
   closeDocumentLayer(): void
   dispose(): void
 }
 
-export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCommands {
+export function createWorkbenchCommands(
+  client: SceneCanvasClient,
+  observers: WorkbenchActionObservers = {}
+): WorkbenchCommands {
   const store = useWorkbenchSessionStore
   const queue = createWorkbenchCommandQueue()
   const promptEdits = createWorkbenchPromptEdits({
     client,
     enqueue: queue.enqueue,
     noteLocalEdit,
-    noteServerResult
+    noteServerResult,
+    onSaved: (cardId, scope) => {
+      observers.onPromptBodySaved?.({ scope, cardId })
+    }
   })
   const autoSave = createWorkbenchAutoSave({
     enqueue: queue.enqueue,
@@ -108,6 +128,51 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
 
   function noteServerResult(): void {
     autoSave.noteServerResult()
+  }
+
+  /** 捕获动作发生时的会话作用域；命令在 await 期间切走时由观察源按当前快照丢弃。 */
+  function currentScope(): WorkbenchActionScope | null {
+    const state = store.getState()
+    if (
+      state.projectId.length === 0 ||
+      state.sceneId.length === 0 ||
+      state.canvasId.length === 0
+    ) {
+      return null
+    }
+    return {
+      projectId: state.projectId,
+      sceneId: state.sceneId,
+      canvasId: state.canvasId
+    }
+  }
+
+  function reportCardCreated(scope: WorkbenchActionScope | null, card: SessionCard): void {
+    if (!scope) return
+    observers.onCardCreated?.({
+      scope,
+      cardId: card.cardId,
+      cardKind: card.kind
+    })
+  }
+
+  /** 连线两端带稳定的卡片身份和类别；缺任一端就不上报，避免把半条线当完成。 */
+  function relationActionOf(
+    scope: WorkbenchActionScope,
+    relation: SessionRelation
+  ): RelationAction | null {
+    const cards = store.getState().cards
+    const from = cards.find((card) => card.cardId === relation.fromCardId)
+    const to = cards.find((card) => card.cardId === relation.toCardId)
+    if (!from || !to) return null
+    return {
+      scope,
+      relationId: relation.relationId,
+      fromCardId: from.cardId,
+      toCardId: to.cardId,
+      fromCardKind: from.kind,
+      toCardKind: to.kind
+    }
   }
 
   function edit(
@@ -144,10 +209,18 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
     await queue.idle()
   }
 
-  async function performSave(reason: SceneCanvasSaveReason): Promise<void> {
+  async function performSave(
+    reason: SceneCanvasSaveReason,
+    reportGuide = true
+  ): Promise<void> {
     const state = store.getState()
+    const scope = currentScope()
     if (!sessionIsDirty(state) && (state.saveState === 'saved' || state.saveState === 'idle')) {
-      if (reason === 'manual') toast(workbenchFeedback.saveNoChanges)
+      if (reason === 'manual') {
+        toast(workbenchFeedback.saveNoChanges)
+        // 手动保存请求且没有需要保存的改动，同样视为用户完成了一次手动保存。
+        if (reportGuide && scope) observers.onCanvasSaved?.({ scope })
+      }
       return
     }
     if (state.arrangementStatus !== 'ready' && state.arrangementStatus !== 'empty') return
@@ -166,7 +239,10 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
       if (store.getState().projectId !== state.projectId) return
       store.getState().markSaved(sent)
       autoSave.noteSaved()
-      if (reason === 'manual') toast(workbenchFeedback.saveSucceeded)
+      if (reason === 'manual') {
+        toast(workbenchFeedback.saveSucceeded)
+        if (reportGuide && scope) observers.onCanvasSaved?.({ scope })
+      }
     } catch (error) {
       if (store.getState().projectId !== state.projectId) return
       const failure = failureOf(error)
@@ -198,6 +274,8 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
     if (!facts.readable) return 'unreadable'
     const kind = sourceKindOf(facts)
     if (!kind) return 'unreadable'
+    const scope = currentScope()
+    const beforeIds = new Set(store.getState().cards.map((card) => card.cardId))
     await beforeEdit()
     const created = await edit((arrangement) =>
       client.createSourceCard({
@@ -209,7 +287,10 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
         layout: layoutAt(kind, position.x, position.y)
       })
     )
-    return created === 'applied' ? 'created' : 'failed'
+    if (created !== 'applied') return 'failed'
+    const card = store.getState().cards.find((item) => !beforeIds.has(item.cardId))
+    if (card) reportCardCreated(scope, card)
+    return 'created'
   }
 
   async function createCardOfKind(
@@ -233,6 +314,7 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
   }
 
   async function createPromptCard(position: { x: number; y: number }): Promise<string | null> {
+    const scope = currentScope()
     await beforeEdit()
     const beforeIds = new Set(store.getState().cards.map((card) => card.cardId))
     const created = await edit((arrangement) =>
@@ -245,16 +327,28 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
       })
     )
     if (created !== 'applied') return null
-    return store.getState().cards.find((card) => !beforeIds.has(card.cardId))?.cardId ?? null
+    const card = store.getState().cards.find((item) => !beforeIds.has(item.cardId))
+    if (card) reportCardCreated(scope, card)
+    return card?.cardId ?? null
   }
 
   async function editCard(
     cardId: string,
     input: { title?: string; summary?: string }
   ): Promise<ArrangementEditResult> {
+    const scope = currentScope()
     await beforeEdit()
-    return edit((arrangement) =>
-      client.editCard({
+    // 起始用途取自本次提交的草稿，和确认后的用途比较，避免把只改标题或
+    // 原样重存当成写了用途；用途正文不进入通知。
+    let purposeBefore: string | null = null
+    const result = await edit((arrangement) => {
+      const before = arrangement.cards.find((item) => item.cardId === cardId)
+      purposeBefore =
+        before &&
+        (before.kind === 'image' || before.kind === 'audio' || before.kind === 'video')
+          ? before.summary.trim()
+          : null
+      return client.editCard({
         projectId: store.getState().projectId,
         sceneId: store.getState().sceneId,
         canvasId: store.getState().canvasId,
@@ -263,7 +357,21 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
         ...(input.title === undefined ? {} : { title: input.title }),
         ...(input.summary === undefined ? {} : { summary: input.summary })
       })
-    )
+    })
+    if (result === 'applied' && scope) {
+      const applied = store.getState().cards.find((item) => item.cardId === cardId)
+      if (
+        input.summary !== undefined &&
+        applied &&
+        purposeBefore !== null &&
+        (applied.kind === 'image' || applied.kind === 'audio' || applied.kind === 'video') &&
+        applied.summary.trim().length > 0 &&
+        applied.summary.trim() !== purposeBefore
+      ) {
+        observers.onCardEdited?.({ scope, cardId, cardKind: applied.kind })
+      }
+    }
+    return result
   }
 
   function editPromptBody(cardId: string, body: string): void {
@@ -337,8 +445,10 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
   }
 
   async function deleteCard(cardId: string): Promise<ArrangementEditResult> {
+    const scope = currentScope()
+    const card = store.getState().cards.find((item) => item.cardId === cardId)
     await beforeEdit()
-    return edit((arrangement) =>
+    const result = await edit((arrangement) =>
       client.deleteCard({
         projectId: store.getState().projectId,
         sceneId: store.getState().sceneId,
@@ -347,14 +457,26 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
         cardId
       })
     )
+    if (result === 'applied' && scope && card) {
+      observers.onCardDeleted?.({
+        scope,
+        cardId: card.cardId,
+        cardKind: card.kind
+      })
+    }
+    return result
   }
 
   async function connectCards(
     fromCardId: string,
     toCardId: string
   ): Promise<ArrangementEditResult> {
+    const scope = currentScope()
+    const beforeIds = new Set(
+      store.getState().relations.map((relation) => relation.relationId)
+    )
     await beforeEdit()
-    return edit((arrangement) =>
+    const result = await edit((arrangement) =>
       client.connectCards({
         projectId: store.getState().projectId,
         sceneId: store.getState().sceneId,
@@ -364,11 +486,22 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
         toCardId
       })
     )
+    if (result === 'applied' && scope) {
+      const relation = store
+        .getState()
+        .relations.find((item) => !beforeIds.has(item.relationId))
+      const action = relation ? relationActionOf(scope, relation) : null
+      if (action) observers.onRelationCreated?.(action)
+    }
+    return result
   }
 
   async function disconnectCards(relationId: string): Promise<ArrangementEditResult> {
+    const scope = currentScope()
+    const relation = store.getState().relations.find((item) => item.relationId === relationId)
+    const action = scope && relation ? relationActionOf(scope, relation) : null
     await beforeEdit()
-    return edit((arrangement) =>
+    const result = await edit((arrangement) =>
       client.disconnectCards({
         projectId: store.getState().projectId,
         sceneId: store.getState().sceneId,
@@ -377,14 +510,19 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
         relationId
       })
     )
+    if (result === 'applied' && action) {
+      observers.onRelationDeleted?.(action)
+    }
+    return result
   }
 
   async function editRelationName(
     relationId: string,
     specificName: string
   ): Promise<ArrangementEditResult> {
+    const scope = currentScope()
     await beforeEdit()
-    return edit((arrangement) =>
+    const result = await edit((arrangement) =>
       client.editRelationName({
         projectId: store.getState().projectId,
         sceneId: store.getState().sceneId,
@@ -394,6 +532,14 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
         specificName
       })
     )
+    if (result === 'applied' && scope) {
+      const relation = store
+        .getState()
+        .relations.find((item) => item.relationId === relationId)
+      const action = relation ? relationActionOf(scope, relation) : null
+      if (action) observers.onRelationNamed?.(action)
+    }
+    return result
   }
 
   async function attachRelationRecord(
@@ -455,7 +601,7 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
     editRelationName,
     attachRelationRecord,
     detachRelationRecord,
-    save: (reason = 'manual') => autoSave.requestSave(reason),
+    save: (reason = 'manual', options) => autoSave.requestSave(reason, options),
     prepareHistoryWrite,
     setSaveHold: (hold) => autoSave.setSaveHold(hold),
     undo,
@@ -478,13 +624,44 @@ export function createWorkbenchCommands(client: SceneCanvasClient): WorkbenchCom
       store.getState().setViewport(viewport)
       if (sessionIsDirty(store.getState())) noteLocalEdit()
     },
-    selectCard: (cardId) => store.getState().selectCard(cardId),
+    selectCard: (cardId) => {
+      store.getState().selectCard(cardId)
+      if (!cardId) return
+      const card = store.getState().cards.find((item) => item.cardId === cardId)
+      const scope = currentScope()
+      if (!card || !scope) return
+      observers.onCardSelected?.({
+        scope,
+        cardId,
+        cardKind: card.kind
+      })
+    },
     openDocumentLayer: (cardId) => {
       const card = store.getState().cards.find((item) => item.cardId === cardId)
       if (card?.kind !== 'document') return
       store.getState().openDocumentLayer(cardId)
     },
-    closeDocumentLayer: () => store.getState().closeDocumentLayer(),
+    reportDocumentBodyReady: (cardId) => {
+      const state = store.getState()
+      // 只认当前打开且仍是文档卡的这一层；关闭、切卡或切工程后的迟到读取
+      // 不再发布阅读事实。
+      if (state.documentLayerCardId !== cardId) return
+      const card = state.cards.find((item) => item.cardId === cardId)
+      if (card?.kind !== 'document') return
+      const scope = currentScope()
+      if (scope) observers.onDocumentOpened?.({ scope, cardId })
+    },
+    closeDocumentLayer: () => {
+      const state = store.getState()
+      const cardId = state.documentLayerCardId
+      if (!cardId) return
+      const card = state.cards.find((item) => item.cardId === cardId)
+      const scope = currentScope()
+      store.getState().closeDocumentLayer()
+      if (card?.kind !== 'document' || !scope) return
+      // 只有真正关闭文档层才发布「回到画布」；取消未保存确认时不会调用这里。
+      observers.onDocumentClosed?.({ scope, cardId })
+    },
     dispose: () => {
       promptEdits.dispose()
       autoSave.cancelScheduledSave()

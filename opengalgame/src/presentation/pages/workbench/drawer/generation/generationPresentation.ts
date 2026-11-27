@@ -84,7 +84,6 @@ export type GenerationPhase =
   | 'failed'
   | 'cancelled'
 
-
 export function generationPhaseOf(status: SceneGenerationRenderStatusVO | null): GenerationPhase {
   if (!status) return 'empty'
   if (isTerminalState(status.state)) {
@@ -837,7 +836,7 @@ export function outcomeNextStepOf(input: {
   if (input.interruptionNote) return input.interruptionNote
   switch (input.failureClass) {
     case 'modelTransient':
-      if (has('regenerate')) return '按画布重新生成会重新读取已保存编排，不沿用上一候选。'
+      if (has('regenerate')) return '重试会读取当前已保存的画布，不沿用上一候选。'
       return has('reload') ? '先核对任务状态，确认这次生成的终态。' : null
     case 'modelAuth':
       if (has('reload')) return '先重新核对任务状态，再确认这一轮的输入。'

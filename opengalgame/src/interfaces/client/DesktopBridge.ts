@@ -5,16 +5,19 @@ import type {
   ReadUpdateStatusDTO
 } from '@application/app-update/dto/AppUpdateDTO'
 import type { UpdateCheckVO, UpdateStatusVO } from '@application/app-update/vo/AppUpdateVO'
+import type { SaveAppearanceSettingsDTO } from '@application/settings/appearance/dto/AppearanceSettingsDTO'
+import type { AppearanceSettingsVO } from '@application/settings/appearance/vo/AppearanceSettingsVO'
 import type {
   ConnectionSettingsDTO,
   ListModelsDTO
-} from '@application/connections/dto/ConnectionSettingsDTO'
+} from '@application/settings/connections/dto/ConnectionSettingsDTO'
 import type {
   ConnectionSettingsVO,
   ConnectionTestVO,
   ModelListVO
-} from '@application/connections/vo/ConnectionSettingsVO'
+} from '@application/settings/connections/vo/ConnectionSettingsVO'
 import type {
+  ChooseProjectFilesDTO,
   CopyProjectFileDTO,
   CopyProjectFolderDTO,
   CreateProjectFolderDTO,
@@ -232,7 +235,9 @@ export interface DesktopBridge {
     request: DetachSceneCanvasRelationRecordDTO
   ): Promise<AjaxResult<SceneCanvasArrangementVO>>
   saveSceneCanvasArrangement(request: SaveSceneCanvasArrangementDTO): Promise<AjaxResult<null>>
-  chooseProjectFiles(): Promise<AjaxResult<readonly string[] | null>>
+  chooseProjectFiles(
+    request?: ChooseProjectFilesDTO
+  ): Promise<AjaxResult<readonly string[] | null>>
   importProjectFiles(request: ImportProjectFilesDTO): Promise<AjaxResult<ImportProjectFilesVO>>
   openProjectFile(request: ProjectFileScopeDTO): Promise<AjaxResult<null>>
   renameProjectFile(request: RenameProjectFileDTO): Promise<AjaxResult<ProjectInputSourceSummaryVO>>
@@ -259,6 +264,10 @@ export interface DesktopBridge {
     request: RecoverProjectFileOperationsDTO
   ): Promise<AjaxResult<readonly ProjectFileOperationRecoveryVO[]>>
   pathForDroppedFile(file: File): Promise<AjaxResult<string>>
+  readAppearance(): Promise<AjaxResult<AppearanceSettingsVO>>
+  saveAppearance(
+    request: SaveAppearanceSettingsDTO
+  ): Promise<AjaxResult<AppearanceSettingsVO>>
   getSettingsSummary(): Promise<AjaxResult<ConnectionSettingsVO | null>>
   testConnection(request: ConnectionSettingsDTO): Promise<AjaxResult<ConnectionTestVO>>
   saveSettings(request: ConnectionSettingsDTO): Promise<AjaxResult<ConnectionSettingsVO>>

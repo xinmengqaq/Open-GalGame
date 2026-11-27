@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { VersionHistoryEntryVO } from '@application/project-versioning/vo/VersionHistoryVO'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
 import {
+  contentSourceLabel,
   formatHistoryRange,
   formatHistoryTime,
   groupHistory,
@@ -81,13 +82,27 @@ describe('历史记录展示', () => {
     expect(formatHistoryTime('not-a-date', now)).toBe('not-a-date')
   })
 
-  it('自动保存组显示首尾时间范围', () => {
+  it('自动保存组显示首尾时间范围，同一天不重复日期', () => {
     const now = new Date(2026, 9, 18, 12, 0, 0)
     const entries = [
       entry('system-1', 'system', new Date(2026, 9, 18, 10, 30).toISOString()),
       entry('system-2', 'system', new Date(2026, 9, 18, 10, 4).toISOString())
     ]
-    expect(formatHistoryRange(entries, now)).toBe('今天 10:04 — 今天 10:30')
+    expect(formatHistoryRange(entries, now)).toBe('10:04 — 10:30')
+    expect(
+      formatHistoryRange(
+        [
+          entry('system-1', 'system', new Date(2026, 9, 18, 9, 50).toISOString()),
+          entry('system-2', 'system', new Date(2026, 9, 17, 23, 50).toISOString())
+        ],
+        now
+      )
+    ).toBe('昨天 23:50 — 今天 09:50')
+  })
+
+  it('内容来源区分创作操作与 AI 生成', () => {
+    expect(contentSourceLabel('operation')).toBe('创作操作')
+    expect(contentSourceLabel('ai')).toBe('AI 生成')
   })
 
   it('清理成功只移除已加载范围内同保存方式的更早记录', () => {

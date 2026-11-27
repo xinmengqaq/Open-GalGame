@@ -2,8 +2,6 @@ import { useRef, type ReactElement } from 'react'
 
 import brandMark from '../../assets/brand-mark.webp'
 import { ArrowIcon, DownloadIcon, ListIcon, PlusIcon, SettingsIcon } from '../../components/Icons'
-import { ConnectionSettingsDialog } from '../../features/connection-settings/ConnectionSettingsDialog'
-import { useConnectionSettings } from '../../features/connection-settings/useConnectionSettings'
 import { CreateProjectDialog } from '../../features/project-create/CreateProjectDialog'
 import { useProjectCreate } from '../../features/project-create/useProjectCreate'
 import { ImportResultDialog } from '../../features/project-import/ImportResultDialog'
@@ -13,33 +11,25 @@ import styles from './HomePage.module.css'
 import { HomeVisual } from './HomeVisual'
 import { useHomeMotion } from './useHomeMotion'
 import type { AppUpdateFlow } from '../../features/app-update/useAppUpdate'
-import type { ConnectionSettingsClient } from '@interfaces/client/ConnectionSettingsClient'
+import type { SettingsSectionId } from '../../features/settings/settingsNavigation'
 import type { ProjectClient } from '@interfaces/client/ProjectClient'
 
 interface HomePageProps {
   projectClient: ProjectClient
-  connectionClient: ConnectionSettingsClient
   appUpdate: AppUpdateFlow
-}
-
-function AppUpdateIcon(): ReactElement {
-  return (
-    <svg className={styles.updateIcon} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
-      <path d="M20 4v5h-5" />
-    </svg>
-  )
+  onOpenSettings: (section?: SettingsSectionId) => void
+  onProjectCreated?: (projectId: string) => void
 }
 
 export function HomePage({
   projectClient,
-  connectionClient,
-  appUpdate
+  appUpdate,
+  onOpenSettings,
+  onProjectCreated
 }: HomePageProps): ReactElement {
   const visit = useNavigationStore((state) => state.visit)
   const importing = useProjectImport(projectClient)
-  const creating = useProjectCreate(projectClient)
-  const settings = useConnectionSettings(connectionClient)
+  const creating = useProjectCreate(projectClient, { onProjectCreated })
   const updateBadge =
     appUpdate.status?.phase === 'available'
       ? '有新版本'
@@ -95,21 +85,21 @@ export function HomePage({
           </span>
         </div>
         <div className={styles.headerRight}>
+          {updateBadge === null ? null : (
+            <span className={styles.updateBadge} role="status" aria-live="polite">
+              {updateBadge}
+            </span>
+          )}
           <button
+            data-guide-target="model-open"
+            data-settings-opener
             ref={settingsButton}
             className={styles.settings}
             type="button"
-            onClick={() => void settings.open()}
+            onClick={() => onOpenSettings()}
           >
             <SettingsIcon ref={gearIcon} />
-            连接设置
-          </button>
-          <button className={styles.settings} type="button" onClick={appUpdate.openSettings}>
-            <AppUpdateIcon />
-            应用设置
-            {updateBadge === null ? null : (
-              <span className={styles.updateBadge}>{updateBadge}</span>
-            )}
+            设置
           </button>
         </div>
       </header>
@@ -158,6 +148,7 @@ export function HomePage({
             </button>
             <div className={styles.row}>
               <button
+                data-guide-target="projects-open"
                 ref={projectsButton}
                 className={styles.secondary}
                 type="button"
@@ -170,6 +161,7 @@ export function HomePage({
                 项目选择
               </button>
               <button
+                data-guide-target="project-create"
                 ref={createButton}
                 className={styles.secondary}
                 type="button"
@@ -199,7 +191,6 @@ export function HomePage({
         onRebuildWorkspace={importing.rebuildWorkspace}
       />
       <CreateProjectDialog flow={creating} />
-      <ConnectionSettingsDialog flow={settings} />
     </section>
   )
 }

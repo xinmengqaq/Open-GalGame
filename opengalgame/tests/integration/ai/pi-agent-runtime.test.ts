@@ -15,7 +15,7 @@ import { PiAgentFactory } from '@infrastructure/ai/pi/PiAgentFactory'
 import { PiAgentExecutor } from '@infrastructure/ai/pi/PiAgentExecutor'
 import { PiModelFactory, type PiModelRuntime } from '@infrastructure/ai/pi/PiModelFactory'
 import type { AgentStreamEvent } from '@infrastructure/ai/streaming/AgentStreamEvent'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 const identity = { executionId: 'execution-1', agentId: 'webgal-scene', runId: 'run-1' }
 

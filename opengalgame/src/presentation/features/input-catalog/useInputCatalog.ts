@@ -12,6 +12,7 @@ import type { ProjectFilesClient } from '@interfaces/project-files/client/Projec
 import { failureOf, requireSuccess } from '../../feedback/failure'
 import { workbenchFeedback } from '../../feedback/workbenchFeedback'
 import { filterInputSources } from './inputCatalogFilters'
+import type { ImportedSourcesHandler } from '../workbench-session/workbenchActionObservers'
 import { useWorkbenchSessionStore } from '../workbench-session/workbenchSession.store'
 import {
   SOURCE_DRAG_MIME,
@@ -65,7 +66,8 @@ const emptySources: readonly ProjectInputSourceSummaryVO[] = []
 
 export function useInputCatalog(
   client: ProjectFilesClient,
-  panelRef: RefObject<HTMLElement | null>
+  panelRef: RefObject<HTMLElement | null>,
+  onImported?: ImportedSourcesHandler
 ): UseInputCatalog {
   const projectId = useWorkbenchSessionStore((state) => state.projectId)
   const queryClient = useQueryClient()
@@ -271,10 +273,22 @@ export function useInputCatalog(
       setMenu({ kind: 'blank', x: event.clientX, y: event.clientY })
     },
     closeMenu: () => setMenu(null),
-    importFiles: () =>
-      chooseAndImport(client, queryClient, projectId, currentFolderId, busy, setBusy).catch(
-        () => undefined
-      ),
+    importFiles: async (options) => {
+      try {
+        return await chooseAndImport(
+          client,
+          queryClient,
+          projectId,
+          currentFolderId,
+          busy,
+          setBusy,
+          onImported,
+          options
+        )
+      } catch {
+        return { status: 'failed' }
+      }
+    },
     allowExternalDrop: (event) => {
       if (isInternalSourceDrag(event) || !hasFilePayload(event) || busy) return
       event.preventDefault()
@@ -290,7 +304,8 @@ export function useInputCatalog(
         parentFolderId,
         event.dataTransfer.files,
         busy,
-        setBusy
+        setBusy,
+        onImported
       ).catch(() => undefined)
     },
     useOnCanvas: (sourceId) => {
@@ -381,9 +396,15 @@ export function useInputCatalog(
     chooseCreateMedia: () => {
       const parent = createChooser === false ? currentFolderId : createChooser
       setCreateChooser(false)
-      void chooseAndImport(client, queryClient, projectId, parent, busy, setBusy).catch(
-        () => undefined
-      )
+      void chooseAndImport(
+        client,
+        queryClient,
+        projectId,
+        parent,
+        busy,
+        setBusy,
+        onImported
+      ).catch(() => undefined)
     },
     beginRenameFile: (sourceId) => {
       const source = sources.find((item) => item.sourceId === sourceId)

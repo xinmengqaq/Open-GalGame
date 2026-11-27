@@ -1,0 +1,436 @@
+/* 邀请：480px 玻璃卡。标题、线图、短说明和两枚操作沿同一条阅读路径，
+   表面、圆角、阴影与弹窗生命周期交给共享 workbench 变体。 */
+.dialogHost[data-mode='invitation'] :global(dialog[data-theme='workbench']) {
+  width: min(480px, calc(100vw - 32px));
+  border-radius: var(--wb-radius-panel);
+  box-shadow:
+    var(--wb-shadow-float),
+    0 0 0 1px color-mix(in srgb, var(--wb-text) 6%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 62%, transparent);
+}
+
+.dialogHost[data-mode='invitation'] :global(dialog[data-theme='workbench']) header {
+  align-items: flex-start;
+  padding: 24px 24px 0;
+}
+
+.dialogHost[data-mode='invitation'] :global(dialog[data-theme='workbench']) header h2 {
+  max-width: 100%;
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 24px;
+  font-weight: 780;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.dialogHost[data-mode='invitation'] :global(dialog[data-theme='workbench']) > div > div {
+  padding: 14px 24px 0;
+}
+
+.dialogHost[data-mode='invitation'] :global(dialog[data-theme='workbench']) footer {
+  align-items: flex-end;
+  gap: 12px;
+  padding: 20px 24px 24px;
+}
+
+.dialogHost[data-mode='invitation'] :global(dialog[data-theme='workbench']) footer button {
+  padding-inline: 16px;
+}
+
+.invitationLine {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
+  text-wrap: pretty;
+}
+
+.noBreak {
+  white-space: nowrap;
+}
+
+.invitationActions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* 目录：480px 玻璃索引。标题、副文、八行步骤名和返回动作共用一条 24px 内线；
+   当前行只标阅读位置，不做完成勾或成就标记。 */
+.dialogHost[data-mode='catalog'] :global(dialog[data-theme='workbench']) {
+  width: min(480px, calc(100vw - 32px));
+  border-radius: var(--wb-radius-panel);
+  box-shadow:
+    var(--wb-shadow-float),
+    0 0 0 1px color-mix(in srgb, var(--wb-text) 6%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 62%, transparent);
+}
+
+.dialogHost[data-mode='catalog'] :global(dialog[data-theme='workbench']) header {
+  align-items: flex-start;
+  padding: 24px 24px 0;
+}
+
+.dialogHost[data-mode='catalog'] :global(dialog[data-theme='workbench']) header h2 {
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 21px;
+  font-weight: 760;
+  letter-spacing: -0.008em;
+  line-height: 1.3;
+}
+
+.dialogHost[data-mode='catalog'] :global(dialog[data-theme='workbench']) header p {
+  overflow: visible;
+  color: var(--wb-text-muted);
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: 0;
+  line-height: 1.55;
+  text-overflow: clip;
+  text-wrap: pretty;
+  white-space: normal;
+}
+
+.dialogHost[data-mode='catalog'] :global(dialog[data-theme='workbench']) > div > div {
+  padding: 12px 24px 0;
+}
+
+.dialogHost[data-mode='catalog'] :global(dialog[data-theme='workbench']) footer {
+  padding: 16px 24px 22px;
+}
+
+/* 图解：480px 玻璃操作台。标题、演示画布、图注和两枚操作沿同一条阅读路径；
+   表面、圆角、阴影与弹窗生命周期交给共享 workbench 变体。 */
+.dialogHost[data-mode='example'] :global(dialog[data-theme='workbench']) {
+  width: min(480px, calc(100vw - 32px));
+  border-radius: var(--wb-radius-panel);
+  box-shadow:
+    var(--wb-shadow-float),
+    0 0 0 1px color-mix(in srgb, var(--wb-text) 6%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 62%, transparent);
+}
+
+.dialogHost[data-mode='example'] :global(dialog[data-theme='workbench']) header {
+  align-items: flex-start;
+  padding: 24px 24px 0;
+}
+
+.dialogHost[data-mode='example'] :global(dialog[data-theme='workbench']) header h2 {
+  max-width: 100%;
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  font-size: 21px;
+  font-weight: 760;
+  letter-spacing: -0.008em;
+  line-height: 1.3;
+}
+
+.dialogHost[data-mode='example'] :global(dialog[data-theme='workbench']) header p {
+  color: var(--wb-text-faint);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.dialogHost[data-mode='example'] :global(dialog[data-theme='workbench']) > div > div {
+  padding: 14px 24px 0;
+}
+
+.dialogHost[data-mode='example'] :global(dialog[data-theme='workbench']) footer {
+  gap: 10px;
+  padding: 18px 24px 22px;
+}
+
+.catalog {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.catalogViewport {
+  position: relative;
+  min-height: 0;
+}
+
+/* 八步单独滚动：footer 与目录提示保持可见，滚轮/键盘都能到达最后一步。 */
+.catalogScroll {
+  max-height: min(54vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: color-mix(in srgb, var(--wb-accent) 42%, transparent)
+    color-mix(in srgb, var(--wb-accent) 10%, transparent);
+  scrollbar-width: thin;
+}
+
+.catalogScroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.catalogScroll::-webkit-scrollbar-track {
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-accent) 10%, transparent);
+}
+
+.catalogScroll::-webkit-scrollbar-thumb {
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-accent) 36%, transparent);
+}
+
+/* 只有真的溢出才出现：底部渐隐 + 还有几步，不压住点击区也不推走 footer。 */
+.scrollHint {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 22px 0 7px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--wb-surface-solid) 0%, transparent),
+    color-mix(in srgb, var(--wb-surface-solid) 92%, transparent) 58%
+  );
+  color: var(--wb-accent-strong);
+  font-family: var(--wb-font);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.scrollHint svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.8;
+}
+
+.catalogList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.catalogItem {
+  display: block;
+}
+
+.catalogRow {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  grid-template-columns: 20px minmax(0, 1fr) auto 12px;
+  align-items: center;
+  column-gap: 10px;
+  padding: 0 12px 0 14px;
+  border: 0;
+  border-radius: var(--wb-radius-control);
+  background: transparent;
+  color: var(--wb-text-strong);
+  font-family: var(--wb-font);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.catalogRow:hover {
+  background: var(--wb-wash-lilac-soft);
+}
+
+.catalogRow:active {
+  background: var(--wb-wash-lilac);
+}
+
+.catalogRow:focus-visible {
+  outline: none;
+  background: var(--wb-wash-lilac);
+  box-shadow: inset 0 0 0 2px var(--wb-accent);
+}
+
+/* 当前行：左侧一小段紫色短轨 + 「读到这里」，只表示阅读位置。 */
+.catalogRow[aria-current='step'] {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--wb-accent) 11%, transparent) 0%,
+    color-mix(in srgb, var(--wb-accent) 4%, transparent) 62%,
+    transparent 100%
+  );
+}
+
+.catalogRow[aria-current='step']::before {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 2px;
+  height: 18px;
+  border-radius: var(--wb-radius-pill);
+  background: linear-gradient(180deg, var(--wb-accent), var(--wb-accent-strong));
+  content: '';
+  transform: translateY(-50%);
+}
+
+.catalogNumber {
+  color: var(--wb-text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-align: center;
+}
+
+.catalogLabel {
+  min-width: 0;
+  color: var(--wb-text-strong);
+  font-size: 14.5px;
+  font-weight: 620;
+  letter-spacing: 0.005em;
+  line-height: 1.35;
+}
+
+.currentMark {
+  flex: none;
+  color: var(--wb-accent-strong);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.catalogRow[aria-current='step'] .catalogNumber,
+.catalogRow[aria-current='step'] .catalogLabel {
+  color: var(--wb-accent-strong);
+}
+
+.catalogRow[aria-current='step'] .catalogLabel {
+  font-weight: 680;
+}
+
+.catalogChevron {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--wb-text-faint);
+  opacity: 0.45;
+  transition:
+    color var(--wb-duration-fast) var(--wb-ease),
+    opacity var(--wb-duration-fast) var(--wb-ease),
+    transform var(--wb-duration-fast) var(--wb-ease);
+}
+
+.catalogRow:hover .catalogChevron,
+.catalogRow:focus-visible .catalogChevron {
+  color: var(--wb-accent-strong);
+  opacity: 1;
+  transform: translateX(1px);
+}
+
+.catalogRow[aria-current='step'] .catalogChevron {
+  color: var(--wb-accent-strong);
+  opacity: 0.72;
+}
+
+.connection {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 0;
+}
+
+.connectionFigureBlock {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.connectionFigureBlock svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 图注与按钮都在图外：图只画两端和关系，不靠动画结束才读得懂操作。 */
+.caption {
+  margin: 11px 0 0;
+  color: var(--wb-text-muted);
+  font-family: var(--wb-font);
+  font-size: 13.5px;
+  line-height: 1.6;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.exampleFallback {
+  margin: 6px 0;
+  color: var(--wb-text-muted);
+  font-family: var(--wb-font);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+@media (max-height: 700px) {
+  .catalogScroll {
+    max-height: min(50vh, 360px);
+  }
+
+  .catalogRow {
+    min-height: 38px;
+  }
+
+  .catalogList {
+    gap: 0;
+  }
+
+  .connectionFigureBlock svg {
+    width: min(100%, 360px);
+    margin: 0 auto;
+  }
+}
+
+@media (max-height: 560px) {
+  .catalogScroll {
+    max-height: calc(100vh - 290px);
+  }
+
+  .scrollHint {
+    padding-top: 18px;
+  }
+
+  .connectionFigureBlock svg {
+    width: min(100%, 280px);
+    margin: 0 auto;
+  }
+}
+
+/* 窄窗里说明和操作改上下排，按钮仍靠右，不把说明挤成窄列。 */
+@media (max-width: 560px) {
+  .dialogHost[data-mode='invitation'] :global(dialog[data-theme='workbench']) footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduced-motion='full']) .catalogRow,
+  :root:not([data-reduced-motion='full']) .catalogChevron {
+    transition: none;
+  }
+}

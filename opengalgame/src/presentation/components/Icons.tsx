@@ -49,6 +49,14 @@ export function ListIcon({ className, ...props }: IconProps): ReactElement {
   )
 }
 
+export function MoreIcon({ className, ...props }: IconProps): ReactElement {
+  return (
+    <svg className={clsx(styles.icon, className)} viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path d="M12 5.5h.01M12 12h.01M12 18.5h.01" strokeWidth={3.2} />
+    </svg>
+  )
+}
+
 export function SettingsIcon({ className, ...props }: IconProps): ReactElement {
   return (
     <svg className={clsx(styles.icon, className)} viewBox="0 0 24 24" aria-hidden="true" {...props}>

@@ -1,7 +1,7 @@
 import { toast } from 'sonner'
 
 export const relationFeedback = {
-  connected: () => toast.success('已建立关联，点击线上标签写关系'),
+  connected: () => toast.success('已建立关联；关系还没写。'),
   connectSelfRejected: () => toast.error('连接未建立：不能连接到自身'),
   connectDuplicateRejected: () => toast.error('连接未建立：该关系已存在'),
   connectFailed: () => toast.error('建立关联未完成，请稍后重试'),

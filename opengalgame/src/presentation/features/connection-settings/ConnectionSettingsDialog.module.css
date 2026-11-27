@@ -1,33 +1,105 @@
+.connectionForm {
+  display: grid;
+  gap: 0;
+}
+
 .modelRow {
   display: flex;
   gap: 8px;
   align-items: stretch;
 }
 
+.fieldRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, auto);
+  column-gap: 16px;
+  row-gap: 0;
+  align-items: start;
+}
+
+.fieldRow + .fieldRow {
+  margin-top: 16px;
+}
+
+.fieldRow > .connectionField {
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  min-width: 0;
+  margin: 0;
+  gap: 0;
+  align-content: start;
+}
+
+.fieldRow > .connectionField > span:first-child {
+  margin-bottom: 7px;
+}
+
+.fieldRow > .fieldFull {
+  grid-column: 1 / -1;
+  grid-row: auto;
+  grid-template-rows: none;
+}
+
+:global([data-theme='home']) .fieldRow > .connectionField {
+  margin: 0;
+  gap: 0;
+  font-size: 13px;
+}
+
+:global([data-theme='home']) .connectionForm .connectionField > span:first-child > label > span {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.modelRow > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.modelRow > button {
+  height: 46px;
+  flex: none;
+  white-space: nowrap;
+}
+
+:global([data-theme='home']) .connectionForm input,
+.connectionForm button[role='combobox'] {
+  min-height: 46px;
+}
+
+.statePanel {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 68%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-muted) 36%, transparent);
+}
+
+.stateTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.stateText {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
 
 .loadingPanel {
   display: grid;
   gap: 14px;
   padding: 2px 0;
-}
-
-.loadingHead {
-  display: flex;
-  gap: 9px;
-  align-items: center;
-  color: #4a3e6e;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.loadingPulse {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  background: #9a5abd;
-  box-shadow: 0 0 0 0 #9a5abd55;
-  animation: connection-pulse 1.5s ease-out infinite;
 }
 
 .skeletonRows {
@@ -43,113 +115,6 @@
   animation: connection-skeleton 1.4s ease-in-out infinite;
 }
 
-.loadingHint {
-  margin: 0;
-  color: #6f6584;
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.55;
-}
-
-.summaryNote {
-  margin: 0 0 14px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #f6f1fa;
-  color: #6f6584;
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.55;
-}
-
-.summaryNote[data-tone='empty'] {
-  background: #fdf8ec;
-  color: #8a5a2b;
-}
-
-
-.feedbackEntry {
-  display: flex;
-  width: 100%;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 14px;
-  padding: 9px 12px;
-  border: 1px solid #eadff3;
-  border-radius: 8px;
-  background: #fffcf7;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast, 160ms) var(--ease-out, ease),
-    background var(--duration-fast, 160ms) var(--ease-out, ease);
-}
-
-.feedbackEntry:hover {
-  border-color: #d7c8e8;
-  background: #fbf7fd;
-}
-
-.feedbackEntry:focus-visible {
-  border-color: #9a5abd;
-  outline: none;
-  box-shadow: 0 0 0 3px #9a5abd33;
-}
-
-.feedbackDot {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  background: #3f8f79;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #3f8f79 16%, transparent);
-}
-
-.feedbackEntry[data-tone='error'] .feedbackDot {
-  background: #c25a72;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #c25a72 16%, transparent);
-}
-
-.feedbackCopy {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-  gap: 1px;
-}
-
-.feedbackLabel {
-  color: #8a7d9d;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.feedbackTitle {
-  color: #4a3e6e;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.feedbackAction {
-  flex: none;
-  color: #7b4f96;
-  font-size: 12.5px;
-  font-weight: 700;
-}
-
-@keyframes connection-pulse {
-  70% {
-    box-shadow: 0 0 0 7px transparent;
-  }
-
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-
 @keyframes connection-skeleton {
   from {
     background-position: 200% 0;
@@ -160,80 +125,22 @@
   }
 }
 
-.modelRow > :first-child {
-  min-width: 0;
-  flex: 1;
-}
-
-.modelRow > button {
-  flex: none;
-  white-space: nowrap;
-}
-
 .extension {
-  margin-top: 2px;
+  margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #eadff3;
+  border-top: 1px solid var(--border-strong);
 }
 
-.extensionEntry {
+.extensionHead {
   display: flex;
-  width: 100%;
   gap: 12px;
   align-items: center;
-  padding: 12px 14px;
-  border: 1px solid #eadff3;
-  border-radius: 8px;
-  background: #fffcf7;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast, 160ms) var(--ease-out, ease),
-    background var(--duration-fast, 160ms) var(--ease-out, ease);
-}
-
-.extensionEntry:hover:not(:disabled) {
-  border-color: #d7c8e8;
-  background: #fbf7fd;
-}
-
-.extensionEntry:focus-visible {
-  border-color: #9a5abd;
-  outline: none;
-  box-shadow: 0 0 0 3px #9a5abd33;
-}
-
-.extensionEntry:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.extensionEntryCopy {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-  gap: 4px;
-}
-
-.extensionEntryAction {
-  display: inline-flex;
-  flex: none;
-  gap: 5px;
-  align-items: center;
-  color: #7b4f96;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.extensionEntryAction svg {
-  width: 14px;
-  height: 14px;
+  justify-content: space-between;
 }
 
 .extensionTitleRow {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
@@ -241,80 +148,81 @@
 
 .extensionTitle {
   margin: 0;
-  color: #4a3e6e;
-  font-size: 13px;
-  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 720;
   line-height: 1.4;
+}
+
+.extensionTitle:focus {
+  outline: none;
 }
 
 .extensionBadge {
   padding: 1px 7px;
   border-radius: 999px;
-  background: #f3ecf9;
-  color: #7b4f96;
-  font-size: 11px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 .extensionBadge[data-tone='configured'] {
-  background: #edf7f3;
-  color: #2f7c68;
+  background: var(--success-bg);
+  color: var(--success);
 }
 
-.extensionHint {
-  display: block;
-  margin: 4px 0 0;
-  color: #6f6584;
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.55;
-  text-wrap: pretty;
+.extensionEntryButton {
+  display: inline-flex;
+  height: 46px;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
 }
 
-.extensionPanel {
+.extensionEntryButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+.extensionState {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: color-mix(in srgb, #9a5abd 6%, #fffcf7);
-  animation: extension-reveal 160ms var(--ease-out, ease) both;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
-.extensionPanel[data-tone='danger'] {
-  background: #fdf1f4;
-}
-
-.extensionPanel[data-tone='pending'] {
-  background: #fdf8ec;
-}
-
-.extensionPanel:focus {
-  outline: none;
-}
-
-.extensionPanelCopy {
-  display: grid;
-  min-width: 0;
-  flex: 1 1 240px;
-  gap: 3px;
+.extensionState[data-tone='pending'] {
+  background: var(--warning-bg);
 }
 
 .extensionDot {
   width: 8px;
   height: 8px;
   flex: none;
-  margin-top: 6px;
   border-radius: 50%;
-  background: #3f8f79;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #3f8f79 16%, transparent);
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 16%, transparent);
 }
 
 .extensionDot[data-tone='pending'] {
-  background: #b1843f;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #b1843f 16%, transparent);
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.extensionStateText {
+  min-width: 0;
+  flex: 1 1 240px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .extensionActions {
@@ -323,20 +231,21 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  justify-content: flex-end;
   margin-left: auto;
 }
 
 .extensionEditor {
-  animation: extension-reveal 160ms var(--ease-out, ease) both;
+  margin-top: 12px;
+  animation: extension-reveal 160ms var(--ease-out) both;
 }
 
-.extensionEditor .extensionTitleRow {
-  margin-bottom: 2px;
+.extensionField {
+  margin: 0;
+  font-size: 13px;
 }
 
-.extensionEditor > .extensionHint {
-  margin: 6px 0 12px;
+:global([data-theme='home']) .extensionField {
+  font-size: 13px;
 }
 
 .extensionEditor textarea.extensionTextarea {
@@ -348,37 +257,20 @@
   resize: vertical;
 }
 
-.extensionHelp {
-  margin: -6px 0 12px;
-  color: #6f6584;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.55;
-  text-wrap: pretty;
-}
-
-.extensionHelpNote {
-  display: block;
-  margin-top: 2px;
-}
-
-.extensionHelpNote[data-tone='caution'] {
-  color: #8a5a2b;
-}
-
 .extensionEditorFoot {
   display: flex;
   gap: 12px;
   align-items: center;
   justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .extensionActions .compactButton,
 .extensionEditorFoot .compactButton {
-  min-height: 34px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 13px;
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 13.5px;
 }
 
 @keyframes extension-reveal {
@@ -394,13 +286,40 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .extensionPanel,
-  .extensionEditor {
+  :root:not([data-reduced-motion='full']) .extensionEditor {
     animation: none;
   }
 
-  .loadingPulse,
-  .skeletonRow {
+  :root:not([data-reduced-motion='full']) .skeletonRow {
     animation: none;
   }
+}
+
+@media (max-width: 699px) {
+  .fieldRow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+  }
+
+  .fieldRow > .connectionField {
+    grid-column: auto;
+    grid-row: auto;
+    grid-template-rows: none;
+  }
+
+  .fieldRow > .connectionField + .connectionField {
+    margin-top: 16px;
+  }
+
+  .fieldRow + .fieldRow {
+    margin-top: 16px;
+  }
+}
+
+:root[data-reduced-motion='reduce'] .extensionEditor {
+  animation: none;
+}
+
+:root[data-reduced-motion='reduce'] .skeletonRow {
+  animation: none;
 }

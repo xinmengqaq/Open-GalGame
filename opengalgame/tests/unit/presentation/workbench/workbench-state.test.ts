@@ -62,10 +62,8 @@ describe('R18 工作台损坏与读取失败冻结', () => {
       detail: '编排内容损坏',
       failureCode: 4416
     })
-    expect(damaged.nextStep).toBe('检查工程诊断，确认恢复范围；损坏内容不会被自动覆盖。')
-    expect(damaged.actions).toEqual([
-      { intent: 'inspect', label: '检查工程', emphasis: 'primary' }
-    ])
+    expect(damaged.nextStep).toBe('检查工程诊断，确认损坏范围。')
+    expect(damaged.actions).toEqual([{ intent: 'inspect', label: '检查工程', emphasis: 'primary' }])
 
     const unsupported = arrangementStateOf('failed', { code: 4417, msg: '编排格式不受支持' })
     expect(unsupported).toMatchObject({

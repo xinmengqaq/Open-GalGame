@@ -281,12 +281,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loadingMark,
-  .staleSpinner {
+  :root:not([data-reduced-motion='full']) .loadingMark,
+  :root:not([data-reduced-motion='full']) .staleSpinner {
     animation: none;
   }
 
-  .staleBar {
+  :root:not([data-reduced-motion='full']) .staleBar {
     animation: none;
   }
 }
@@ -384,4 +384,9 @@
   background: var(--lav);
   isolation: isolate;
   outline: none;
+}
+
+/* 教程 portal 只借用预览对话框的焦点/可访问范围，不参与预览布局。 */
+.guideLayer {
+  display: contents;
 }

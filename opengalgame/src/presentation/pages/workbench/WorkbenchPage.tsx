@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { Clapperboard, Package } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 
 import type { SceneGenerationRenderStatusVO } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { ProjectClient } from '@interfaces/client/ProjectClient'
@@ -14,6 +14,7 @@ import type { ScenePreviewClient } from '@interfaces/scene-preview/client/SceneP
 import type { SystemPathClient } from '@interfaces/system-path/client/SystemPathClient'
 import { DocumentLayer } from '../../features/document-layer/DocumentLayer'
 import { InputCatalogPanel } from '../../features/input-catalog/InputCatalogPanel'
+import type { UseInputCatalog } from '../../features/input-catalog/inputCatalog.types'
 import { ProjectMediaProvider } from '../../features/media-preview/ProjectMediaProvider'
 import { SceneCanvas } from '../../features/scene-canvas/SceneCanvas'
 import {
@@ -21,6 +22,7 @@ import {
   type WorkbenchCommands
 } from '../../features/workbench-session/workbenchCommands'
 import { WorkbenchCommandsProvider } from '../../features/workbench-session/workbenchCommandsProvider'
+import type { WorkbenchActionObservers } from '../../features/workbench-session/workbenchActionObservers'
 import { WorkbenchStateBanner } from '../../features/workbench-session/WorkbenchStateBanner'
 import { promptReferenceFailureOf } from '../../features/workbench-session/promptReferences'
 import { saveStatusOf } from '../../features/workbench-session/workbenchSaveStatus'
@@ -98,6 +100,10 @@ interface WorkbenchPageProps {
   scenePreviewClient: ScenePreviewClient
   sceneExportClient: SceneExportClient
   systemPathClient: SystemPathClient
+  /** 外壳提供的窄语义动作回调；页面只报告真实动作，不 import 新手引导。 */
+  observers?: WorkbenchActionObservers
+  /** 把文件区真实导入动作交给外壳；本页不判断教程步骤。 */
+  onImportFilesChange?: (importFiles: UseInputCatalog['importFiles'] | null) => void
 }
 
 export function WorkbenchPage({
@@ -108,9 +114,14 @@ export function WorkbenchPage({
   sceneGenerationClient,
   scenePreviewClient,
   sceneExportClient,
-  systemPathClient
+  systemPathClient,
+  observers,
+  onImportFilesChange
 }: WorkbenchPageProps): ReactElement {
-  const commands = useMemo(() => createWorkbenchCommands(sceneCanvasClient), [sceneCanvasClient])
+  const commands = useMemo(
+    () => createWorkbenchCommands(sceneCanvasClient, observers),
+    [sceneCanvasClient, observers]
+  )
   return (
     <WorkbenchCommandsProvider commands={commands}>
       <WorkbenchScreen
@@ -122,6 +133,8 @@ export function WorkbenchPage({
         scenePreviewClient={scenePreviewClient}
         sceneExportClient={sceneExportClient}
         systemPathClient={systemPathClient}
+        observers={observers}
+        onImportFilesChange={onImportFilesChange}
         commands={commands}
       />
     </WorkbenchCommandsProvider>
@@ -137,6 +150,8 @@ function WorkbenchScreen({
   scenePreviewClient,
   sceneExportClient,
   systemPathClient,
+  observers,
+  onImportFilesChange,
   commands
 }: WorkbenchPageProps & {
   commands: WorkbenchCommands
@@ -181,7 +196,40 @@ function WorkbenchScreen({
     saveState: saveStatus.state,
     pageBlocked,
     canvasReady: arrangementStatus === 'ready' || arrangementStatus === 'empty',
-    saveCanvas: saveCanvasForGeneration
+    saveCanvas: saveCanvasForGeneration,
+    onGenerationStarted: ({ operationId }) => {
+      if (!projectId || !sceneId || !canvasId) return
+      observers?.onGenerationStarted?.({
+        scope: { projectId, sceneId, canvasId },
+        operationId,
+        saveVerified: true
+      })
+    },
+    onCandidateAccepted: ({ operationId, candidateSnapshotId }) => {
+      if (!projectId || !sceneId || !canvasId) return
+      observers?.onCandidateAccepted?.({
+        scope: { projectId, sceneId, canvasId },
+        operationId,
+        candidateSnapshotId,
+        outcome: 'confirmed'
+      })
+    },
+    onCandidateRevised: ({ operationId, candidateSnapshotId }) => {
+      if (!projectId || !sceneId || !canvasId) return
+      observers?.onCandidateRevised?.({
+        scope: { projectId, sceneId, canvasId },
+        candidateSnapshotId,
+        operationId
+      })
+    },
+    onCandidateDiscarded: ({ candidateSnapshotId }) => {
+      if (!projectId || !sceneId || !canvasId) return
+      observers?.onCandidateDiscarded?.({
+        scope: { projectId, sceneId, canvasId },
+        candidateSnapshotId,
+        outcome: 'confirmed'
+      })
+    }
   })
   const forkUnknown = useForkUnknownRegistry({ projectId, sceneId })
   const generationActive = generation.status !== null && !isTerminalState(generation.status.state)
@@ -203,10 +251,69 @@ function WorkbenchScreen({
     generationActive,
     onReloadGeneration: generation.reload
   })
+  const summaryVisible = drawer.open && drawer.tabs.active === 'summary'
+  const summaryReported = useRef(false)
+  useEffect(() => {
+    if (
+      summaryVisible &&
+      !summaryReported.current &&
+      projectId.length > 0 &&
+      sceneId.length > 0 &&
+      canvasId.length > 0
+    ) {
+      observers?.onInputSummaryOpened?.({ scope: { projectId, sceneId, canvasId } })
+    }
+    summaryReported.current = summaryVisible
+  }, [summaryVisible, observers, projectId, sceneId, canvasId])
+  const readyCandidateReported = useRef<string | null>(null)
+  useEffect(() => {
+    const status = generation.status
+    const interaction = status?.interaction
+    if (!status || !interaction || interaction.kind !== 'review') return
+    if (status.previewAvailable !== true || status.failure?.unverified === true) return
+    const readyCandidateSnapshotId =
+      interaction.candidateSnapshotId ?? status.candidateSnapshotId ?? null
+    if (!readyCandidateSnapshotId || !status.operationId) return
+    if (!projectId || !sceneId || !canvasId) return
+    const key = `${projectId}|${sceneId}|${canvasId}|${status.operationId}|${readyCandidateSnapshotId}`
+    if (readyCandidateReported.current === key) return
+    readyCandidateReported.current = key
+    observers?.onCandidateReady?.({
+      scope: { projectId, sceneId, canvasId },
+      candidateSnapshotId: readyCandidateSnapshotId,
+      operationId: status.operationId,
+      previewAvailable: true
+    })
+  }, [generation.status, observers, projectId, sceneId, canvasId])
+  const failedGenerationReported = useRef<string | null>(null)
+  useEffect(() => {
+    const status = generation.status
+    if (!status || status.state !== 'failed') return
+    if (status.failure?.unverified === true) return
+    if (!status.operationId || !projectId || !sceneId || !canvasId) return
+    const key = `${projectId}|${sceneId}|${canvasId}|${status.operationId}`
+    if (failedGenerationReported.current === key) return
+    failedGenerationReported.current = key
+    observers?.onGenerationFailed?.({
+      scope: { projectId, sceneId, canvasId },
+      operationId: status.operationId,
+      outcome: 'confirmed'
+    })
+  }, [generation.status, observers, projectId, sceneId, canvasId])
   const currentTone = drawerToneOf(generation.status)
   const [noticeSlot, setNoticeSlot] = useState<HTMLElement | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewReturnFocus, setPreviewReturnFocus] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!previewOpen) return
+    observers?.onPreviewVisibilityChanged?.(true)
+    return () => observers?.onPreviewVisibilityChanged?.(false)
+  }, [observers, previewOpen])
+  useEffect(() => {
+    if (!drawer.open) return
+    observers?.onGenerationDrawerVisibilityChanged?.(true)
+    return () => observers?.onGenerationDrawerVisibilityChanged?.(false)
+  }, [drawer.open, observers])
   const name = projectName || opened?.name || '未打开工程'
   const loading = arrangementStatus === 'loading' || arrangementStatus === 'idle'
   const workspaceBlocked =
@@ -215,6 +322,8 @@ function WorkbenchScreen({
     saveError?.code === PROJECT_WORKSPACE_NOT_READY_CODE
   const saving = saveStatus.state === 'saving'
   const compactActions = shellWidth < COMPACT_ACTIONS_WIDTH
+  // 空画布、读取失败和损坏状态没有可写回的编排；就绪画布保留手动保存入口。
+  const saveActionAllowed = arrangementStatus === 'ready' || hasUnsavedEdits
 
   const previewAvailability = useQuery({
     queryKey: ['workbench-scene-preview-availability', projectId, sceneId],
@@ -275,6 +384,20 @@ function WorkbenchScreen({
       succeeded: generation.status?.state === 'succeeded',
       commitId: generation.status?.result?.commitId ?? null,
       operationId: generation.status?.operationId ?? null
+    },
+    onExported: () => {
+      if (!projectId || !sceneId || !canvasId) return
+      observers?.onExported?.({
+        scope: { projectId, sceneId, canvasId },
+        outcome: 'confirmed'
+      })
+    },
+    onExportFailed: () => {
+      if (!projectId || !sceneId || !canvasId) return
+      observers?.onExportFailed?.({
+        scope: { projectId, sceneId, canvasId },
+        outcome: 'failed'
+      })
     }
   })
   const closeDrawerForPreview = drawer.actions.closeForPreview
@@ -341,8 +464,18 @@ function WorkbenchScreen({
       id: 'save',
       label: saving ? '正在保存…' : workbenchFeedback.saveAction,
       icon: <SaveIcon />,
-      disabled: saving || pageBlocked || history.viewStale || generationActive || workspaceBlocked,
-      hint: generationActive ? '生成进行中，保存已暂停' : (saveStatus.detail ?? saveStatus.label),
+      disabled:
+        saving ||
+        pageBlocked ||
+        history.viewStale ||
+        generationActive ||
+        workspaceBlocked ||
+        !saveActionAllowed,
+      hint: generationActive
+        ? '生成进行中，保存已暂停'
+        : !saveActionAllowed
+          ? '当前画布没有可保存的改动'
+          : (saveStatus.detail ?? saveStatus.label),
       onInvoke: () => void commands.save('manual')
     }
   ]
@@ -385,7 +518,11 @@ function WorkbenchScreen({
           onBack={() => visit('projects')}
         />
 
-        <SceneExportDialog {...exportController.destinationDialog} />
+        <SceneExportDialog
+          {...exportController.destinationDialog}
+          projectName={name}
+          sceneLabel={sceneLabel}
+        />
 
         <FeedbackLayer
           active={
@@ -435,6 +572,10 @@ function WorkbenchScreen({
               <InputCatalogPanel
                 client={projectFilesClient}
                 onRefresh={() => void page.refreshSources()}
+                onSourcesImported={(sources) => {
+                  for (const source of sources) observers?.onSourceImported?.(source)
+                }}
+                onImportFilesChange={onImportFilesChange}
               />
             </aside>
             <div className={styles.canvasArea} data-motion="stage">
@@ -451,6 +592,10 @@ function WorkbenchScreen({
               <InputCatalogPanel
                 client={projectFilesClient}
                 onRefresh={() => void page.refreshSources()}
+                onSourcesImported={(sources) => {
+                  for (const source of sources) observers?.onSourceImported?.(source)
+                }}
+                onImportFilesChange={onImportFilesChange}
               />
             </aside>
             <div className={styles.canvasArea} data-motion="stage">
@@ -501,6 +646,45 @@ function WorkbenchScreen({
             onSavedVersion={(saved) =>
               exportController.acceptSavedVersion(saved, { projectId, sceneId })
             }
+            onDialogueSaveStarted={(event) => {
+              if (!projectId || !sceneId || !canvasId) return
+              observers?.onDialogueSaveStarted?.({
+                scope: { projectId, sceneId, canvasId },
+                requestId: event.requestId
+              })
+            }}
+            onDialogueSaved={(saved) => {
+              if (!projectId || !sceneId || !canvasId) return
+              observers?.onDialogueSaved?.({
+                scope: { projectId, sceneId, canvasId },
+                requestId: saved.requestId,
+                revision: saved.revision,
+                outcome: 'confirmed'
+              })
+            }}
+            onDialogueSaveUnsettled={(event) => {
+              if (!projectId || !sceneId || !canvasId) return
+              observers?.onDialogueSaveUnsettled?.({
+                scope: { projectId, sceneId, canvasId },
+                outcome: event.outcome,
+                ...(event.requestId === undefined ? {} : { requestId: event.requestId })
+              })
+            }}
+            onDialogueSaveCleared={(event) => {
+              if (!projectId || !sceneId || !canvasId) return
+              observers?.onDialogueSaveCleared?.({
+                scope: { projectId, sceneId, canvasId },
+                reason: event.reason,
+                ...(event.requestId === undefined ? {} : { requestId: event.requestId })
+              })
+            }}
+            onDialogueDraftChanged={(dirty) => {
+              if (!projectId || !sceneId || !canvasId) return
+              observers?.onDialogueDraftChanged?.({
+                scope: { projectId, sceneId, canvasId },
+                dirty
+              })
+            }}
           />
         ) : null}
         {opened ? (
@@ -508,6 +692,20 @@ function WorkbenchScreen({
             captureDraft={history.captureDraft}
             candidatePreviewClient={scenePreviewClient}
             candidateTarget={candidateTarget}
+            onCandidateOpened={(candidateSnapshotId) => {
+              if (!projectId || !sceneId || !canvasId) return
+              observers?.onCandidateOpened?.({
+                scope: { projectId, sceneId, canvasId },
+                candidateSnapshotId
+              })
+            }}
+            onCandidateReturned={(candidateSnapshotId) => {
+              if (!projectId || !sceneId || !canvasId) return
+              observers?.onCandidateReturned?.({
+                scope: { projectId, sceneId, canvasId },
+                candidateSnapshotId
+              })
+            }}
             currentTone={currentTone}
             currentView={
               <GenerationPanel
@@ -564,8 +762,11 @@ function WorkbenchScreen({
             summaryView={
               <GenerationInputSummaryView
                 cards={cards}
+                dirty={hasUnsavedEdits}
                 loadError={arrangementError?.msg ?? null}
                 loading={loading}
+                onReload={() => void page.loadWorkspace()}
+                onReturnToCanvas={() => drawer.onOpenChange(false)}
                 status={generation.status}
               />
             }

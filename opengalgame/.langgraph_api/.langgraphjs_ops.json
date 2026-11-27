@@ -1,0 +1,195 @@
+{
+  "json": {
+    "runs": {
+      "01a116b1-b78e-7196-bb56-15f7525b69dc": {
+        "run_id": "01a116b1-b78e-7196-bb56-15f7525b69dc",
+        "thread_id": "01a116b1-b777-7675-af0e-4a76c7d36c77",
+        "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1",
+        "metadata": {
+          "created_by": "system",
+          "graph_id": "debug",
+          "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1"
+        },
+        "status": "success",
+        "kwargs": {
+          "input": { "prompt": "本地线程调试验收" },
+          "command": null,
+          "config": {
+            "configurable": {
+              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26200; zh-CN) PowerShell/7.6.0",
+              "run_id": "01a116b1-b78e-7196-bb56-15f7525b69dc",
+              "thread_id": "01a116b1-b777-7675-af0e-4a76c7d36c77",
+              "graph_id": "debug",
+              "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1",
+              "user_id": null
+            },
+            "metadata": {
+              "created_by": "system",
+              "graph_id": "debug",
+              "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1"
+            }
+          },
+          "context": {},
+          "stream_mode": ["values"],
+          "interrupt_before": null,
+          "interrupt_after": null,
+          "webhook": null,
+          "feedback_keys": null,
+          "temporary": false,
+          "subgraphs": false,
+          "resumable": false
+        },
+        "multitask_strategy": "reject",
+        "created_at": "2026-10-07T14:08:28.047Z",
+        "updated_at": "2026-10-07T14:08:28.242Z"
+      },
+      "01a116ba-5226-71a8-8124-0fe28f44b2c3": {
+        "run_id": "01a116ba-5226-71a8-8124-0fe28f44b2c3",
+        "thread_id": "01a116ba-5212-77ab-912b-936e6527d898",
+        "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1",
+        "metadata": {
+          "created_by": "system",
+          "graph_id": "debug",
+          "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1"
+        },
+        "status": "success",
+        "kwargs": {
+          "input": { "prompt": "核对本地调试图" },
+          "command": null,
+          "config": {
+            "configurable": {
+              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26200; zh-CN) PowerShell/7.6.0",
+              "run_id": "01a116ba-5226-71a8-8124-0fe28f44b2c3",
+              "thread_id": "01a116ba-5212-77ab-912b-936e6527d898",
+              "graph_id": "debug",
+              "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1",
+              "user_id": null
+            },
+            "metadata": {
+              "created_by": "system",
+              "graph_id": "debug",
+              "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1"
+            }
+          },
+          "context": {},
+          "stream_mode": ["values"],
+          "interrupt_before": null,
+          "interrupt_after": null,
+          "webhook": null,
+          "feedback_keys": null,
+          "temporary": false,
+          "subgraphs": false,
+          "resumable": false
+        },
+        "multitask_strategy": "reject",
+        "created_at": "2026-10-07T14:17:51.911Z",
+        "updated_at": "2026-10-07T14:17:52.297Z"
+      }
+    },
+    "threads": {
+      "01a116b1-b777-7675-af0e-4a76c7d36c77": {
+        "thread_id": "01a116b1-b777-7675-af0e-4a76c7d36c77",
+        "created_at": "2026-10-07T14:08:28.024Z",
+        "updated_at": "2026-10-07T14:08:28.242Z",
+        "metadata": { "graph_id": "debug", "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1" },
+        "status": "idle",
+        "config": {
+          "configurable": {
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26200; zh-CN) PowerShell/7.6.0"
+          }
+        },
+        "values": { "prompt": "本地线程调试验收", "result": "本地调试完成" },
+        "interrupts": {}
+      },
+      "01a116ba-5212-77ab-912b-936e6527d898": {
+        "thread_id": "01a116ba-5212-77ab-912b-936e6527d898",
+        "created_at": "2026-10-07T14:17:51.891Z",
+        "updated_at": "2026-10-07T14:17:52.297Z",
+        "metadata": { "graph_id": "debug", "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1" },
+        "status": "idle",
+        "config": {
+          "configurable": {
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26200; zh-CN) PowerShell/7.6.0"
+          }
+        },
+        "values": { "prompt": "核对本地调试图", "result": "本地调试完成" },
+        "interrupts": {}
+      }
+    },
+    "assistants": {
+      "451cb073-39cc-5fe0-9332-401769f10fd1": {
+        "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1",
+        "version": 1,
+        "config": {},
+        "context": {},
+        "created_at": "2026-10-07T13:43:36.476Z",
+        "updated_at": "2026-10-07T13:43:36.476Z",
+        "graph_id": "debug",
+        "metadata": { "created_by": "system" },
+        "name": "debug",
+        "description": null
+      }
+    },
+    "assistant_versions": [
+      {
+        "assistant_id": "451cb073-39cc-5fe0-9332-401769f10fd1",
+        "version": 1,
+        "graph_id": "debug",
+        "config": {},
+        "context": {},
+        "metadata": { "created_by": "system" },
+        "created_at": "2026-10-07T13:43:36.476Z",
+        "name": "debug",
+        "description": null
+      }
+    ],
+    "retry_counter": {
+      "01a1169b-b03c-713a-a5e5-85f930167033": 1,
+      "01a116a1-2bca-727a-8432-f5d08e214f65": 1,
+      "01a116b1-b78e-7196-bb56-15f7525b69dc": 1,
+      "01a116ba-5226-71a8-8124-0fe28f44b2c3": 1
+    }
+  },
+  "meta": {
+    "values": {
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.kwargs.command": ["undefined"],
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.kwargs.config.configurable.user_id": ["undefined"],
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.kwargs.interrupt_before": ["undefined"],
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.kwargs.interrupt_after": ["undefined"],
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.kwargs.webhook": ["undefined"],
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.kwargs.feedback_keys": ["undefined"],
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.created_at": ["Date"],
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.updated_at": ["Date"],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.kwargs.command": ["undefined"],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.kwargs.config.configurable.user_id": ["undefined"],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.kwargs.interrupt_before": ["undefined"],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.kwargs.interrupt_after": ["undefined"],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.kwargs.webhook": ["undefined"],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.kwargs.feedback_keys": ["undefined"],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.created_at": ["Date"],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.updated_at": ["Date"],
+      "threads.01a116b1-b777-7675-af0e-4a76c7d36c77.created_at": ["Date"],
+      "threads.01a116b1-b777-7675-af0e-4a76c7d36c77.updated_at": ["Date"],
+      "threads.01a116ba-5212-77ab-912b-936e6527d898.created_at": ["Date"],
+      "threads.01a116ba-5212-77ab-912b-936e6527d898.updated_at": ["Date"],
+      "assistants.451cb073-39cc-5fe0-9332-401769f10fd1.created_at": ["Date"],
+      "assistants.451cb073-39cc-5fe0-9332-401769f10fd1.updated_at": ["Date"],
+      "assistant_versions.0.created_at": ["Date"]
+    },
+    "referentialEqualities": {
+      "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.metadata": [
+        "runs.01a116b1-b78e-7196-bb56-15f7525b69dc.kwargs.config.metadata"
+      ],
+      "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.metadata": [
+        "runs.01a116ba-5226-71a8-8124-0fe28f44b2c3.kwargs.config.metadata"
+      ],
+      "assistants.451cb073-39cc-5fe0-9332-401769f10fd1.config": ["assistant_versions.0.config"],
+      "assistants.451cb073-39cc-5fe0-9332-401769f10fd1.created_at": [
+        "assistants.451cb073-39cc-5fe0-9332-401769f10fd1.updated_at",
+        "assistant_versions.0.created_at"
+      ],
+      "assistants.451cb073-39cc-5fe0-9332-401769f10fd1.metadata": ["assistant_versions.0.metadata"]
+    },
+    "v": 1
+  }
+}

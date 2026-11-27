@@ -248,7 +248,7 @@ describe('GenerationInputSummaryView 启动后', () => {
     expect(html).toContain('基础生成 · 场景')
     expect(html).toContain('林晚与场景（记录：文档）')
     const detailsHtml = html.slice(html.indexOf('wb-gen-summary__details"'))
-    expect((detailsHtml.match(/<li/g) ?? []).length).toBe(3)
+    expect((detailsHtml.match(/<li(?:\s|>)/g) ?? []).length).toBe(3)
   })
 
   it('明细最多 12 条，溢出以等 N 项收尾', () => {
@@ -259,7 +259,7 @@ describe('GenerationInputSummaryView 启动后', () => {
     const html = view([], baseStatus({ documentCount: 16, details: { documents } }))
 
     const detailsHtml = html.slice(html.indexOf('wb-gen-summary__details"'))
-    expect((detailsHtml.match(/<li/g) ?? []).length).toBe(12)
+    expect((detailsHtml.match(/<li(?:\s|>)/g) ?? []).length).toBe(12)
     expect(detailsHtml).toContain('等 5 项')
     expect(detailsHtml).toContain('文档 11')
   })

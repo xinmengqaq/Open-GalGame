@@ -13,6 +13,7 @@
 .rays {
   position: absolute;
   inset: 0;
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -100,7 +101,8 @@
   padding: 10px 18px;
   border: 1px solid #76658f;
   border-radius: 100px;
-  background: #fff9f4a6;
+  background: var(--surface-glass, #fff9f4a6);
+  backdrop-filter: blur(16px) saturate(1.06);
   color: #4b416d;
   font-size: 16px;
 }
@@ -172,7 +174,8 @@
   padding: 9px 16px;
   border: 1px solid #a777c3;
   border-radius: 3px;
-  background: #fff8ef99;
+  background: var(--surface-glass-soft, #fff8ef99);
+  backdrop-filter: blur(12px) saturate(1.04);
   color: #8a4faa;
   font-size: 14px;
   font-weight: 700;
@@ -217,8 +220,8 @@
 .lead {
   margin: 0;
   color: #6f6584;
-  font-size: 18px;
-  line-height: 1.9;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .actions {
@@ -286,7 +289,8 @@
   padding: 10px 14px;
   border: 1px solid #8896a4;
   border-radius: 6px;
-  background: #fffaf2b8;
+  background: var(--surface-glass, #fffaf2b8);
+  backdrop-filter: blur(16px) saturate(1.06);
   color: #465772;
   font-size: 16px;
 }
@@ -364,7 +368,8 @@
   padding: 14px 18px;
   border: 2px solid #705d8b;
   border-radius: 17px 17px 17px 3px;
-  background: #fffdfa;
+  background: var(--surface-glass, #fffdfa);
+  backdrop-filter: blur(16px) saturate(1.06);
   box-shadow: 5px 5px 0 #6b82957a;
   color: #635277;
   font-size: 16px;

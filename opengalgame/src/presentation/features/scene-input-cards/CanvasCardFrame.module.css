@@ -1,10 +1,13 @@
 .frame {
-  --card-accent: var(--wb-accent);
+  --card-accent: var(--content-image);
   --card-tint: color-mix(in srgb, var(--card-accent) 15%, transparent);
-  --card-fill: color-mix(in srgb, var(--wb-surface-solid) 93%, transparent);
+  --card-fill: color-mix(in srgb, var(--content-surface) 93%, transparent);
   --card-shadow:
-    0 26px 48px -36px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 62%, transparent),
-    0 8px 18px -16px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 38%, transparent);
+    0 26px 48px -36px color-mix(in srgb, var(--content-focus) 62%, transparent),
+    0 8px 18px -16px color-mix(in srgb, var(--content-focus) 38%, transparent);
+  --card-shadow-hover:
+    0 32px 66px -46px color-mix(in srgb, var(--content-focus) 64%, transparent),
+    0 10px 26px -24px color-mix(in srgb, var(--content-focus) 46%, transparent);
   position: relative;
   isolation: isolate;
   display: flex;
@@ -16,9 +19,13 @@
   border-radius: var(--wb-radius-card);
   background:
     radial-gradient(ellipse 118% 84% at 4% -12%, var(--card-tint) 0%, transparent 58%),
-    linear-gradient(168deg, color-mix(in srgb, #fff 42%, transparent), transparent 46%),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--content-surface) 42%, transparent),
+      transparent 46%
+    ),
     var(--card-fill);
-  color: var(--wb-text);
+  color: var(--content-text);
   box-shadow: var(--card-shadow);
   transition:
     transform var(--wb-duration-fast) var(--wb-ease),
@@ -27,31 +34,31 @@
 }
 
 .frame[data-kind='document'] {
-  --card-accent: var(--wb-positive-strong);
+  --card-accent: var(--content-document);
 }
 
 .frame[data-kind='prompt'] {
-  --card-accent: var(--wb-accent-strong);
+  --card-accent: var(--content-prompt);
 }
 
 .frame[data-kind='image'] {
-  --card-accent: var(--wb-accent);
+  --card-accent: var(--content-image);
 }
 
 .frame[data-kind='audio'] {
-  --card-accent: var(--wb-warning);
+  --card-accent: var(--content-audio);
 }
 
 .frame[data-kind='video'] {
-  --card-accent: var(--wb-danger);
+  --card-accent: var(--content-video);
 }
 
 .frame[data-kind='animation'] {
-  --card-accent: var(--wb-positive);
+  --card-accent: var(--content-animation);
 }
 
 .frame[data-kind='effect'] {
-  --card-accent: var(--wb-accent-strong);
+  --card-accent: var(--content-focus);
 }
 
 .frame[data-fill='true'] {
@@ -60,7 +67,7 @@
 
 .frame:hover {
   transform: translateY(-2px);
-  box-shadow: var(--wb-shadow-float);
+  box-shadow: var(--card-shadow-hover);
 }
 
 .frame[data-selected='true'] {
@@ -68,15 +75,15 @@
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--card-accent) 22%, transparent),
     0 0 46px -8px color-mix(in srgb, var(--card-accent) 52%, transparent),
-    var(--wb-shadow-float);
+    var(--card-shadow-hover);
 }
 
 .frame[data-risk='true'] {
-  --card-accent: var(--wb-danger);
+  --card-accent: var(--content-video);
   background:
     radial-gradient(
       ellipse 130% 90% at 6% -14%,
-      color-mix(in srgb, var(--wb-danger) 18%, transparent),
+      color-mix(in srgb, var(--content-video) 18%, transparent),
       transparent 62%
     ),
     var(--card-fill);
@@ -84,15 +91,15 @@
 
 .frame[data-risk='true']:hover {
   box-shadow:
-    0 0 34px -18px color-mix(in srgb, var(--wb-danger) 52%, transparent),
-    var(--wb-shadow-float);
+    0 0 34px -18px color-mix(in srgb, var(--content-video) 52%, transparent),
+    var(--card-shadow-hover);
 }
 
 .frame[data-risk='true'][data-selected='true'] {
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--wb-danger) 24%, transparent),
-    0 0 46px -8px color-mix(in srgb, var(--wb-danger) 48%, transparent),
-    var(--wb-shadow-float);
+    0 0 0 3px color-mix(in srgb, var(--content-video) 24%, transparent),
+    0 0 46px -8px color-mix(in srgb, var(--content-video) 48%, transparent),
+    var(--card-shadow-hover);
 }
 
 .frame:focus-within {
@@ -112,14 +119,17 @@
       color-mix(in srgb, var(--card-accent) 22%, transparent) 0%,
       transparent 58%
     ),
-    linear-gradient(168deg, color-mix(in srgb, #fff 50%, transparent), transparent 46%),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--content-surface) 50%, transparent),
+      transparent 46%
+    ),
     var(--card-fill);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--card-accent) 16%, transparent),
     0 0 52px -16px color-mix(in srgb, var(--card-accent) 42%, transparent),
     var(--card-shadow);
 }
-
 
 .selectAura {
   position: absolute;
@@ -138,7 +148,6 @@
 .frame[data-selected='true'] .selectAura {
   opacity: 1;
 }
-
 
 .header {
   position: relative;
@@ -178,7 +187,7 @@
 
 .kindLabel {
   overflow: hidden;
-  color: var(--wb-text-muted);
+  color: var(--content-text-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -195,7 +204,6 @@
   justify-content: flex-end;
   margin-left: auto;
 }
-
 
 .content {
   position: relative;
@@ -229,7 +237,6 @@
   border: 0;
   background: transparent;
 }
-
 
 .frame[data-layout='media'],
 .frame[data-layout='media']:hover,
@@ -273,12 +280,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .frame {
+  :root:not([data-reduced-motion='full']) .frame {
     transition: none;
   }
 
-  .frame:hover,
-  .frame[data-selected='true'] {
+  :root:not([data-reduced-motion='full']) .frame:hover,
+  :root:not([data-reduced-motion='full']) .frame[data-selected='true'] {
     transform: none;
   }
 }

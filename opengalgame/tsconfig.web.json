@@ -6,6 +6,7 @@
     "src/bootstrap/browser/**/*",
     "src/presentation/**/*",
     "src/interfaces/client/**/*",
+    "src/interfaces/settings/**/client/**/*",
     "src/interfaces/project-files/client/**/*",
     "src/interfaces/project-files/contracts/**/*",
     "src/interfaces/project-versioning/client/**/*",
@@ -22,6 +23,8 @@
     "src/interfaces/contracts/**/*",
     "src/application/*/dto/**/*",
     "src/application/*/vo/**/*",
+    "src/application/*/*/dto/**/*",
+    "src/application/*/*/vo/**/*",
     "src/common/**/*"
   ],
   "exclude": ["src/bootstrap/browser/devFileBackend.ts", "src/bootstrap/browser/devFilePlugin.ts"],

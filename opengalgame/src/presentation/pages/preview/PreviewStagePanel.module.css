@@ -450,14 +450,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .trackFill,
-  .stepButton,
-  .followButton {
+  :root:not([data-reduced-motion='full']) .trackFill,
+  :root:not([data-reduced-motion='full']) .stepButton,
+  :root:not([data-reduced-motion='full']) .followButton {
     transition: none;
   }
 
-  .spin,
-  .spinner {
+  :root:not([data-reduced-motion='full']) .spin,
+  :root:not([data-reduced-motion='full']) .spinner {
     animation: none;
   }
 }

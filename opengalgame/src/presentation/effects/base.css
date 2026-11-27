@@ -1,4 +1,5 @@
 @import './tokens.css';
+@import './fonts.css';
 
 * {
   box-sizing: border-box;
@@ -35,9 +36,9 @@ html {
 
 body {
   overflow: hidden;
-  background: var(--lav);
-  color: var(--ink);
-  font-family: var(--font-sans);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-shell, var(--font-sans));
   font-size: 15px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -79,10 +80,18 @@ select:focus-visible,
   outline-offset: 3px;
 }
 
+:root[data-reduced-motion='reduce'] *,
+:root[data-reduced-motion='reduce'] *::before,
+:root[data-reduced-motion='reduce'] *::after {
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  :root:not([data-reduced-motion='full']) *,
+  :root:not([data-reduced-motion='full']) *::before,
+  :root:not([data-reduced-motion='full']) *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;

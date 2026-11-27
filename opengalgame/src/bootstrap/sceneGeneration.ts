@@ -16,7 +16,7 @@ import {
   type SceneGenerationDependencies,
   type SceneGenerationDispatchIdentity
 } from '@application/scene-generation/services/impl/SceneGenerationCoordinator'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 import { SceneGenerationDomainServiceImpl } from '@domain/scene-generation/services/impl/SceneGenerationDomainServiceImpl'
 import type { SceneGenerationProgressVO } from '@application/scene-generation/vo/SceneGenerationVO'
 import {

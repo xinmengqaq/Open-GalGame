@@ -3,8 +3,15 @@ import { createPortal } from 'react-dom'
 
 import type { SceneContentBasisVO } from '@application/scene-preview/vo/ScenePreviewSessionVO'
 import type { SceneExportVersionReference } from '@application/scene-export/vo/SceneExportVO'
+import { setGuidePreviewHost } from '@presentation/features/beginner-guide/guideTopLayer'
 import type { ScenePreviewClient } from '@interfaces/scene-preview/client/ScenePreviewClient'
 import { PreviewPage } from '@presentation/pages/preview/PreviewPage'
+import type {
+  PreviewSaveCleared,
+  PreviewSaveStarted,
+  PreviewSaveUnsettled,
+  PreviewSavedVersion
+} from '@presentation/pages/preview/usePreviewSaveSettlement'
 import styles from '../WorkbenchPage.module.css'
 
 export type SavedSceneVersionFact = {
@@ -21,6 +28,16 @@ interface WorkbenchPreviewLayerProps {
   returnFocusTo: HTMLElement | null
   onExit: () => void
   onSavedVersion: (saved: SavedSceneVersionFact) => void
+  /** 开始一次保存时上报；observer 用 requestId 区分迟到结果。 */
+  onDialogueSaveStarted?: (event: PreviewSaveStarted) => void
+  /** 直接保存或结算确认后上报；observer 按 requestId 去重。 */
+  onDialogueSaved?: (saved: PreviewSavedVersion) => void
+  /** 保存失败或结果待核对时上报；不显示成功。 */
+  onDialogueSaveUnsettled?: (event: PreviewSaveUnsettled) => void
+  /** 未处理的保存已结算为无改动，或用户明确放弃草稿退出。 */
+  onDialogueSaveCleared?: (event: PreviewSaveCleared) => void
+  /** 预览里出现了真实未保存改词；只传有无。 */
+  onDialogueDraftChanged?: (dirty: boolean) => void
 }
 
 export function WorkbenchPreviewLayer({
@@ -31,7 +48,12 @@ export function WorkbenchPreviewLayer({
   sceneLabel,
   returnFocusTo,
   onExit,
-  onSavedVersion
+  onSavedVersion,
+  onDialogueSaveStarted,
+  onDialogueSaved,
+  onDialogueSaveUnsettled,
+  onDialogueSaveCleared,
+  onDialogueDraftChanged
 }: WorkbenchPreviewLayerProps): ReactElement {
   const layerRef = useRef<HTMLDivElement>(null)
 
@@ -99,12 +121,51 @@ export function WorkbenchPreviewLayer({
         projectName={projectName}
         sceneLabel={sceneLabel}
         onExit={onExit}
-        onSavedVersion={(saved) =>
+        onSaveStarted={(event) => {
+          try {
+            onDialogueSaveStarted?.(event)
+          } catch {
+            // 指引观察者异常不能打断预览保存请求。
+          }
+        }}
+        onSavedVersion={(saved) => {
           onSavedVersion({
             versionReference: { kind: 'preview-save', requestId: saved.requestId },
             contentBasis: saved.contentBasis
           })
-        }
+          try {
+            onDialogueSaved?.(saved)
+          } catch {
+            // 指引观察者异常不能打断预览保存的成功提示。
+          }
+        }}
+        onSaveUnsettled={(event) => {
+          try {
+            onDialogueSaveUnsettled?.(event)
+          } catch {
+            // 指引观察者异常不能打断预览保存的失败或待核对提示。
+          }
+        }}
+        onSaveCleared={(event) => {
+          try {
+            onDialogueSaveCleared?.(event)
+          } catch {
+            // 指引观察者异常不能打断预览会话关闭。
+          }
+        }}
+        onDraftDirtyChange={(dirty) => {
+          try {
+            onDialogueDraftChanged?.(dirty)
+          } catch {
+            // 指引观察者异常不能打断预览草稿编辑。
+          }
+        }}
+      />
+      {/* 新手教程 portal 的同级槽位：留在预览对话框的焦点范围内，绘制层级高于舞台。 */}
+      <div
+        ref={setGuidePreviewHost}
+        className={styles.guideLayer}
+        data-guide-top-layer-host="preview"
       />
     </div>,
     document.body

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as git from 'isomorphic-git'
 
@@ -267,6 +267,49 @@ describe('工程文件版本窄端口', () => {
     expect(
       (await readdir(join(world.projectRoot, '.git/opengalgame/version-operations'))).length
     ).toBe(intentBefore)
+  })
+
+  it('失效登记存在时发布成功且同 ID 重复发布不新增提交', async () => {
+    const world = await registeredProject()
+    const staleDirectory = join(dirname(world.projectRoot), 'removed-project')
+    await writeProjectRegistrations(world.userDirectory, [
+      { id: 'project-1', directory: world.projectRoot, operationId: 'op-register' },
+      { id: 'project-stale', directory: staleDirectory, operationId: 'op-stale' }
+    ])
+    await writeFile(join(world.projectRoot, 'keep.txt'), '保留')
+    const versioning = versioningFor(world.userDirectory, ['op-stale-publish', 'hist-stale-publish'])
+    await versioning.initializeBaseline({ projectId: 'project-1', initialPaths: ['keep.txt'] })
+    const gateway = new LocalProjectWorkVersionGatewayImpl(versioning, async () => 'catalog-v1')
+    const request = {
+      project: located(world.projectRoot),
+      operationId: 'caller-stale-publish',
+      changes: [
+        {
+          relativePath: 'notes.txt',
+          action: 'add' as const,
+          bytes: new TextEncoder().encode('正文')
+        }
+      ],
+      expectedCatalogVersion: 'catalog-v1'
+    }
+    await gateway.publish(request)
+    await expect(readFile(join(world.projectRoot, 'notes.txt'), 'utf8')).resolves.toBe('正文')
+    await expect(gateway.readOperation(located(world.projectRoot), 'caller-stale-publish')).resolves.toBe(
+      'committed'
+    )
+    const commits = (await git.log({ fs, dir: world.projectRoot })).length
+    const intents = (
+      await readdir(join(world.projectRoot, '.git/opengalgame/version-operations'))
+    ).length
+    expect(commits).toBe(2)
+    expect(intents).toBe(1)
+
+    await gateway.publish(request)
+
+    expect((await git.log({ fs, dir: world.projectRoot })).length).toBe(commits)
+    expect(
+      (await readdir(join(world.projectRoot, '.git/opengalgame/version-operations'))).length
+    ).toBe(intents)
   })
 
   it('已未提交 caller link 缺失时迟到同 ID 拒绝', async () => {

@@ -25,11 +25,45 @@
   --warning: #966721;
   --success: #357d76;
 
-  --surface: var(--paper);
-  --surface-raised: var(--paper-strong);
-  --surface-selected: var(--purple-wash);
-  --surface-warning: var(--cream);
-  --surface-danger: #fbeef1;
+  --bg-app: #f6edf7;
+  --surface: #fffdfb;
+  --surface-raised: #fffcf7;
+  --surface-muted: #eadcf0;
+  --glass-opacity: 70%;
+  --glass-soft-opacity: 45%;
+  --surface-glass: color-mix(in srgb, var(--surface) var(--glass-opacity, 70%), transparent);
+  --surface-glass-soft: color-mix(in srgb, var(--surface) var(--glass-soft-opacity, 45%), transparent);
+
+  --text-primary: #3b365f;
+  --text-muted: #6f6584;
+  --text-faint: #8b819c;
+  --border: #e8def0;
+  --border-strong: #d7c8e8;
+
+  --accent: #8d67ab;
+  --accent-strong: #5a4477;
+  --accent-soft: #f2e6f6;
+  --on-accent: #fffdfb;
+  --ring-focus:
+    0 0 0 2px var(--surface), 0 0 0 5px color-mix(in srgb, var(--accent) 52%, transparent);
+
+  --success: #357d76;
+  --success-bg: #eaf5f0;
+  --warning: #966721;
+  --warning-bg: #fff6e3;
+  --danger: #8a3a3a;
+  --danger-bg: #fbeef1;
+
+  --font-system:
+    system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC',
+    'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
+  --font-shell: var(--font-system);
+  --body-text-size: 15px;
+  --body-line-height: 24px;
+
+  --surface-selected: var(--accent-soft);
+  --surface-warning: var(--warning-bg);
+  --surface-danger: var(--danger-bg);
   --type-document: var(--teal-deep);
   --type-image: var(--purple);
   --type-audio: var(--warning);
@@ -42,7 +76,11 @@
     radial-gradient(ellipse at 78% 47%, #fff6ce70 0%, #ead4f350 32%, transparent 60%),
     linear-gradient(140deg, #fbf6ff 0%, #f3e8f5 42%, #cce3e3 100%);
 
-  --font-sans: 'Yu Gothic', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  /* 中文界面优先使用中文无衬线字体，避免 Yu Gothic 只有部分汉字字形时
+     同一串中文逐字回退成不同字体。日文环境仍由 Yu Gothic 兜底。 */
+  --font-sans:
+    'Microsoft YaHei', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC',
+    'Source Han Sans SC', 'Yu Gothic', sans-serif;
   --font-mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
 
   --space-1: 4px;
@@ -66,4 +104,31 @@
   --duration-base: 220ms;
   --duration-slow: 420ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root[data-high-contrast='true'] {
+  --text-primary: #241f3d;
+  --text-muted: #4f4666;
+  --text-faint: #6b607f;
+  --border: #8f7aa8;
+  --border-strong: #6b5a82;
+  --surface-muted: #e3d6ea;
+  --accent: #5a4477;
+  --accent-strong: #4a3765;
+  --on-accent: #fffdfb;
+  --success: #2b655f;
+  --warning: #7a531a;
+  --danger: #6f2d2d;
+  --ring-focus: 0 0 0 2px var(--surface), 0 0 0 5px var(--accent-strong);
+
+  --ink: var(--text-primary);
+  --ink-strong: var(--text-primary);
+  --muted: var(--text-muted);
+  --muted-soft: var(--text-faint);
+  --line: var(--border-strong);
+  --line-soft: var(--border);
+  --purple: var(--accent);
+  --purple-deep: var(--accent-strong);
+  --purple-wash: var(--accent-soft);
+  --error: var(--danger);
 }

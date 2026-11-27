@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { LockKeyhole, LocateFixed, Pencil, TriangleAlert } from 'lucide-react'
+import { Check, LockKeyhole, LocateFixed, Pencil, TriangleAlert } from 'lucide-react'
 import {
   useEffect,
   useLayoutEffect,
@@ -113,6 +113,10 @@ export function PreviewDialogueList({
 
   const dirtySet = new Set(dirtyIds)
   const blankSet = new Set(blankIds)
+  const selectedNumber =
+    dialogues.findIndex((dialogue) => dialogue.dialogueId === selectedDialogueId) + 1
+  const editingNumber =
+    dialogues.findIndex((dialogue) => dialogue.dialogueId === editingDialogueId) + 1
   const issuesByDialogue = new Map<string, number>()
   for (const issue of issues) {
     if (issue.dialogueId === undefined) continue
@@ -147,14 +151,37 @@ export function PreviewDialogueList({
             ) : null}
           </div>
         </div>
-        <p className={clsx(styles.note, blankIds.length > 0 && styles.noteWarning)}>
-          {lockState === 'locked'
-            ? '这个场景正在别处编辑，当前只能查看。'
-            : lockState === 'unknown'
-              ? '无法确认场景是否可编辑，已按只读处理。'
-              : blankIds.length > 0
-                ? `有 ${blankIds.length} 处台词为空，补上后才能保存。`
-                : '只修改文字 · 说话人和配音保持原样'}
+        <p
+          className={clsx(
+            styles.note,
+            (dirtyIds.length > 0 || blankIds.length > 0) && styles.noteWarning
+          )}
+          aria-live="polite"
+        >
+          {lockState === 'locked' ? (
+            '这个场景正在别处编辑，当前只能查看。'
+          ) : lockState === 'unknown' ? (
+            '无法确认场景是否可编辑，已按只读处理。'
+          ) : dirtyIds.length > 0 ? (
+            <>
+              <TriangleAlert className={styles.noteIcon} aria-hidden="true" />
+              已修改 {dirtyIds.length} 句 · 点顶部「保存」写回当前场景
+            </>
+          ) : editingNumber > 0 ? (
+            <>
+              <Pencil className={styles.noteIcon} aria-hidden="true" />
+              正在修改第 {editingNumber} 句 · 按 Esc 或点空白处结束
+            </>
+          ) : selectedNumber > 0 ? (
+            <>
+              <Check className={styles.noteIcon} aria-hidden="true" />
+              已选中第 {selectedNumber} 句 · 点铅笔或按回车修改
+            </>
+          ) : blankIds.length > 0 ? (
+            `有 ${blankIds.length} 处台词为空，补上后才能保存。`
+          ) : (
+            '只修改文字 · 说话人和配音保持原样'
+          )}
         </p>
         {issuesOpen ? (
           <PreviewIssuesPopover
@@ -301,6 +328,7 @@ function DialogueRow({
     <div
       ref={rowRef}
       data-dialogue-id={dialogue.dialogueId}
+      data-selected={selected || undefined}
       className={clsx(
         styles.row,
         selected && styles.rowSelected,
@@ -337,6 +365,7 @@ function DialogueRow({
               value={composingValue ?? text}
               rows={1}
               spellCheck={false}
+              data-guide-target="dialogue-editor"
               aria-label={`编辑第 ${index + 1} 句`}
               onChange={(event) => {
                 resize(event.currentTarget)
@@ -386,6 +415,7 @@ function DialogueRow({
               ref={selectRef}
               type="button"
               className={styles.selectArea}
+              data-guide-target="dialogue-row"
               aria-label={`第 ${index + 1} 句${dirty ? '（有未保存修改）' : ''}${
                 atPosition ? '（舞台当前位置）' : ''
               }${editable ? '，按回车编辑' : ''}：${text.trim() === '' ? '空白台词' : text}`}
@@ -402,7 +432,25 @@ function DialogueRow({
       </div>
 
       <div className={styles.tail}>
-        {dirty ? <span className={styles.dirtyMark} title="已修改" aria-label="已修改" /> : null}
+        {editing ? (
+          <span className={styles.stateChip} data-tone="editing">
+            正在修改
+          </span>
+        ) : selected ? (
+          <span className={styles.stateChip} data-tone="selected" aria-label="已选中">
+            已选中
+          </span>
+        ) : null}
+        {dirty ? (
+          <span
+            className={styles.stateChip}
+            data-tone="dirty"
+            title="已修改，待保存"
+            aria-label="已修改"
+          >
+            已修改
+          </span>
+        ) : null}
         {issueCount > 0 ? (
           <span className={styles.issueMark} title={`${issueCount} 处预览提示`} />
         ) : null}
@@ -410,6 +458,7 @@ function DialogueRow({
           <button
             type="button"
             className={styles.editButton}
+            data-guide-target="dialogue-edit"
             aria-label={`编辑第 ${index + 1} 句`}
             title="编辑这一句"
             onClick={() => onStartEditing(dialogue.dialogueId)}

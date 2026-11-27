@@ -1,6 +1,6 @@
 import type * as PiAgentCore from '@earendil-works/pi-agent-core'
 
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 import { PiAgentExecutor } from './PiAgentExecutor'
 import { PiModelFactory, type PiModelCreationRequest } from './PiModelFactory'

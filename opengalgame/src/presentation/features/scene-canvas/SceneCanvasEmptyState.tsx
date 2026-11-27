@@ -32,16 +32,14 @@ export function SceneCanvasEmptyState({ onAddPrompt }: SceneCanvasEmptyStateProp
           />
         </svg>
       </span>
-      <p className={styles.emptyEyebrow}>空画布 · 从这里开始</p>
+      <p className={styles.emptyEyebrow}>空画布</p>
       <h2>让这一场，慢慢成形。</h2>
-      <p className={styles.emptyGuide}>{workbenchFeedback.emptyGuide}</p>
       <div className={styles.emptyActions}>
         <Button onClick={onAddPrompt} title="在视口中心添加提示词卡">
           <SparkIcon />
           添加提示词
         </Button>
       </div>
-      <p className={styles.emptyHint}>{workbenchFeedback.emptyHint}</p>
       <p className={styles.emptyNote}>{workbenchFeedback.canvasLayout}</p>
     </div>
   )

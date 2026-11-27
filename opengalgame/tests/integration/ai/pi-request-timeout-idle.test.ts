@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { normalizeContext } from '@earendil-works/pi-ai'
 import { PiModelFactory } from '@infrastructure/ai/pi/PiModelFactory'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 const saved: ConnectionSettingsInfo = {
   providerId: 'openai-compatible',

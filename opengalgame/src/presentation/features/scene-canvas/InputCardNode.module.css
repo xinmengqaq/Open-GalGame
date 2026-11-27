@@ -47,7 +47,6 @@
     transform 170ms var(--wb-ease);
 }
 
-
 .scale {
   display: grid;
   place-items: center;
@@ -62,7 +61,7 @@
   width: 12px;
   height: 12px;
   place-items: center;
-  color: color-mix(in srgb, var(--wb-accent-strong) 82%, transparent);
+  color: color-mix(in srgb, var(--content-focus) 82%, transparent);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, -50%);
@@ -98,18 +97,16 @@
 }
 
 .port:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--wb-accent) 58%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--content-focus) 58%, transparent);
   outline-offset: 2px;
 }
-
 
 .port:hover .scale > span[data-state='idle'],
 .port:focus-visible .scale > span[data-state='idle'] {
   border-color: transparent;
-  background: color-mix(in srgb, var(--wb-accent) 86%, transparent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wb-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--content-focus) 86%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--content-focus) 14%, transparent);
 }
-
 
 .glyph[data-state='ready'] .scale {
   animation: port-ready-in 300ms var(--wb-ease);
@@ -130,7 +127,6 @@
   }
 }
 
-
 .rejectAura {
   position: absolute;
   inset: -10px;
@@ -139,7 +135,7 @@
   background: radial-gradient(
     ellipse at 50% 50%,
     transparent 60%,
-    color-mix(in srgb, var(--wb-danger) 14%, transparent) 76%,
+    color-mix(in srgb, var(--content-video) 14%, transparent) 76%,
     transparent 86%
   );
   opacity: 0;
@@ -153,13 +149,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .glyph,
-  .scale,
-  .plus {
+  :root:not([data-reduced-motion='full']) .glyph,
+  :root:not([data-reduced-motion='full']) .scale,
+  :root:not([data-reduced-motion='full']) .plus {
     transition: none;
   }
 
-  .glyph[data-state='ready'] .scale {
+  :root:not([data-reduced-motion='full']) .glyph[data-state='ready'] .scale {
     animation: none;
   }
 }

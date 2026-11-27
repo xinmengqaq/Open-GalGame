@@ -89,9 +89,7 @@ export function PromptEditor({
     catalogLoaded ? (sourceId) => sourceFactsOf(session, sourceId).readable : undefined
   )
   const issue = promptReferenceIssueSummary(chipViews)
-  const saveFailure = session.saveError
-    ? promptReferenceFailureOf(session.saveError)
-    : null
+  const saveFailure = session.saveError ? promptReferenceFailureOf(session.saveError) : null
   const alert = session.promptReferenceAlert
   const cardAlert = alert && (alert.cardId === undefined || alert.cardId === cardId) ? alert : null
   const externalFailure = cardAlert?.message ?? null
@@ -251,6 +249,23 @@ export function PromptEditor({
     element?.focus()
   }
 
+  function insertReferenceMention(): void {
+    const element = area.current
+    if (!element) return
+    const text = element.value
+    const start = element.selectionStart ?? text.length
+    const end = element.selectionEnd ?? start
+    const needsSpace = start > 0 && !/\s/.test(text[start - 1] ?? '')
+    const inserted = `${needsSpace ? ' ' : ''}@`
+    const nextValue = `${text.slice(0, start)}${inserted}${text.slice(end)}`
+    const caret = start + inserted.length
+    commands.editPromptBody(cardId, nextValue)
+    pendingCaret.current = caret
+    pendingScroll.current = element.scrollTop
+    syncMention(nextValue, caret)
+    element.focus()
+  }
+
   function handleKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
     if (event.nativeEvent.isComposing) return
     if (event.key === 'Escape') {
@@ -287,6 +302,16 @@ export function PromptEditor({
       ref={root}
       className={`${styles.prompt}${editing ? ' nodrag nopan nowheel' : ''}`}
       data-prompt-focused={focused}
+      onBlur={(event) => {
+        const next = event.relatedTarget
+        if (
+          next instanceof Node &&
+          (root.current?.contains(next) || picker.current?.contains(next))
+        ) {
+          return
+        }
+        exitEditing()
+      }}
     >
       <span className={styles.promptHalo} data-prompt-halo aria-hidden="true" />
       <div className={styles.promptField}>
@@ -305,13 +330,8 @@ export function PromptEditor({
             aria-activedescendant={
               mention && candidates.length > 0 ? `${listId}-${activeIndex}` : undefined
             }
-            placeholder="写下这次的想法…输入 @ 引用卡片"
+            placeholder="写下这次的想法…"
             onFocus={() => setFocused(true)}
-            onBlur={(event) => {
-              const next = event.relatedTarget
-              if (next instanceof Node && picker.current?.contains(next)) return
-              exitEditing()
-            }}
             onChange={(event) => {
               const next = event.target.value
               commands.editPromptBody(cardId, next)
@@ -337,9 +357,29 @@ export function PromptEditor({
             data-fade={displayFade || undefined}
             aria-label="提示词正文"
           >
-            {empty ? '写下这次的想法…双击编辑，输入 @ 引用卡片' : value}
+            {empty ? '写下这次的想法…' : value}
           </div>
         )}
+        {editing ? (
+          <div className={styles.promptEditBar}>
+            <button
+              type="button"
+              className={styles.promptMentionAction}
+              aria-label="引用画布卡片"
+              title="引用画布卡片"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={insertReferenceMention}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape') return
+                event.preventDefault()
+                exitEditing()
+              }}
+            >
+              <span aria-hidden="true">@</span>
+              引用
+            </button>
+          </div>
+        ) : null}
         {chipViews.length > 0 ? (
           <div
             className={`${styles.promptRefs} nodrag nopan`}

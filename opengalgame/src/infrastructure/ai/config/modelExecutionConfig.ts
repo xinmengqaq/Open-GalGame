@@ -1,6 +1,6 @@
 import { AppException } from '@common/errors/AppException'
-import { ConnectionErrorCodes } from '@domain/connections/errors/ConnectionErrorCodes'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import { ConnectionErrorCodes } from '@domain/settings/connections/errors/ConnectionErrorCodes'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 
 export const suggestedModelRequestTimeoutMs = 240000
 

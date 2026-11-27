@@ -37,11 +37,8 @@ export function InputCatalogEmptyState({
         </span>
       </div>
       <p className={styles.stateTitle}>{workbenchFeedback.emptyCatalog}</p>
-      <p className={styles.stateHint}>
-        导入文档和素材，或先建一个文件夹整理本场景的输入。导入后会出现在这里。
-      </p>
       <div className={styles.stateActions}>
-        <Button className={styles.statePrimary} onClick={onImport}>
+        <Button data-guide-target="file-import" className={styles.statePrimary} onClick={onImport}>
           <ImportIcon />
           导入文件
         </Button>

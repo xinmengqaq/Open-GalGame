@@ -262,3 +262,8 @@
   background: currentColor;
   content: '';
 }
+
+.safeAction:focus {
+  outline: 3px solid color-mix(in srgb, currentColor 58%, transparent);
+  outline-offset: 2px;
+}

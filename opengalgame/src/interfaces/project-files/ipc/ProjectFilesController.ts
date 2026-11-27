@@ -100,8 +100,8 @@ export class ProjectFilesController {
     input: unknown,
     access: IpcRequestAccess
   ): Promise<AjaxResult<readonly string[] | null>> {
-    return this.handle(chooseProjectFilesSchema, input, access, '文件选择完成', () =>
-      this.chooser.chooseProjectFiles()
+    return this.handle(chooseProjectFilesSchema, input, access, '文件选择完成', (request) =>
+      this.chooser.chooseProjectFiles(request.mediaKinds)
     )
   }
 

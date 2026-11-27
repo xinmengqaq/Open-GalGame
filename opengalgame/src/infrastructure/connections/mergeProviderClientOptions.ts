@@ -1,4 +1,4 @@
-import type { ConnectionExtension } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionExtension } from '@domain/settings/connections/models/ConnectionSettings'
 
 interface ProviderClientControls {
   baseURL: string

@@ -1,9 +1,11 @@
 import { clsx } from 'clsx'
-import type { ReactElement } from 'react'
+import { useRef, type ReactElement } from 'react'
 
-import { ArrowIcon } from '../../components/Icons'
-import { Button } from '../../components/Button'
+import { Button } from '@presentation/components/Button'
+import { ArrowIcon } from '@presentation/components/Icons'
+import { SettingsHelp } from '@presentation/components/SettingsHelp'
 import styles from './AppUpdateSection.module.css'
+import { useAppUpdateMotion } from './useAppUpdateMotion'
 import type { AppUpdateFlow } from './useAppUpdate'
 
 const MANUAL_DOWNLOAD_URL = 'https://github.com/xinmengqaq/Open-GalGame/releases/latest'
@@ -71,7 +73,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
         kind: 'loading',
         eyebrow: '更新状态',
         title: '正在读取版本信息…',
-        detail: '连上主进程后会显示当前版本与发布源状态。',
+        detail: '',
         live: '正在读取版本信息',
         actionLabel: '检查更新',
         actionDisabled: true,
@@ -98,13 +100,13 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
     return {
       kind: 'unsupported',
       eyebrow: '仅安装版可用',
-      title: '当前运行形态不支持应用内更新',
-      detail: '在 Windows 安装版中，这里会检查发布源并提示下载与重启安装。',
-      live: '当前运行形态不支持应用内更新',
-      actionLabel: '检查更新',
-      actionDisabled: false,
-      action: 'check',
-      showManualDownload: false,
+      title: '应用内更新不可用',
+      detail: '',
+      live: '应用内更新不可用',
+      actionLabel: '应用内更新不可用',
+      actionDisabled: true,
+      action: 'none',
+      showManualDownload: true,
       showProgress: false
     }
   }
@@ -115,7 +117,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
         kind: 'checking',
         eyebrow: '更新状态 · 检查中',
         title: '正在检查更新…',
-        detail: '正在连接发布源获取最新的版本信息。',
+        detail: '',
         live: '正在检查更新',
         actionLabel: '正在检查…',
         actionDisabled: true,
@@ -129,7 +131,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
         kind: 'available',
         eyebrow: '可更新',
         title: `发现新版本 ${version}`,
-        detail: `当前版本 ${status.currentVersion}。下载由你决定开始，完成后也不会自动重启。`,
+        detail: '',
         live: `发现新版本 ${version}`,
         actionLabel: '立即更新',
         actionDisabled: false,
@@ -162,7 +164,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
         kind: 'downloading',
         eyebrow: '更新状态 · 下载中',
         title: '正在下载…',
-        detail: '下载总量还在确认，完成后会提示你重启安装。',
+        detail: '',
         live: '正在下载更新',
         actionLabel: '正在下载…',
         actionDisabled: true,
@@ -177,7 +179,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
         kind: 'downloaded',
         eyebrow: '更新已就绪',
         title: '更新已下载，重启后完成安装',
-        detail: `新版本 ${version} 已准备就绪；现在不会自动重启，由你确认后安装。`,
+        detail: `新版本 ${version} 已就绪；重启安装由你确认。`,
         live: '更新已下载，可以重启安装',
         actionLabel: '重启安装',
         actionDisabled: false,
@@ -191,7 +193,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
         kind: 'installing',
         eyebrow: '更新状态 · 安装中',
         title: '正在安装更新…',
-        detail: '应用即将退出，并在安装完成后重新启动。',
+        detail: '应用即将退出，安装完成后自动重启。',
         live: '正在安装更新',
         actionLabel: '正在安装…',
         actionDisabled: true,
@@ -206,7 +208,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
           kind: 'failed',
           eyebrow: '更新失败',
           title: '更新没有完成',
-          detail: '可以重新检查发布源。',
+          detail: '重新检查发布源，或手动下载安装包。',
           live: '更新没有完成',
           actionLabel: '重新检查',
           actionDisabled: false,
@@ -219,9 +221,9 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
       return {
         kind: 'failed',
         eyebrow: '更新失败',
-        title: failure.message,
-        detail: failureDetails[failure.kind] ?? '可以重新检查发布源。',
-        live: `更新失败：${failure.message}`,
+        title: '更新没有完成',
+        detail: failureDetails[failure.kind] ?? '可以重新检查发布源，或手动下载安装包。',
+        live: '更新没有完成',
         actionLabel: retryDownload ? '重试' : '重新检查',
         actionDisabled: false,
         action: 'retry',
@@ -235,7 +237,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
             kind: 'idle',
             eyebrow: '更新状态',
             title: '已是最新版本',
-            detail: `当前版本 ${status.currentVersion} 已是发布源上的最新版本。`,
+            detail: '',
             live: '已是最新版本',
             actionLabel: '检查更新',
             actionDisabled: false,
@@ -247,7 +249,7 @@ function resolveUpdateView(flow: AppUpdateFlow): UpdateView {
             kind: 'unchecked',
             eyebrow: '更新状态',
             title: '尚未检查更新',
-            detail: '检查后就能知道发布源是否有新版本。',
+            detail: '',
             live: '尚未检查更新',
             actionLabel: '检查更新',
             actionDisabled: false,
@@ -440,6 +442,9 @@ export function AppUpdateSection({ flow }: { flow: AppUpdateFlow }): ReactElemen
   const percent = status?.progress?.percent ?? 0
   const release = status?.release
   const releasedAt = releaseDateLabel(release?.releasedAt)
+  const root = useRef<HTMLDivElement>(null)
+
+  useAppUpdateMotion(root, view.kind)
 
   function runAction(): void {
     switch (view.action) {
@@ -508,7 +513,12 @@ export function AppUpdateSection({ flow }: { flow: AppUpdateFlow }): ReactElemen
   })()
 
   return (
-    <div className={styles.section} data-phase={view.kind} data-supported={status?.supported}>
+    <div
+      ref={root}
+      className={styles.section}
+      data-phase={view.kind}
+      data-supported={status?.supported}
+    >
       <p className={styles.live} aria-live="polite" aria-atomic="true">
         {view.live}
       </p>
@@ -517,26 +527,38 @@ export function AppUpdateSection({ flow }: { flow: AppUpdateFlow }): ReactElemen
           <span className={styles.versionLabel}>当前版本</span>
           <span className={styles.versionValue}>v{status?.currentVersion ?? '—'}</span>
         </div>
-        <span
-          className={styles.channel}
-          data-tone={status?.supported === false ? 'muted' : 'ready'}
-        >
-          <span className={styles.channelDot} aria-hidden="true" />
-          {status?.supported === false ? '不支持应用内更新' : '应用内更新'}
-        </span>
+        <div className={styles.versionActions}>
+          <span
+            className={styles.channel}
+            data-tone={status?.supported === false ? 'muted' : 'ready'}
+          >
+            <span className={styles.channelDot} aria-hidden="true" />
+            {status?.supported === false ? '不支持应用内更新' : '应用内更新'}
+          </span>
+          <SettingsHelp label="版本更新" align="end">
+            <p>应用内更新仅在安装版可用。下载完成后不会自动重启，安装前会再次向你确认。</p>
+            <p>检查、下载或安装失败时可以重试，或从 GitHub Releases 手动下载安装包。</p>
+            <p>更新不会改动你的工程和本地文件。</p>
+          </SettingsHelp>
+        </div>
       </div>
-      <section className={styles.hero}>
+      <section className={styles.hero} data-update-motion="hero">
         <div className={styles.heroGlow} aria-hidden="true" />
         <UpdateDial kind={view.kind} percent={percent} />
         <div className={styles.heroCopy}>
           <span className={styles.eyebrow}>{view.eyebrow}</span>
           <h3 className={styles.title}>{view.title}</h3>
-          <p className={styles.detail}>{view.detail}</p>
+          {view.detail === '' ? null : <p className={styles.detail}>{view.detail}</p>}
         </div>
       </section>
       {progressView}
       <div className={styles.actionRow}>
-        <Button className={styles.primaryAction} disabled={view.actionDisabled} onClick={runAction}>
+        <Button
+          className={styles.primaryAction}
+          data-update-motion="action"
+          disabled={view.actionDisabled}
+          onClick={runAction}
+        >
           {view.actionLabel}
         </Button>
         {view.showManualDownload ? <ManualDownloadLink /> : null}

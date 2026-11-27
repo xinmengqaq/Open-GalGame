@@ -6,7 +6,9 @@ import styles from './FormField.module.css'
 interface FormFieldProps {
   label: string
   optional?: string
+  labelAccessory?: ReactNode
   error?: string
+  className?: string
   htmlFor: string
   children: ReactNode
 }
@@ -14,15 +16,20 @@ interface FormFieldProps {
 export function FormField({
   label,
   optional,
+  labelAccessory,
   error,
+  className,
   htmlFor,
   children
 }: FormFieldProps): ReactElement {
   return (
-    <label className={styles.field} htmlFor={htmlFor}>
-      <span>
-        {label}
-        {optional ? <span className={styles.optional}>{optional}</span> : null}
+    <div className={clsx(styles.field, className)}>
+      <span className={styles.labelRow}>
+        <label htmlFor={htmlFor}>
+          {label}
+          {optional ? <span className={styles.optional}>{optional}</span> : null}
+        </label>
+        {labelAccessory ? <span className={styles.labelAccessory}>{labelAccessory}</span> : null}
       </span>
       {children}
       {error ? (
@@ -30,7 +37,7 @@ export function FormField({
           {error}
         </span>
       ) : null}
-    </label>
+    </div>
   )
 }
 

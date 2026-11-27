@@ -77,7 +77,6 @@
   margin-left: 1px;
 }
 
-
 .videoControls {
   position: absolute;
   right: 8px;
@@ -151,7 +150,6 @@
   line-height: 1.4;
   white-space: nowrap;
 }
-
 
 .audioDeck {
   position: relative;
@@ -305,7 +303,6 @@
   display: none;
 }
 
-
 .compactAudio {
   position: relative;
   display: grid;
@@ -414,7 +411,6 @@
   height: 8px;
 }
 
-
 .cardSkeleton {
   display: block;
   width: 100%;
@@ -498,16 +494,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .videoControls,
-  .audioPlay,
-  .compactPlay {
+  :root:not([data-reduced-motion='full']) .videoControls,
+  :root:not([data-reduced-motion='full']) .audioPlay,
+  :root:not([data-reduced-motion='full']) .compactPlay {
     transition: none;
   }
 
-  .cardSkeleton,
-  .thumbSkeleton,
-  .audioPlaySkeleton,
-  .audioBarsSkeleton {
+  :root:not([data-reduced-motion='full']) .cardSkeleton,
+  :root:not([data-reduced-motion='full']) .thumbSkeleton,
+  :root:not([data-reduced-motion='full']) .audioPlaySkeleton,
+  :root:not([data-reduced-motion='full']) .audioBarsSkeleton {
     animation: none;
   }
 }

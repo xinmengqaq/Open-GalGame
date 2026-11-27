@@ -2,28 +2,27 @@ import type { ClientOptions as AnthropicClientOptions } from '@anthropic-ai/sdk'
 import type { ClientOptions as OpenAIClientOptions } from 'openai'
 
 import { AppException } from '@common/errors/AppException'
-import { ConnectionErrorCodes } from '@domain/connections/errors/ConnectionErrorCodes'
+import { ConnectionErrorCodes } from '@domain/settings/connections/errors/ConnectionErrorCodes'
 import type {
   ConnectionAccess,
   ConnectionExtension
-} from '@domain/connections/models/ConnectionSettings'
+} from '@domain/settings/connections/models/ConnectionSettings'
 
 const allowedProviderOptionKeys = {
   'openai-compatible': [
     'defaultHeaders',
     'defaultQuery',
-    'fetchOptions',
-    'logLevel'
+    'fetchOptions'
   ] as const satisfies readonly (keyof OpenAIClientOptions)[],
   anthropic: [
     'defaultHeaders',
     'defaultQuery',
-    'fetchOptions',
-    'logLevel'
+    'fetchOptions'
   ] as const satisfies readonly (keyof AnthropicClientOptions)[]
 }
 
 const rejectedProviderOptionKeys = [
+  'logLevel',
   'timeout',
   'maxRetries',
   'apiKey',
@@ -36,8 +35,6 @@ const rejectedProviderOptionKeys = [
 
 const knownRejectedKey: Record<string, true> = {}
 for (const key of rejectedProviderOptionKeys) knownRejectedKey[key] = true
-
-const providerLogLevels = ['off', 'error', 'warn', 'info', 'debug'] as const
 
 type AllowedProviderOptionKey =
   | (typeof allowedProviderOptionKeys)['openai-compatible'][number]
@@ -63,10 +60,7 @@ function validateAllowedValue(key: AllowedProviderOptionKey, value: unknown): vo
   if (key === 'fetchOptions') {
     if (!isPlainObject(value)) throw invalidValue(key)
     rejectNonJson(value, key)
-    return
   }
-  if (!providerLogLevels.includes(value as (typeof providerLogLevels)[number]))
-    throw invalidValue(key)
 }
 
 function requireStringRecord(value: unknown, key: string): void {

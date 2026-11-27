@@ -54,7 +54,9 @@ export function WorkbenchStateBanner({ className }: WorkbenchStateBannerProps): 
       <span className={styles.copy}>
         {state.kind !== 'ready' ? <span className={styles.subject}>{state.subject}</span> : null}
         <strong className={styles.title}>{state.title}</strong>
-        {state.kind !== 'ready' ? <span className={styles.next}>{state.nextStep}</span> : null}
+        {state.kind !== 'ready' && state.nextStep ? (
+          <span className={styles.next}>{state.nextStep}</span>
+        ) : null}
       </span>
     </div>
   )

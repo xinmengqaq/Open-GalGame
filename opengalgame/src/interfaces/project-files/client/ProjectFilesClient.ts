@@ -1,4 +1,5 @@
 import type {
+  ChooseProjectFilesDTO,
   CopyProjectFileDTO,
   CopyProjectFolderDTO,
   CreateProjectFolderDTO,
@@ -53,7 +54,9 @@ export interface ProjectFilesClient {
 
   readProjectMedia(request: ReadProjectMediaDTO): Promise<AjaxResult<ProjectMediaVO>>
 
-  chooseProjectFiles(): Promise<AjaxResult<readonly string[] | null>>
+  chooseProjectFiles(
+    request?: ChooseProjectFilesDTO
+  ): Promise<AjaxResult<readonly string[] | null>>
 
   importProjectFiles(request: ImportProjectFilesDTO): Promise<AjaxResult<ImportProjectFilesVO>>
 

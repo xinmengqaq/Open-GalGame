@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactElement } from 'react'
 
-import coverPlaceholder from '../../assets/cover-placeholder.svg'
 import { Button } from '../../components/Button'
+import { ArrowIcon, DownloadIcon, PlusIcon } from '../../components/Icons'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Dialog } from '../../components/Dialog'
 import { FormField, TextArea, TextInput } from '../../components/FormField'
@@ -13,6 +13,7 @@ import type { FailureState } from '../../feedback/failure'
 import { fieldForErrorCode } from '../../feedback/homeResult'
 import { useNavigationStore } from '../../stores/navigation.store'
 import { NewProjectCard } from './NewProjectCard'
+import { LibraryStateArtwork } from './ProjectsStateArtwork'
 import { ProjectCard } from './ProjectCard'
 import styles from './ProjectsPage.module.css'
 import { PROJECTS_PAGE_SIZE, useProjectsList } from './useProjectsList'
@@ -22,11 +23,12 @@ import type { ProjectClient } from '@interfaces/client/ProjectClient'
 
 interface ProjectsPageProps {
   projectClient: ProjectClient
+  onProjectCreated?: (projectId: string) => void
 }
 
-export function ProjectsPage({ projectClient }: ProjectsPageProps): ReactElement {
+export function ProjectsPage({ projectClient, onProjectCreated }: ProjectsPageProps): ReactElement {
   const visit = useNavigationStore((state) => state.visit)
-  const creating = useProjectCreate(projectClient)
+  const creating = useProjectCreate(projectClient, { onProjectCreated })
   const importing = useProjectImport(projectClient)
   const list = useProjectsList(projectClient)
   const root = useRef<HTMLElement>(null)
@@ -48,11 +50,27 @@ export function ProjectsPage({ projectClient }: ProjectsPageProps): ReactElement
     importing.state === 'importing'
   const pageNumber = Math.floor(list.offset / PROJECTS_PAGE_SIZE) + 1
   const showPager = list.total > PROJECTS_PAGE_SIZE
+  const countLabel =
+    list.status === 'loading'
+      ? '正在读取'
+      : list.status === 'failed'
+        ? '加载失败'
+        : `${list.total} 部作品`
   const renameSynopsisFailure =
     renameFailure && fieldForErrorCode(renameFailure.code) === 'synopsis'
       ? renameFailure.msg
       : undefined
   const renameNameFailure = renameFailure && !renameSynopsisFailure ? renameFailure.msg : undefined
+
+  function openCreate(): void {
+    if (flowBusy || importing.state !== 'idle') return
+    creating.open()
+  }
+
+  function openImport(): void {
+    if (flowBusy || creating.state !== 'closed') return
+    void importing.importProject()
+  }
 
   function openRename(entry: Extract<ProjectListEntryVO, { status: 'available' }>): void {
     setRenameTarget(entry)
@@ -75,25 +93,49 @@ export function ProjectsPage({ projectClient }: ProjectsPageProps): ReactElement
   return (
     <section className={styles.screen} ref={root} aria-label="项目">
       <div className={styles.wash} aria-hidden="true" />
-      <header className={styles.header}>
-        <Button className={styles.chrome} variant="secondary" onClick={() => visit('home')}>
-          返回
-        </Button>
-        <h1 className={styles.title}>项目</h1>
-        <Button
-          className={styles.chrome}
-          variant="secondary"
-          disabled={flowBusy}
-          onClick={() => {
-            if (creating.state !== 'closed') return
-            void importing.importProject()
-          }}
+      <header className={styles.topbar}>
+        <button
+          type="button"
+          className={styles.backButton}
+          aria-label="返回"
+          data-tip="返回"
+          onClick={() => visit('home')}
         >
-          导入
-        </Button>
+          <ArrowIcon className={styles.backIcon} />
+        </button>
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>项目</h1>
+          <span className={styles.count} aria-live="polite">
+            {countLabel}
+          </span>
+        </div>
+        <div className={styles.actions}>
+          <button
+            type="button"
+            className={`${styles.action} ${styles.actionSecondary}`}
+            disabled={flowBusy}
+            onClick={openCreate}
+          >
+            <PlusIcon className={styles.actionIcon} />
+            <span>新建</span>
+          </button>
+          <button
+            type="button"
+            className={`${styles.action} ${styles.actionPrimary}`}
+            disabled={flowBusy}
+            onClick={openImport}
+          >
+            <DownloadIcon className={styles.actionIcon} />
+            <span>导入</span>
+          </button>
+        </div>
       </header>
-      {list.refreshError ? <p className={styles.banner}>{list.refreshError.msg}</p> : null}
-      <div className={styles.gridWrap}>
+      {list.refreshError ? (
+        <p className={styles.banner} role="status">
+          {list.refreshError.msg}
+        </p>
+      ) : null}
+      <div className={styles.stage}>
         {list.status === 'loading' ? (
           <div className={styles.grid} aria-busy="true" aria-label="正在加载项目">
             {Array.from({ length: PROJECTS_PAGE_SIZE + 1 }, (_, index) => (
@@ -102,21 +144,38 @@ export function ProjectsPage({ projectClient }: ProjectsPageProps): ReactElement
           </div>
         ) : null}
         {list.status === 'failed' ? (
-          <div className={styles.failure}>
-            <p className={styles.message}>{list.error?.msg ?? '项目列表加载失败，请重试'}</p>
-            <Button onClick={() => void list.retry()}>重试</Button>
+          <div className={styles.stateCenter}>
+            <div className={styles.statePanel} data-kind="failed" role="alert">
+              <div className={`${styles.stateVisual} ${styles.stateVisualFailed}`}>
+                <LibraryStateArtwork failed />
+              </div>
+              <div className={styles.stateCopy}>
+                <h2 className={styles.stateTitle}>{list.error?.msg ?? '项目列表加载失败'}</h2>
+                <p className={styles.stateDetail}>
+                  工程文件没有被修改；重新加载仍然失败时，检查工程目录是否可访问。
+                </p>
+                <button
+                  type="button"
+                  className={styles.stateAction}
+                  onClick={() => void list.retry()}
+                >
+                  重试
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
         {list.status === 'empty' ? (
-          <div className={styles.emptyState}>
-            <p className={styles.emptyTitle}>还没有作品</p>
-            <p className={styles.emptyLead}>可以从空白画布开始，或把已有工程带进来。</p>
-            <NewProjectCard
-              onCreate={() => {
-                if (flowBusy || importing.state !== 'idle') return
-                creating.open()
-              }}
-            />
+          <div className={styles.stateCenter}>
+            <div className={styles.statePanel}>
+              <div className={styles.stateVisual}>
+                <LibraryStateArtwork />
+              </div>
+              <div className={styles.stateCopy}>
+                <h2 className={styles.stateTitle}>还没有作品</h2>
+                <NewProjectCard onCreate={openCreate} />
+              </div>
+            </div>
           </div>
         ) : null}
         {list.status === 'ready' ? (
@@ -126,7 +185,6 @@ export function ProjectsPage({ projectClient }: ProjectsPageProps): ReactElement
                 key={entry.id}
                 entry={entry}
                 selected={list.selectedId === entry.id}
-                coverSrc={coverPlaceholder}
                 onSelect={() => list.select(entry.id)}
                 onOpen={() => void list.openProject(entry.id)}
                 onRename={() => {
@@ -135,34 +193,29 @@ export function ProjectsPage({ projectClient }: ProjectsPageProps): ReactElement
                 onUnregister={() => setRemoveTarget(entry)}
               />
             ))}
-            <NewProjectCard
-              onCreate={() => {
-                if (flowBusy || importing.state !== 'idle') return
-                creating.open()
-              }}
-            />
+            <NewProjectCard onCreate={openCreate} />
           </div>
         ) : null}
       </div>
       {showPager ? (
         <div className={styles.pager}>
-          <Button
-            className={styles.chrome}
-            variant="secondary"
+          <button
+            type="button"
+            className={styles.pagerButton}
             disabled={list.offset === 0}
             onClick={list.goPreviousPage}
           >
             上一页
-          </Button>
+          </button>
           <span className={styles.pageLabel}>第 {pageNumber} 页</span>
-          <Button
-            className={styles.chrome}
-            variant="secondary"
+          <button
+            type="button"
+            className={styles.pagerButton}
             disabled={list.offset + PROJECTS_PAGE_SIZE >= list.total}
             onClick={list.goNextPage}
           >
             下一页
-          </Button>
+          </button>
         </div>
       ) : null}
       <CreateProjectDialog flow={creating} />

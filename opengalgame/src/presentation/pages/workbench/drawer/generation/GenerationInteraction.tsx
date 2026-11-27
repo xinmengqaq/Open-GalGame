@@ -299,6 +299,7 @@ export function GenerationInteraction({
           {candidateAvailable && candidateTab ? (
             <button
               className="wb-gen-candidate-entry"
+              data-guide-target="candidate-open"
               onClick={() => candidateTab.activate()}
               type="button"
             >
@@ -317,7 +318,7 @@ export function GenerationInteraction({
           ) : null}
           <div className="wb-gen-review__actions">
             {canAccept(status, interaction) ? (
-              <Button className="wb-gen-primary" disabled={locked} onClick={onAccept} type="button">
+              <Button data-guide-target="candidate-accept" className="wb-gen-primary" disabled={locked} onClick={onAccept} type="button">
                 <Check />
                 {pending ? '正在提交…' : '接受并提交'}
               </Button>
@@ -326,6 +327,7 @@ export function GenerationInteraction({
               <Button
                 className="wb-gen-secondary"
                 disabled={locked}
+                data-guide-target="candidate-revise"
                 onClick={onOpenRevise}
                 type="button"
               >

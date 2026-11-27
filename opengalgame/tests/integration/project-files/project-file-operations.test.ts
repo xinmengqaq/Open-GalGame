@@ -72,11 +72,17 @@ async function createService(
   root: string,
   opened: string[],
   files: ProjectFileOperationGateway = new LocalProjectFileOperationGatewayImpl(),
-  idPrefix = ''
+  idPrefix = '',
+  options: {
+    userDirectory?: string
+    extraRegistrations?: readonly { id: string; directory: string; operationId: string }[]
+  } = {}
 ): Promise<ManageProjectFiles> {
-  const userDirectory = await temporaryDirectory('opengalgame-file-user-')
+  const userDirectory =
+    options.userDirectory ?? (await temporaryDirectory('opengalgame-file-user-'))
   await writeProjectRegistrations(userDirectory, [
-    { id: 'project-1', directory: root, operationId: 'op-register' }
+    { id: 'project-1', directory: root, operationId: 'op-register' },
+    ...(options.extraRegistrations ?? [])
   ])
   const listQuery: ProjectListQueryGateway = {
     listRegistrations: async () => [],
@@ -152,6 +158,90 @@ describe('工程文件写入适配', () => {
     })
     const afterDelete = await service.listProjectInputSources({ projectId: 'project-1' })
     expect(afterDelete.sources.find((item) => item.sourceId === sourceId)).toBeUndefined()
+  })
+
+  it('用户目录保留失效登记时导入和建目录仍成功且登记不被清理', async () => {
+    const root = await temporaryDirectory('opengalgame-file-stale-')
+    const outside = await temporaryDirectory('opengalgame-file-stale-src-')
+    const userDirectory = await temporaryDirectory('opengalgame-file-stale-user-')
+    await seedRepository(root)
+    await writeFile(join(outside, '笔记.md'), '# 正文\n', 'utf8')
+    const staleDirectory = join(userDirectory, 'removed-project')
+    const service = await createService(root, [], undefined, '', {
+      userDirectory,
+      extraRegistrations: [
+        { id: 'project-stale', directory: staleDirectory, operationId: 'op-stale' }
+      ]
+    })
+
+    const imported = await importFiles(service, [join(outside, '笔记.md')])
+    expect(imported.failedFiles).toEqual([])
+    expect(imported.importedFiles).toHaveLength(1)
+
+    const listed = await service.listProjectInputSources({ projectId: 'project-1' })
+    expect(listed.sources.map((item) => item.name)).toContain('笔记.md')
+    const folder = await service.createProjectFolder({
+      projectId: 'project-1',
+      operationId: testOperationId(),
+      parentFolderId: null,
+      name: '资料',
+      expectedCatalogVersion: listed.catalogVersion
+    })
+    expect(folder.name).toBe('资料')
+    const after = await service.listProjectInputSources({ projectId: 'project-1' })
+    expect(after.folders.map((item) => item.name)).toContain('资料')
+
+    const document = JSON.parse(
+      await readFile(join(userDirectory, 'projects.json'), 'utf8')
+    ) as { registrations: { id: string; directory: string }[] }
+    expect(document.registrations.map((item) => item.id)).toEqual([
+      'project-1',
+      'project-stale'
+    ])
+    expect(document.registrations.find((item) => item.id === 'project-stale')?.directory).toBe(
+      staleDirectory
+    )
+  })
+
+  it('混合导入按内容确认类别，大小写后缀和伪装格式各自处理', async () => {
+    const root = await temporaryDirectory('opengalgame-file-types-')
+    const outside = await temporaryDirectory('opengalgame-file-types-src-')
+    await seedRepository(root)
+    const png = Buffer.from(
+      '89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d763f8cfc0000000020001e221bc330000000049454e44ae426082',
+      'hex'
+    )
+    const wav = Buffer.from(
+      '524946462400000057415645666d7420100000000100010044ac000088580100020010006461746100000000',
+      'hex'
+    )
+    await writeFile(join(outside, '剧本.MD'), '# 正文\n', 'utf8')
+    await writeFile(join(outside, '声音.WAV'), wav)
+    await writeFile(
+      join(outside, '图.SVG'),
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>',
+      'utf8'
+    )
+    await writeFile(join(outside, '伪装.wav'), '不是音频', 'utf8')
+    await writeFile(join(outside, '未知.xyz'), png)
+    const service = await createService(root, [])
+
+    const imported = await importFiles(
+      service,
+      ['剧本.MD', '声音.WAV', '图.SVG', '伪装.wav', '未知.xyz'].map((name) =>
+        join(outside, name)
+      )
+    )
+
+    expect(imported.importedFiles.map((file) => [file.name, file.contentKind])).toEqual([
+      ['剧本.MD', 'text'],
+      ['声音.WAV', 'audio'],
+      ['图.SVG', 'image'],
+      ['未知.xyz', 'image']
+    ])
+    expect(imported.failedFiles).toEqual([
+      { fileName: '伪装.wav', message: '文件格式不受支持' }
+    ])
   })
 
   it('已有或未提交的同名素材不会被导入或重命名覆盖', async () => {

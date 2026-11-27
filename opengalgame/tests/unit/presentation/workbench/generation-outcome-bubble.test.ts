@@ -308,7 +308,7 @@ describe('失败气泡诊断', () => {
       failedStatus('modelTransient', { updatedAt: '2026-11-04T12:34:56.789Z' }),
       baseHandlers
     )
-    expect(withReference).toContain('诊断信息')
+    expect(withReference).toContain('失败诊断')
     expect(withReference).toContain('故障指纹')
     expect(withReference).toContain('a1b2c3d4e5f6')
     expect(withReference).toContain('操作时间')

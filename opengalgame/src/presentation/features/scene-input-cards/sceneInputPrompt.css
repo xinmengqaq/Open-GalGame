@@ -8,12 +8,12 @@
   background:
     radial-gradient(
       ellipse 68% 58% at 102% -4%,
-      color-mix(in srgb, var(--wb-warning) 20%, transparent) 0%,
+      color-mix(in srgb, var(--content-prompt) 20%, transparent) 0%,
       transparent 66%
     ),
     radial-gradient(
       ellipse 82% 72% at -8% 106%,
-      color-mix(in srgb, var(--wb-accent) 14%, transparent) 0%,
+      color-mix(in srgb, var(--content-image) 14%, transparent) 0%,
       transparent 70%
     );
 }
@@ -26,7 +26,7 @@
   position: absolute;
   top: 2px;
   right: 15px;
-  color: color-mix(in srgb, var(--wb-accent) 24%, transparent);
+  color: color-mix(in srgb, var(--content-image) 24%, transparent);
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 54px;
   line-height: 1;
@@ -40,42 +40,48 @@
   opacity: 0;
 }
 
-
-.promptEditHint {
+.promptEditAction {
   position: absolute;
-  top: 4px;
-  right: 10px;
+  top: 5px;
+  right: 9px;
   z-index: 2;
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  padding: 2px 7px 2px 6px;
-  border-radius: var(--wb-radius-pill);
-  background: color-mix(in srgb, var(--wb-surface-solid) 88%, transparent);
-  box-shadow: var(--wb-shadow-chip);
-  color: var(--wb-text-muted);
-  font-family: var(--wb-font);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.6;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-2px);
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--content-surface) 84%, transparent);
+  box-shadow: 0 10px 22px -20px color-mix(in srgb, var(--content-focus) 52%, transparent);
+  color: var(--content-text-muted);
+  cursor: pointer;
+  opacity: 0.58;
   transition:
     opacity 150ms var(--wb-ease),
-    transform 150ms var(--wb-ease);
+    background 150ms var(--wb-ease),
+    color 150ms var(--wb-ease);
 }
 
-.promptEditHintIcon {
-  width: 11px;
-  height: 11px;
-  flex: none;
+.promptEditAction svg {
+  width: 13px;
+  height: 13px;
 }
 
-.promptCard:hover .promptEditHint,
-.promptCard:focus-within .promptEditHint {
+.promptEditAction:hover {
+  background: var(--content-surface);
+  color: var(--content-focus);
   opacity: 1;
-  transform: translateY(0);
+}
+
+.promptEditAction:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--content-image) 62%, transparent);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+.promptCard[data-editing='true'] .promptEditAction {
+  display: none;
 }
 
 .prompt {
@@ -105,7 +111,7 @@
   border-radius: 2px;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--wb-accent) 82%, transparent),
+    color-mix(in srgb, var(--content-image) 82%, transparent),
     transparent
   );
   content: '';
@@ -125,7 +131,7 @@
   border-radius: 16px;
   background: radial-gradient(
     ellipse at 26% 18%,
-    color-mix(in srgb, var(--wb-accent) 15%, transparent) 0%,
+    color-mix(in srgb, var(--content-image) 15%, transparent) 0%,
     transparent 70%
   );
   opacity: 0;
@@ -143,7 +149,7 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--wb-text-strong);
+  color: var(--content-text);
   font-family: var(--wb-font);
   font-size: 14px;
   line-height: 1.9;
@@ -153,13 +159,56 @@
 }
 
 .promptArea::placeholder {
-  color: var(--wb-text-faint);
+  color: var(--content-text-muted);
 }
 
 .promptArea:focus-visible {
   outline: 0;
 }
 
+.promptEditBar {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.promptMentionAction {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 9px 3px 7px;
+  border: 0;
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--content-image) 10%, transparent);
+  color: var(--content-focus);
+  font-family: var(--wb-font-mono, var(--font-mono));
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 150ms var(--wb-ease),
+    color 150ms var(--wb-ease);
+}
+
+.promptMentionAction span {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--content-image) 14%, transparent);
+  font-size: 11px;
+}
+
+.promptMentionAction:hover {
+  background: color-mix(in srgb, var(--content-image) 18%, transparent);
+}
+
+.promptMentionAction:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--content-image) 62%, transparent);
+  outline-offset: 2px;
+}
 
 .promptDisplay {
   position: relative;
@@ -168,11 +217,11 @@
   min-height: 0;
   flex: 1 1 auto;
   margin: 0;
-  padding: 0;
+  padding: 0 24px 0 0;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  color: var(--wb-text-strong);
+  color: var(--content-text);
   font-family: var(--wb-font);
   font-size: 14px;
   line-height: 1.9;
@@ -186,7 +235,7 @@
 }
 
 .promptDisplay[data-empty] {
-  color: var(--wb-text-faint);
+  color: var(--content-text-muted);
 }
 
 .promptDisplay[data-fade] {
@@ -194,9 +243,8 @@
 }
 
 .prompt:focus-within .promptQuote {
-  color: color-mix(in srgb, var(--wb-accent) 36%, transparent);
+  color: color-mix(in srgb, var(--content-image) 36%, transparent);
 }
-
 
 .promptRefs {
   display: flex;
@@ -204,12 +252,12 @@
   gap: 7px;
   align-items: center;
   padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--wb-hairline) 72%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--content-border) 72%, transparent);
 }
 
 .promptRefsLabel {
   flex: none;
-  color: var(--wb-text-faint);
+  color: var(--content-text-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -243,10 +291,10 @@
   gap: 4px;
   align-items: center;
   padding: 2px 3px 2px 7px;
-  border: 1px solid color-mix(in srgb, var(--wb-accent) 17%, transparent);
+  border: 1px solid color-mix(in srgb, var(--content-image) 17%, transparent);
   border-radius: var(--wb-radius-pill);
-  background: color-mix(in srgb, var(--wb-accent) 8%, transparent);
-  color: var(--wb-accent-strong);
+  background: color-mix(in srgb, var(--content-image) 8%, transparent);
+  color: var(--content-focus);
   font-family: var(--wb-font);
   font-size: 11px;
   font-weight: 700;
@@ -255,15 +303,15 @@
 }
 
 .promptRefChip[data-tone='warning'] {
-  border-color: color-mix(in srgb, var(--wb-warning) 24%, transparent);
-  background: color-mix(in srgb, var(--wb-warning) 9%, transparent);
-  color: var(--wb-warning);
+  border-color: color-mix(in srgb, var(--content-prompt) 24%, transparent);
+  background: color-mix(in srgb, var(--content-prompt) 9%, transparent);
+  color: var(--content-prompt);
 }
 
 .promptRefChip[data-tone='invalid'] {
-  border-color: color-mix(in srgb, var(--wb-danger) 28%, transparent);
-  background: color-mix(in srgb, var(--wb-danger) 8%, transparent);
-  color: var(--wb-danger-strong);
+  border-color: color-mix(in srgb, var(--content-video) 28%, transparent);
+  background: color-mix(in srgb, var(--content-video) 8%, transparent);
+  color: var(--content-focus);
 }
 
 .promptRefAt {
@@ -325,7 +373,6 @@
   opacity: 1;
 }
 
-
 .promptRefAlert {
   display: flex;
   min-width: 0;
@@ -335,16 +382,16 @@
   margin: 0;
   padding: 7px 8px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--wb-danger) 7%, transparent);
-  color: var(--wb-danger-strong);
+  background: color-mix(in srgb, var(--content-video) 7%, transparent);
+  color: var(--content-focus);
   font-family: var(--wb-font);
   font-size: 11px;
   line-height: 1.55;
 }
 
 .promptRefAlert[data-tone='warning'] {
-  background: color-mix(in srgb, var(--wb-warning) 8%, transparent);
-  color: var(--wb-warning);
+  background: color-mix(in srgb, var(--content-prompt) 8%, transparent);
+  color: var(--content-prompt);
 }
 
 .promptRefAlertIcon {
@@ -384,7 +431,6 @@
   outline: 1px solid currentColor;
   outline-offset: 1px;
 }
-
 
 .promptPicker {
   --picker-text: var(--wb-text, var(--ink));
@@ -576,24 +622,22 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .prompt::after,
-  .promptPicker,
-  .promptRefRemove {
+  :root:not([data-reduced-motion='full']) .prompt::after,
+  :root:not([data-reduced-motion='full']) .promptPicker,
+  :root:not([data-reduced-motion='full']) .promptRefRemove {
     transition: none;
   }
 
-  .promptEditHint,
-  .promptQuote {
+  :root:not([data-reduced-motion='full']) .promptEditAction,
+  :root:not([data-reduced-motion='full']) .promptQuote {
     transition: opacity 100ms linear !important;
   }
 
-  .promptEditHint,
-  .promptCard:hover .promptEditHint,
-  .promptCard:focus-within .promptEditHint {
+  :root:not([data-reduced-motion='full']) .promptEditAction:hover {
     transform: none;
   }
 
-  .promptPicker {
+  :root:not([data-reduced-motion='full']) .promptPicker {
     animation: none;
   }
 }

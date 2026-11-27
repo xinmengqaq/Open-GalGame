@@ -6,6 +6,7 @@ import { Button } from '../../components/Button'
 import { ImportIcon } from '../../pages/workbench/WorkbenchIcons'
 import { EmptyDocumentEditor } from '../document-layer/EmptyDocumentEditor'
 import { contentKindLabel } from '../workbench-session/contentKindLabel'
+import type { ImportedSourcesHandler } from '../workbench-session/workbenchActionObservers'
 import { SOURCE_DRAG_MIME } from '../workbench-session/workbenchSession.types'
 import { InputCatalogBreadcrumbs } from './InputCatalogBreadcrumbs'
 import {
@@ -22,6 +23,7 @@ import { ClipIcon, CloseIcon, FolderPlusIcon, SparkIcon, WarningDotIcon } from '
 import { InputFolderTree } from './InputFolderTree'
 import { InputSourceContextMenu } from './InputSourceContextMenu'
 import { useInputCatalog } from './useInputCatalog'
+import type { UseInputCatalog } from './inputCatalog.types'
 import {
   useClipboardBannerMotion,
   useDropOverlayMotion,
@@ -32,11 +34,28 @@ import styles from './InputCatalogPanel.module.css'
 interface InputCatalogPanelProps {
   client: ProjectFilesClient
   onRefresh: () => void
+  onSourcesImported?: ImportedSourcesHandler
+  /** 把文件区真实的导入动作交给外壳，教程不直接触碰目录或文件。 */
+  onImportFilesChange?: (importFiles: UseInputCatalog['importFiles'] | null) => void
 }
 
-export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps): ReactElement {
+export function InputCatalogPanel({
+  client,
+  onRefresh,
+  onSourcesImported,
+  onImportFilesChange
+}: InputCatalogPanelProps): ReactElement {
   const panelRef = useRef<HTMLElement | null>(null)
-  const catalog = useInputCatalog(client, panelRef)
+  const catalog = useInputCatalog(client, panelRef, onSourcesImported)
+  const importFilesRef = useRef(catalog.importFiles)
+  useEffect(() => {
+    importFilesRef.current = catalog.importFiles
+  }, [catalog.importFiles])
+  useEffect(() => {
+    if (!onImportFilesChange) return
+    onImportFilesChange((options) => importFilesRef.current(options))
+    return () => onImportFilesChange(null)
+  }, [onImportFilesChange])
   const menu = catalog.menu
   const clipboard = catalog.clipboard
   const [dropActive, setDropActive] = useState(false)
@@ -67,9 +86,9 @@ export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps)
           menuSource.contentKind === 'text' ? menuSource.textKind : undefined
         )} · ${menuSource.readable ? '可读取' : '不可读取'}`
       : menu?.kind === 'folder'
-        ? '文件夹 · 双击进入'
+        ? '文件夹'
         : menu?.kind === 'blank'
-          ? '在这里新建或导入'
+          ? '当前目录'
           : null
 
   const clipboardName = clipboard
@@ -254,7 +273,6 @@ export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps)
             <ImportIcon />
           </span>
           <strong>松开以导入文件</strong>
-          <span>加入当前文件夹，或拖到文件夹行。</span>
         </div>
       </div>
 
@@ -282,6 +300,7 @@ export function InputCatalogPanel({ client, onRefresh }: InputCatalogPanelProps)
             <Button
               className={styles.importButton}
               disabled={catalog.busy}
+              data-guide-target="file-import"
               onClick={() => void catalog.importFiles()}
             >
               <ImportIcon />

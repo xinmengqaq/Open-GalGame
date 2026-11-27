@@ -49,7 +49,13 @@ export function DocumentLayerHeader({
   const saveState = saving ? '保存中…' : error ? '保存失败' : dirty ? '未保存' : null
   return (
     <header className={clsx(styles.readingHeader, theme.theme)} data-theme="workbench">
-      <button ref={backButtonRef} type="button" className={styles.backButton} onClick={onBack}>
+      <button
+        ref={backButtonRef}
+        type="button"
+        className={styles.backButton}
+        data-guide-target="document-back"
+        onClick={onBack}
+      >
         <BackIcon />
         返回画布
       </button>

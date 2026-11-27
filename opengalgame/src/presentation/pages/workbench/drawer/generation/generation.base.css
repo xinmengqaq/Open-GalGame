@@ -325,8 +325,10 @@
     0 20px 44px -32px rgb(74 62 110 / 62%),
     inset 0 1px 0 rgb(255 255 255 / 95%);
   color: var(--wb-text);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--body-text-size, 15px);
+  /* 正文行高按字号的 1.6 倍随字号计算，避免固定像素行高被按钮、
+     标签和元数据继承后把它们的行盒一起撑大。 */
+  line-height: 1.6;
   backdrop-filter: blur(12px);
 }
 
@@ -357,9 +359,14 @@
 
 .wb-gen-bubble p {
   margin: 0;
+}
+
+/* 只给没有自有字号类的普通段落套阅读字号；回答标签、问题标题、
+   操作按钮和元数据由各自类保持固定层级。 */
+.wb-gen-bubble p:not([class]) {
   color: var(--wb-text-muted);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-bubble strong {

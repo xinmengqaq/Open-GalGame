@@ -24,6 +24,7 @@ export function CreateProjectDialog({ flow }: { flow: CreateFlow }): ReactElemen
       <Dialog
         open={open && !flow.confirmClose}
         title="新建项目"
+        surface="glass"
         allowClose={!busy}
         onClose={flow.requestClose}
         actions={
@@ -32,10 +33,16 @@ export function CreateProjectDialog({ flow }: { flow: CreateFlow }): ReactElemen
               <Button variant="secondary" onClick={flow.requestClose}>
                 关闭
               </Button>
-              <Button onClick={() => void flow.retry()}>重试登记</Button>
+              <Button data-guide-target="project-retry" onClick={() => void flow.retry()}>
+                重试登记
+              </Button>
             </>
           ) : flow.state === 'failure' && flow.error && failureAction === 'rebuild-workspace' ? (
-            <Button onClick={() => void flow.rebuildWorkspace()} disabled={flow.rebuilding}>
+            <Button
+              data-guide-target="project-rebuild"
+              onClick={() => void flow.rebuildWorkspace()}
+              disabled={flow.rebuilding}
+            >
               {flow.rebuilding ? homeWorkspaceFailure.rebuilding : homeWorkspaceFailure.action}
             </Button>
           ) : (
@@ -43,7 +50,11 @@ export function CreateProjectDialog({ flow }: { flow: CreateFlow }): ReactElemen
               <Button variant="secondary" onClick={flow.requestClose} disabled={busy}>
                 取消
               </Button>
-              <Button onClick={() => void flow.submit()} disabled={busy}>
+              <Button
+                data-guide-target="project-submit"
+                onClick={() => void flow.submit()}
+                disabled={busy}
+              >
                 {flow.state === 'creating' ? '正在创建…' : '创建项目'}
               </Button>
             </>
@@ -97,6 +108,7 @@ export function CreateProjectDialog({ flow }: { flow: CreateFlow }): ReactElemen
                   type="button"
                   variant="secondary"
                   disabled={busy}
+                  data-guide-target="project-folder"
                   onClick={() => void flow.chooseLocation()}
                 >
                   {flow.directory ? '更改' : '选择文件夹'}

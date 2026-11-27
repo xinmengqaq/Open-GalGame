@@ -7,15 +7,19 @@ import {
   fixturePathForDroppedFile
 } from './workbenchCatalogFixture'
 import { fixtureInspect, fixtureReadArrangement, fixtureReadSources } from './workbenchFixtures'
+import type { AppearanceSettings } from '@domain/settings/appearance/models/AppearanceSettings'
+import type { AppearanceSettingsGateway } from '@application/settings/appearance/ports/AppearanceSettingsGateway'
+import { ManageAppearanceSettings } from '@application/settings/appearance/services/impl/ManageAppearanceSettings'
+import type { AppearanceSettingsVO } from '@application/settings/appearance/vo/AppearanceSettingsVO'
 import type {
   ConnectionSettingsDTO,
   ListModelsDTO
-} from '@application/connections/dto/ConnectionSettingsDTO'
+} from '@application/settings/connections/dto/ConnectionSettingsDTO'
 import type {
   ConnectionSettingsVO,
   ConnectionTestVO,
   ModelListVO
-} from '@application/connections/vo/ConnectionSettingsVO'
+} from '@application/settings/connections/vo/ConnectionSettingsVO'
 import type {
   CreateProjectDTO,
   ImportProjectDTO,
@@ -25,7 +29,11 @@ import type {
   UnregisterProjectDTO
 } from '@application/projects/dto/ProjectDTO'
 import type { EnsureProjectWorkspaceDTO } from '@application/projects/dto/ProjectWorkspaceDTO'
-import type { ReadProjectMediaDTO } from '@application/project-files/dto/ProjectFilesDTO'
+import type {
+  ChooseProjectFilesDTO,
+  ReadProjectMediaDTO
+} from '@application/project-files/dto/ProjectFilesDTO'
+import type { ProjectFileAssetKind } from '@application/project-files/vo/ProjectInputSourceVO'
 import type { ProjectMediaVO } from '@application/project-files/vo/ProjectMediaVO'
 import type {
   ProjectWorkspaceInspectionVO,
@@ -46,7 +54,13 @@ import type { VersionHistoryPageVO } from '@application/project-versioning/vo/Ve
 import type { SceneGenerationRenderProgressEventVO } from '@application/scene-generation/vo/SceneGenerationRenderVO'
 import type { AjaxResult } from '@common/contracts/AjaxResult'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import type { LoggerGateway } from '@common/logging/LoggerGateway'
+import { mediaExtensionsForCategories } from '@common/media/mediaFileName'
 import type { DesktopBridge } from '@interfaces/client/DesktopBridge'
+import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
+import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
+import type { IpcRequestAccess } from '@interfaces/ipc/RequestSchema'
+import { AppearanceSettingsController } from '@interfaces/settings/appearance/ipc/AppearanceSettingsController'
 
 function fileOperationUnavailable(): AjaxResult<never> {
   return { code: ErrorCodes.forbidden, msg: '当前环境不能操作工程文件' }
@@ -163,6 +177,25 @@ function appUpdateUnavailable(): AjaxResult<never> {
   return { code: ErrorCodes.invalidConfig, msg: '当前运行形态不支持应用内更新' }
 }
 
+const silentLogger: LoggerGateway = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined
+}
+
+const PROJECT_DOCUMENT_ACCEPT = ['.md', '.markdown', '.txt'] as const
+const PROJECT_MEDIA_KINDS = ['image', 'audio', 'video'] as const
+
+/** 每次选择都按本次请求从同一份媒体后缀规则生成 accept；普通导入仍含文档。 */
+function projectFileAcceptFor(mediaKinds?: readonly ProjectFileAssetKind[]): string {
+  const requested = mediaKinds && mediaKinds.length > 0 ? mediaKinds : PROJECT_MEDIA_KINDS
+  const media = mediaExtensionsForCategories(requested).map((extension) => `.${extension}`)
+  const accepted =
+    mediaKinds && mediaKinds.length > 0 ? media : [...PROJECT_DOCUMENT_ACCEPT, ...media]
+  return accepted.join(',')
+}
+
 export function createBrowserDesktopBridge(): DesktopBridge {
   const listeners = new Set<(progress: ProjectProgressVO) => void>()
   const generationListeners = new Set<(progress: SceneGenerationRenderProgressEventVO) => void>()
@@ -175,6 +208,23 @@ export function createBrowserDesktopBridge(): DesktopBridge {
   let candidatePreviewSource: EventSource | undefined
   const search = new URLSearchParams(window.location.search)
   const realFiles = usesRealProjectFiles(search)
+  let storedAppearance: AppearanceSettings | null = null
+  const appearanceGateway: AppearanceSettingsGateway = {
+    read: () => Promise.resolve(storedAppearance),
+    save: (settings) => {
+      storedAppearance = settings
+      return Promise.resolve()
+    }
+  }
+  const appearance = new AppearanceSettingsController(
+    new ManageAppearanceSettings({ settings: appearanceGateway, logger: silentLogger }),
+    new IpcExceptionHandler(silentLogger, new IpcErrorMapper())
+  )
+  let appearanceRequestSequence = 0
+  const appearanceAccess = (): IpcRequestAccess => ({
+    trusted: true,
+    requestId: `browser-appearance-${++appearanceRequestSequence}`
+  })
 
   function ensurePreviewRuntimeSource(): void {
     if (!realFiles || previewRuntimeSource) return
@@ -297,7 +347,7 @@ export function createBrowserDesktopBridge(): DesktopBridge {
   filePicker.type = 'file'
   filePicker.multiple = true
   filePicker.hidden = true
-  filePicker.accept = '.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.wav,.mp3,.ogg,.mp4,.webm'
+  filePicker.accept = projectFileAcceptFor()
   filePicker.setAttribute('data-testid', 'project-file-picker')
   document.body.append(filePicker)
 
@@ -325,12 +375,16 @@ export function createBrowserDesktopBridge(): DesktopBridge {
     })
   }
 
-  function pickProjectFiles(): Promise<readonly File[] | null> {
+  function pickProjectFiles(
+    mediaKinds?: readonly ProjectFileAssetKind[]
+  ): Promise<readonly File[] | null> {
+    filePicker.accept = projectFileAcceptFor(mediaKinds)
     const { promise, resolve } = Promise.withResolvers<readonly File[] | null>()
     const finish = (files: readonly File[] | null): void => {
       filePicker.removeEventListener('change', onChange)
       filePicker.removeEventListener('cancel', onCancel)
       filePicker.value = ''
+      filePicker.accept = projectFileAcceptFor()
       resolve(files)
     }
     const onChange = (): void => {
@@ -595,8 +649,10 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       generationFixture
         ? Promise.resolve({ code: ErrorCodes.success, msg: '画布已保存（走查夹具）', data: null })
         : devOrBlocked('saveSceneCanvasArrangement', request, sceneCanvasUnavailable()),
-    chooseProjectFiles: async (): Promise<AjaxResult<readonly string[] | null>> => {
-      const files = await pickProjectFiles()
+    chooseProjectFiles: async (
+      request?: ChooseProjectFilesDTO
+    ): Promise<AjaxResult<readonly string[] | null>> => {
+      const files = await pickProjectFiles(request?.mediaKinds)
       if (!files) {
         return { code: ErrorCodes.success, msg: '已取消选择', data: null }
       }
@@ -678,6 +734,14 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       }
       return Promise.resolve({ code: 2000, msg: '已从列表移出', data: { id: request.id } })
     },
+    readAppearance: () =>
+      realFiles
+        ? callDev<AppearanceSettingsVO>('readAppearance', undefined)
+        : appearance.readAppearance(undefined, appearanceAccess()),
+    saveAppearance: (request) =>
+      realFiles
+        ? callDev<AppearanceSettingsVO>('saveAppearance', request)
+        : appearance.saveAppearance(request, appearanceAccess()),
     getSettingsSummary: () =>
       realFiles
         ? callDev('getSettingsSummary', undefined)

@@ -151,6 +151,7 @@ function renderDetail(
     detailError?: string | null
     forking?: boolean
     forkFeedback?: HistoryForkFeedback | null
+    onOpenRun?: () => void
   } = {}
 ): string {
   const blockedDetail: SceneGenerationHistoryDetailVO = {
@@ -168,6 +169,7 @@ function renderDetail(
       forking: overrides.forking ?? false,
       onBack: () => undefined,
       onFork: () => undefined,
+      onOpenRun: overrides.onOpenRun,
       onRecheckFork: () => undefined,
       onRefreshHistory: () => undefined,
       onRetryDetail: () => undefined,
@@ -428,7 +430,7 @@ describe('AI 历史行与详情渲染', () => {
 
     expect(html).toContain('记录时间')
     expect(html).toContain('操作边界')
-    expect(html).toContain('所处阶段')
+    expect(html).not.toContain('所处阶段')
     expect(html).toContain('失败原因')
     expect(html).toContain('模型暂时不可用')
     expect(html).not.toContain('旧记录')
@@ -443,6 +445,38 @@ describe('AI 历史行与详情渲染', () => {
     expect(html).not.toContain('wb-hist__more')
     expect((html.match(/<button/g) ?? []).length).toBe(1)
     expect(html).toContain('返回列表')
+  })
+
+  it('失败详情提供回到当前生成，不把历史记录伪装成可重试动作', () => {
+    const html = renderDetail(
+      summary({
+        boundary: 'failed',
+        stage: 'failed',
+        message: '本次生成未完成',
+        failureReason: 'modelFailure'
+      }),
+      { onOpenRun: () => undefined }
+    )
+
+    expect(html).toContain('失败原因')
+    expect(html).toContain('模型暂时不可用')
+    expect(html).toContain('这条记录不能直接重试')
+    expect(html).toContain('回到当前生成')
+    const buttons = [...html.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map((match) =>
+      match[1].replace(/<[^>]+>/g, '')
+    )
+    expect(buttons).toContain('回到当前生成')
+    expect(buttons.some((text) => /重试|恢复/.test(text))).toBe(false)
+  })
+
+  it('已提交详情不显示失败恢复入口', () => {
+    const html = renderDetail(
+      summary({ boundary: 'committed', stage: 'completed', message: '作品已提交' }),
+      { onOpenRun: () => undefined }
+    )
+
+    expect(html).not.toContain('回到当前生成')
+    expect(html).not.toContain('这条记录不能直接重试')
   })
 
   it('可复制记录显示分叉入口，不展示操作、线程或检查点标识', () => {
@@ -702,7 +736,8 @@ describe('AI 历史行与详情渲染', () => {
     const failed = renderDetail(
       summary({ boundary: 'failed', stage: 'failed', message: '本次生成未完成' })
     )
-    expect(failed).toContain('生成失败')
+    expect(failed).toContain('失败')
+    expect(failed).not.toContain('生成失败')
 
     const committed = renderDetail(
       summary({ boundary: 'committed', stage: 'completed', message: '作品已提交' })

@@ -5,7 +5,7 @@ import {
   resolveConnectionAccess,
   resolveConnectionExtension,
   resolveConnectionSettings
-} from '@domain/connections/services/resolveConnectionSettings'
+} from '@domain/settings/connections/services/resolveConnectionSettings'
 
 const current = {
   providerId: 'openai-compatible' as const,

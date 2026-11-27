@@ -711,6 +711,27 @@ describe('工程文件选择器', () => {
     expect(calls).toEqual([])
   })
 
+  it('可选素材类型进入系统过滤器，缺省选项保持不变', async () => {
+    const showDialog = vi.fn().mockResolvedValue({ canceled: true, filePaths: [] })
+    const { controller } = createHarness(new ElectronProjectFileChooser(() => null, showDialog))
+    const access = { trusted: true, requestId: 'req-choose-filter' }
+
+    expect(await controller.chooseProjectFiles({ mediaKinds: ['audio'] }, access)).toEqual({
+      code: ErrorCodes.success,
+      msg: '文件选择完成',
+      data: null
+    })
+    expect(showDialog).toHaveBeenLastCalledWith({
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: '音频', extensions: ['mp3', 'flac', 'wav', 'ogg', 'mp4', 'webm'] }
+      ]
+    })
+
+    await controller.chooseProjectFiles({}, access)
+    expect(showDialog).toHaveBeenLastCalledWith(expectedOptions)
+  })
+
   it('选择器失败经统一出口映射，不可信来源和多余路径不打开选择器', async () => {
     const chooser = { chooseProjectFiles: vi.fn() }
     const { controller, projectFiles, calls } = createHarness(chooser)

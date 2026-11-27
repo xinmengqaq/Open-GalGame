@@ -2,6 +2,8 @@ const { test, expect } = require('@playwright/test')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { seedGuidePreference } = require('./support/guide-preference.cjs')
+
 const evidenceDir = path.resolve(__dirname, '..', '..', 'artifacts', 'generation-r06')
 const screensDir = path.join(evidenceDir, 'screens')
 const resultsPath = path.join(evidenceDir, 'results.json')
@@ -47,6 +49,7 @@ async function captureViewport(page) {
 
 async function openWorkbench(page, search) {
   instrument(page)
+  await seedGuidePreference(page)
   await page.goto(search)
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 20000 })
   await page.getByRole('button', { name: '项目选择' }).click()
@@ -581,19 +584,21 @@ test('八态 03：等待决策', async ({ page }) => {
   })
 })
 
-test('八态 04：失败与诊断展开', async ({ page }) => {
+test('八态 04：失败与诊断', async ({ page }) => {
   const search = '/?workbench=mixed&generation=failed&history=fixture'
   await openWorkbench(page, search)
   await openDrawer(page)
 
   await expect(page.getByText('模型调用失败，本次生成未完成')).toBeVisible()
-  const details = page.locator('details.wb-gen-outcome__diagnostics')
-  await expect(details).toBeVisible()
-  await page.getByText('诊断信息', { exact: true }).click()
-  await expect(details).toHaveJSProperty('open', true)
-  await expect(details.getByText('故障指纹')).toBeVisible()
-  const fingerprint = await details.locator('dd').first().innerText()
-  record('失败诊断：展开后显示故障指纹', /^[0-9a-f]{12}$/.test(fingerprint.trim()), fingerprint)
+  const facts = page.locator('.wb-gen-outcome__facts')
+  await expect(facts).toBeVisible()
+  await expect(facts.getByText('故障指纹')).toBeVisible()
+  const fingerprint = await facts
+    .locator('div')
+    .filter({ hasText: '故障指纹' })
+    .locator('dd')
+    .innerText()
+  record('失败诊断：直接显示故障指纹', /^[0-9a-f]{12}$/.test(fingerprint.trim()), fingerprint)
   const outcome = await page.locator('.wb-gen-outcome').evaluate((node) => {
     const style = getComputedStyle(node)
     return {
@@ -808,10 +813,23 @@ test('八态 07：AI 历史列表与详情', async ({ page }) => {
   await expect(failedRow).toBeVisible()
   await failedRow.click()
   await expect(detail.getByText('失败原因')).toBeVisible()
+  await expect(detail.getByText('所处阶段')).toHaveCount(0)
+  const failedRecovery = detail.getByRole('button', { name: '回到当前生成' })
+  await expect(failedRecovery).toBeVisible()
   record(
-    'AI 历史详情：失败记录显示原因',
-    await detail.getByText('失败原因').isVisible(),
-    '失败原因'
+    'AI 历史详情：失败记录显示原因且只提供回到当前生成',
+    (await detail.getByText('失败原因').isVisible()) &&
+      (await failedRecovery.isVisible()) &&
+      (await detail
+        .getByRole('button')
+        .filter({ hasText: /重试|恢复/ })
+        .count()) === 0,
+    '失败原因 + 回到当前生成，无重试/恢复动作'
+  )
+  await failedRecovery.click()
+  await expect(page.locator('[data-tab="current"] [role="tab"]')).toHaveAttribute(
+    'aria-selected',
+    'true'
   )
 
   await page.goto('/?workbench=mixed&generation=failureWithoutFacts&history=fixture')
@@ -825,7 +843,7 @@ test('八态 07：AI 历史列表与详情', async ({ page }) => {
   await expect(page.locator('.wb-hist__row')).toHaveCount(1)
   await page.locator('.wb-hist__row').first().click()
   await expect(detail.getByText('操作边界')).toBeVisible()
-  await expect(detail.locator('.wb-hist__detail-badges .wb-hist__badge')).toHaveText('失败')
+  await expect(detail.locator('.wb-hist__detail-facts .wb-hist__badge')).toHaveText('失败')
   await expect(detail.getByText('旧记录')).toHaveCount(0)
   record(
     'AI 历史详情：缺少失败事实的失败记录保留失败反馈且无旧记录标记',
@@ -1420,7 +1438,7 @@ test('作品历史写操作在途时禁止关闭', async ({ page }) => {
   })
 
   await confirm.getByRole('button', { name: '撤销这次操作' }).click()
-  await expect(detail.getByText('已回退')).toBeVisible()
+  await expect(detail.locator('.works-reverted')).toBeVisible()
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -1612,6 +1630,7 @@ test('默认格式与 token 计算样式', async ({ page }) => {
 test('减少动态效果', async ({ page }) => {
   instrument(page)
   await page.emulateMedia({ reducedMotion: 'reduce' })
+  await seedGuidePreference(page)
   const runningSearch = '/?workbench=mixed&generation=running&history=fixture'
   await page.goto(runningSearch)
   await expect(page.getByRole('button', { name: /导入项目/ })).toBeVisible({ timeout: 20000 })

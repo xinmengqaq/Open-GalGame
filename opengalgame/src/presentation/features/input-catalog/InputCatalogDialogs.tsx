@@ -14,7 +14,6 @@ import {
   FileGlyphIcon,
   FolderIcon,
   ImageGlyphIcon,
-  SparkIcon,
   TrashIcon
 } from './InputCatalogIcons'
 import type { CatalogNameDialog } from './inputCatalog.types'
@@ -139,7 +138,7 @@ export function CatalogCreateDialog({
           </span>
           <span className={styles.chooserCopy}>
             <strong>文档</strong>
-            <span>打开空文档编辑器，正文保存为工程中的真实文档。</span>
+            <span>新建空文档并写入当前目录。</span>
           </span>
           <span className={styles.chooserArrow} aria-hidden="true">
             <ChevronIcon />
@@ -156,17 +155,13 @@ export function CatalogCreateDialog({
           </span>
           <span className={styles.chooserCopy}>
             <strong>图片 / 音频 / 视频</strong>
-            <span>从本机选择文件，导入当前目录，再拖入画布使用。</span>
+            <span>从本机选择文件并导入当前目录。</span>
           </span>
           <span className={styles.chooserArrow} aria-hidden="true">
             <ChevronIcon />
           </span>
         </button>
       </div>
-      <p className={styles.dialogHint}>
-        <SparkIcon />
-        提示词、动画和特效卡片在画布底栏添加。
-      </p>
     </Dialog>
   )
 }

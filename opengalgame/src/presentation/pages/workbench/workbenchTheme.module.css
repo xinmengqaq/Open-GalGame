@@ -23,9 +23,9 @@
   --wb-wash-rose: color-mix(in srgb, var(--rose) 9%, transparent);
   --wb-wash-ink: color-mix(in srgb, var(--ink) 5%, transparent);
 
-  --wb-surface-glass: color-mix(in srgb, var(--paper-strong) 70%, transparent);
-  --wb-surface-soft: color-mix(in srgb, var(--paper-strong) 45%, transparent);
-  --wb-surface-quiet: color-mix(in srgb, var(--paper-strong) 28%, transparent);
+  --wb-surface-glass: var(--surface-glass);
+  --wb-surface-soft: var(--surface-glass-soft);
+  --wb-surface-quiet: color-mix(in srgb, var(--surface-glass-soft) 62%, transparent);
   --wb-surface-solid: var(--paper-strong);
   --wb-hairline: color-mix(in srgb, var(--ink) 9%, transparent);
   --wb-hairline-strong: color-mix(in srgb, var(--ink) 16%, transparent);

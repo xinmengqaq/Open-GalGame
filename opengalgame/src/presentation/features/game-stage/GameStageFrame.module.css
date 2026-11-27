@@ -172,13 +172,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .veilGlow,
-  .veilShimmer,
-  .spinner {
+  :root:not([data-reduced-motion='full']) .veilGlow,
+  :root:not([data-reduced-motion='full']) .veilShimmer,
+  :root:not([data-reduced-motion='full']) .spinner {
     animation: none;
   }
 
-  .veil {
+  :root:not([data-reduced-motion='full']) .veil {
     transition-duration: 90ms;
   }
 }

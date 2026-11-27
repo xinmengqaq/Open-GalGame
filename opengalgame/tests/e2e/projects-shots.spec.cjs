@@ -1,9 +1,12 @@
 const { test } = require('@playwright/test')
 const path = require('node:path')
 
+const { seedGuidePreference } = require('./support/guide-preference.cjs')
+
 const out = path.join(__dirname, '..', '..', '..', 'output', 'playwright')
 
 async function openProjects(page, search = '') {
+  await seedGuidePreference(page)
   await page.goto(`/${search}`)
   await page.getByRole('button', { name: '项目选择' }).click()
   await page.getByRole('heading', { name: '项目' }).waitFor()
@@ -12,6 +15,7 @@ async function openProjects(page, search = '') {
 
 test('截项目页各状态', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
+  await seedGuidePreference(page)
   await page.goto('/')
   await page.getByRole('button', { name: /导入项目/ }).waitFor()
   await page.waitForTimeout(900)
@@ -26,13 +30,13 @@ test('截项目页各状态', async ({ page }) => {
   await page.waitForTimeout(200)
   await page.screenshot({ path: path.join(out, 'projects-1920-selected.png') })
 
-  await page.getByRole('button', { name: '重命名' }).click()
+  await page.getByRole('menuitem', { name: '重命名' }).click()
   await page.waitForTimeout(300)
   await page.screenshot({ path: path.join(out, 'projects-1920-rename.png') })
   await page.getByRole('button', { name: '取消' }).click()
 
   await page.getByTestId('project-card').first().click({ button: 'right' })
-  await page.getByRole('button', { name: '移出列表' }).click()
+  await page.getByRole('menuitem', { name: '移出列表' }).click()
   await page.waitForTimeout(300)
   await page.screenshot({ path: path.join(out, 'projects-1920-remove.png') })
   await page.getByRole('button', { name: '留下' }).click()

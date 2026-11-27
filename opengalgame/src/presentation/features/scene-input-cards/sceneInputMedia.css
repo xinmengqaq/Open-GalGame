@@ -9,29 +9,29 @@
   background:
     radial-gradient(
       ellipse 76% 84% at 18% -6%,
-      color-mix(in srgb, var(--wb-accent) 30%, transparent) 0%,
+      color-mix(in srgb, var(--content-image) 30%, transparent) 0%,
       transparent 64%
     ),
     radial-gradient(
       ellipse 82% 96% at 102% 106%,
-      color-mix(in srgb, var(--wb-positive) 24%, transparent) 0%,
+      color-mix(in srgb, var(--content-animation) 24%, transparent) 0%,
       transparent 66%
     ),
     linear-gradient(
       168deg,
-      color-mix(in srgb, var(--wb-surface-solid) 58%, transparent),
-      color-mix(in srgb, var(--wb-surface-soft) 42%, transparent)
+      color-mix(in srgb, var(--content-surface) 58%, transparent),
+      color-mix(in srgb, var(--content-surface-raised) 42%, transparent)
     );
   box-shadow:
-    0 28px 50px -44px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 72%, transparent),
-    0 10px 22px -22px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 42%, transparent);
+    0 28px 50px -44px color-mix(in srgb, var(--content-focus) 72%, transparent),
+    0 10px 22px -22px color-mix(in srgb, var(--content-focus) 42%, transparent);
   transition: box-shadow var(--wb-duration-base) var(--wb-ease);
 }
 
 .mediaStage:hover {
   box-shadow:
-    0 34px 60px -44px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 82%, transparent),
-    0 14px 26px -22px color-mix(in srgb, var(--wb-purple-shadow, #65487f) 52%, transparent);
+    0 34px 60px -44px color-mix(in srgb, var(--content-focus) 82%, transparent),
+    0 14px 26px -22px color-mix(in srgb, var(--content-focus) 52%, transparent);
 }
 
 .mediaStage[data-media-kind='image'] {
@@ -52,21 +52,20 @@
   background:
     radial-gradient(
       ellipse 76% 84% at 18% -6%,
-      color-mix(in srgb, var(--wb-danger) 28%, transparent) 0%,
+      color-mix(in srgb, var(--content-video) 28%, transparent) 0%,
       transparent 64%
     ),
     radial-gradient(
       ellipse 82% 96% at 102% 106%,
-      color-mix(in srgb, var(--wb-accent) 24%, transparent) 0%,
+      color-mix(in srgb, var(--content-image) 24%, transparent) 0%,
       transparent 66%
     ),
     linear-gradient(
       168deg,
-      color-mix(in srgb, var(--wb-surface-solid) 58%, transparent),
-      color-mix(in srgb, var(--wb-surface-soft) 42%, transparent)
+      color-mix(in srgb, var(--content-surface) 58%, transparent),
+      color-mix(in srgb, var(--content-surface-raised) 42%, transparent)
     );
 }
-
 
 .mediaStage::before {
   position: absolute;
@@ -74,7 +73,7 @@
   background: repeating-radial-gradient(
     circle at 74% 24%,
     transparent 0 34px,
-    color-mix(in srgb, var(--wb-surface-solid) 52%, transparent) 34px 35px,
+    color-mix(in srgb, var(--content-surface) 52%, transparent) 34px 35px,
     transparent 35px 68px
   );
   content: '';
@@ -89,7 +88,7 @@
   background: linear-gradient(
     188deg,
     transparent 52%,
-    color-mix(in srgb, var(--wb-text) 5%, transparent) 100%
+    color-mix(in srgb, var(--content-text) 5%, transparent) 100%
   );
   content: '';
   pointer-events: none;
@@ -115,9 +114,9 @@
   z-index: 2;
   padding: 2px 7px 2px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--wb-surface-solid) 78%, transparent);
-  box-shadow: var(--wb-shadow-chip);
-  color: color-mix(in srgb, var(--wb-text-muted) 82%, transparent);
+  background: color-mix(in srgb, var(--content-surface) 78%, transparent);
+  box-shadow: 0 10px 22px -20px color-mix(in srgb, var(--content-focus) 52%, transparent);
+  color: color-mix(in srgb, var(--content-text-muted) 82%, transparent);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -132,11 +131,11 @@
   flex: none;
   place-items: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--wb-surface-solid) 58%, transparent);
+  background: color-mix(in srgb, var(--content-surface) 58%, transparent);
   box-shadow:
-    0 0 0 10px color-mix(in srgb, var(--wb-accent) 6%, transparent),
-    0 18px 32px -24px color-mix(in srgb, var(--wb-accent) 62%, transparent);
-  color: color-mix(in srgb, var(--wb-accent-strong) 78%, transparent);
+    0 0 0 10px color-mix(in srgb, var(--content-image) 6%, transparent),
+    0 18px 32px -24px color-mix(in srgb, var(--content-image) 62%, transparent);
+  color: color-mix(in srgb, var(--content-focus) 78%, transparent);
 }
 
 .mediaEmblem > svg {
@@ -154,8 +153,8 @@
   height: 18px;
   place-items: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--wb-danger) 16%, var(--wb-surface-solid));
-  color: var(--wb-danger-strong);
+  background: color-mix(in srgb, var(--content-video) 16%, var(--content-surface));
+  color: var(--content-focus);
 }
 
 .mediaOffMark svg {
@@ -165,7 +164,7 @@
 
 .mediaHeadline {
   margin-top: 9px;
-  color: var(--wb-text-muted);
+  color: var(--content-text-muted);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -177,8 +176,8 @@
   padding: 4px 11px;
   border: 0;
   border-radius: var(--wb-radius-pill);
-  background: color-mix(in srgb, var(--wb-accent) 10%, transparent);
-  color: var(--wb-accent-strong);
+  background: color-mix(in srgb, var(--content-image) 10%, transparent);
+  color: var(--content-focus);
   font-family: var(--wb-font);
   font-size: 11.5px;
   font-weight: 600;
@@ -186,11 +185,11 @@
 }
 
 .mediaRetry:hover {
-  background: color-mix(in srgb, var(--wb-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--content-image) 18%, transparent);
 }
 
 .mediaRetry:focus-visible {
-  outline: 2px solid var(--wb-accent);
+  outline: 2px solid var(--content-image);
   outline-offset: 2px;
 }
 
@@ -207,7 +206,7 @@
 .mediaTitle {
   min-width: 0;
   margin: 0;
-  color: var(--wb-text-strong);
+  color: var(--content-text);
   font-family: var(--wb-font);
   font-size: 15px;
   font-weight: 600;
@@ -223,7 +222,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mediaStage {
+  :root:not([data-reduced-motion='full']) .mediaStage {
     transition: none;
   }
 }

@@ -58,7 +58,7 @@ export function SceneCanvasFailureState({
 
         <p className={styles.policy} data-motion="failure-reveal">
           {damaged
-            ? '损坏内容不会被自动覆盖或自动修复；请先检查工程，再决定恢复范围。'
+            ? '损坏内容不会被自动覆盖，也不会自动修复。'
             : '读取失败不会被当作空画布，也不会自动改写工程内容。'}
         </p>
 

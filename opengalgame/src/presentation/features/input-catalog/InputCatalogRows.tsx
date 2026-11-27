@@ -63,7 +63,6 @@ export function InputFolderRow({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <span className={styles.guide} aria-hidden="true" />
       {expandable ? (
         <button
           type="button"
@@ -223,7 +222,6 @@ export function InputSourceRow({
         onMenu(event)
       }}
     >
-      <span className={styles.guide} aria-hidden="true" />
       <span className={styles.chevronSpacer} aria-hidden="true" />
       {source.contentKind === 'text' ? (
         <span className={styles.iconTile} data-tone={textKind} aria-hidden="true">

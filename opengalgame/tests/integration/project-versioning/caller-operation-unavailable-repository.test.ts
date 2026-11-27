@@ -5,6 +5,7 @@ import { afterEach, expect, it } from 'vitest'
 
 import { AppException } from '@common/errors/AppException'
 import { ErrorCodes } from '@common/errors/ErrorCodes'
+import { ProjectVersioningErrorCodes } from '@domain/project-versioning/errors/ProjectVersioningErrorCodes'
 import { createProjectVersioningGateways } from '@infrastructure/project-versioning/createProjectVersioningGateways'
 import { writeProjectRegistrations } from '@infrastructure/projects/projectRegistrations'
 
@@ -139,6 +140,85 @@ it('.git 为符号链接或 junction 时视为无调用方链接并继续扫描'
     'version-linked'
   )
   expect(valid.projectId).toBe('project-valid')
+})
+
+it('登记目录已不存在时跳过该登记，其他工程仍可准备和绑定调用方', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'caller-missing-root-'))
+  directories.push(root)
+  const userDirectory = join(root, 'user')
+  const validRoot = join(root, 'valid')
+  const missingRoot = join(root, 'removed-project')
+  const otherRoot = join(root, 'other')
+  await mkdir(userDirectory)
+  await mkdir(validRoot)
+  await mkdir(otherRoot)
+  await writeFile(join(validRoot, 'story.txt'), '有效')
+  await writeFile(join(otherRoot, 'story.txt'), '另一份')
+  await writeProjectRegistrations(userDirectory, [
+    { id: 'project-missing', directory: missingRoot, operationId: 'op-missing' },
+    { id: 'project-valid', directory: validRoot, operationId: 'op-valid' },
+    { id: 'project-other', directory: otherRoot, operationId: 'op-other' }
+  ])
+  const gateways = createProjectVersioningGateways(userDirectory)
+  await gateways.transactions.initializeBaseline({
+    projectId: 'project-valid',
+    initialPaths: ['story.txt']
+  })
+  await gateways.transactions.initializeBaseline({
+    projectId: 'project-other',
+    initialPaths: ['story.txt']
+  })
+  await expect(
+    gateways.records.findCallerOperation('scene-canvas', 'caller-missing')
+  ).resolves.toBeNull()
+  const valid = await prepareAndBind(
+    userDirectory,
+    'project-valid',
+    'caller-valid',
+    'version-valid'
+  )
+  expect(valid.projectId).toBe('project-valid')
+  await prepareAndBind(userDirectory, 'project-other', 'caller-conflict', 'version-other')
+  const bound = await rejectionOf(
+    prepareAndBind(userDirectory, 'project-valid', 'caller-conflict', 'version-valid-conflict')
+  )
+  expect(bound.code).toBe(ErrorCodes.operationConflict)
+})
+
+it('失效登记存在时，损坏的调用方链接仍返回 5204 而不是被当作不存在', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'caller-missing-corrupt-'))
+  directories.push(root)
+  const userDirectory = join(root, 'user')
+  const validRoot = join(root, 'valid')
+  const missingRoot = join(root, 'removed-project')
+  const otherRoot = join(root, 'other')
+  await mkdir(userDirectory)
+  await mkdir(validRoot)
+  await mkdir(otherRoot)
+  await writeFile(join(validRoot, 'story.txt'), '有效')
+  await writeFile(join(otherRoot, 'story.txt'), '另一份')
+  await writeProjectRegistrations(userDirectory, [
+    { id: 'project-missing', directory: missingRoot, operationId: 'op-missing' },
+    { id: 'project-valid', directory: validRoot, operationId: 'op-valid' },
+    { id: 'project-other', directory: otherRoot, operationId: 'op-other' }
+  ])
+  const gateways = createProjectVersioningGateways(userDirectory)
+  await gateways.transactions.initializeBaseline({
+    projectId: 'project-valid',
+    initialPaths: ['story.txt']
+  })
+  await gateways.transactions.initializeBaseline({
+    projectId: 'project-other',
+    initialPaths: ['story.txt']
+  })
+  await prepareAndBind(userDirectory, 'project-other', 'caller-broken', 'version-broken')
+  await writeFile(
+    join(otherRoot, '.git/opengalgame/version-caller-links/scene-canvas/caller-broken.json'),
+    '{损坏'
+  )
+  await expect(
+    gateways.records.findCallerOperation('scene-canvas', 'caller-broken')
+  ).rejects.toMatchObject({ code: ProjectVersioningErrorCodes.gitQueryFailed })
 })
 
 async function prepareAndBind(

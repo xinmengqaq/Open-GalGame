@@ -222,12 +222,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .panel[data-state='rebuilding'] .mark,
-  .missing {
+  :root:not([data-reduced-motion='full']) .panel[data-state='rebuilding'] .mark,
+  :root:not([data-reduced-motion='full']) .missing {
     animation: none;
   }
 
-  .rebuild {
+  :root:not([data-reduced-motion='full']) .rebuild {
     transition: none;
   }
 }

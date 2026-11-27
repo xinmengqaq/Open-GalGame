@@ -1,0 +1,41 @@
+.body {
+  display: grid;
+  gap: 16px;
+  max-height: min(54dvh, 460px);
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.block {
+  display: grid;
+  gap: 6px;
+}
+
+.heading {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--surface-muted) 58%, transparent);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.65;
+}

@@ -26,6 +26,27 @@ export type PreviewSaveNotice = {
 export type PreviewSavedVersion = {
   readonly requestId: string
   readonly contentBasis: SceneContentBasisVO
+  /** 预览内的保存提示版本；仅用于幂等和提示去重。 */
+  readonly revision: number
+  /** 直接保存成功，或等待结算后的确认；两种都是已确认保存。 */
+  readonly notice: 'saved' | 'settlement'
+}
+
+export type PreviewSaveUnsettled = {
+  readonly requestId?: string
+  readonly outcome: 'failed' | 'unverified'
+}
+
+export type PreviewSaveStarted = {
+  readonly requestId: string
+}
+
+export type PreviewSaveClearReason = 'unchanged' | 'abandoned'
+
+/** 未处理的保存已结束；只用于恢复教程初始选择，不表示保存成功。 */
+export type PreviewSaveCleared = {
+  readonly requestId?: string
+  readonly reason: PreviewSaveClearReason
 }
 
 type PendingSaveRequest = {
@@ -38,6 +59,9 @@ interface UsePreviewSaveSettlementOptions {
   readonly projectId: string
   readonly sceneId: string
   readonly onSavedVersion?: (saved: PreviewSavedVersion) => void
+  readonly onSaveStarted?: (event: PreviewSaveStarted) => void
+  readonly onSaveUnsettled?: (event: PreviewSaveUnsettled) => void
+  readonly onSaveCleared?: (event: PreviewSaveCleared) => void
   readonly draft: UsePreviewDraftEditingResult
   readonly lifecycle: UsePreviewSessionLifecycleResult
   readonly stage: UseScenePreviewStageResult
@@ -51,6 +75,8 @@ export interface UsePreviewSaveSettlementResult {
   readonly save: () => Promise<PreviewSaveOutcome>
   readonly checkSettlement: () => Promise<void>
   readonly clearRejectedSave: () => void
+  /** 用户明确放弃未处理保存或未保存草稿并退出时调用；不合成保存成功。 */
+  readonly abandonUnsettled: (discardedDrafts?: boolean) => void
   readonly beginOpen: () => void
   readonly markClosed: () => void
   readonly resetForSession: () => void
@@ -67,6 +93,9 @@ export function usePreviewSaveSettlement({
   projectId,
   sceneId,
   onSavedVersion,
+  onSaveStarted,
+  onSaveUnsettled,
+  onSaveCleared,
   draft,
   lifecycle,
   stage,
@@ -79,7 +108,10 @@ export function usePreviewSaveSettlement({
   const saveStateRef = useRef<PreviewSaveUiState>({ status: 'idle' })
   const saveBlockedRef = useRef<string | null>(null)
   const pendingSaveRef = useRef<PendingSaveRequest | null>(null)
+  const unsettledRef = useRef(false)
+  const lastRequestIdRef = useRef<string | null>(null)
   const settlementInFlightRef = useRef(false)
+  const saveNoticeRevisionRef = useRef(0)
 
   const {
     commitSaved,
@@ -111,38 +143,99 @@ export function usePreviewSaveSettlement({
   }, [])
 
   const publishSaved = useCallback(
-    (requestId: string, basis: SceneContentBasisVO, message: string) => {
+    (
+      requestId: string,
+      basis: SceneContentBasisVO,
+      message: string,
+      notice: PreviewSavedVersion['notice']
+    ) => {
+      saveNoticeRevisionRef.current += 1
+      const revision = saveNoticeRevisionRef.current
       try {
-        onSavedVersion?.({ requestId, contentBasis: basis })
-      } catch {
-      }
-      setSaveNotice((previous) => ({ revision: previous.revision + 1, message }))
+        onSavedVersion?.({ requestId, contentBasis: basis, revision, notice })
+      } catch {}
+      setSaveNotice({ revision, message })
     },
     [onSavedVersion]
+  )
+
+  const reportUnsettled = useCallback(
+    (outcome: PreviewSaveUnsettled['outcome'], requestId?: string) => {
+      unsettledRef.current = true
+      try {
+        onSaveUnsettled?.({
+          outcome,
+          ...(requestId === undefined ? {} : { requestId })
+        })
+      } catch {
+        // 指引观察者异常不能改变预览保存结果。
+      }
+    },
+    [onSaveUnsettled]
+  )
+
+  const reportStarted = useCallback(
+    (requestId: string) => {
+      try {
+        onSaveStarted?.({ requestId })
+      } catch {
+        // 指引观察者异常不能改变预览保存请求。
+      }
+    },
+    [onSaveStarted]
+  )
+
+  const reportCleared = useCallback(
+    (reason: PreviewSaveClearReason, requestId?: string) => {
+      unsettledRef.current = false
+      try {
+        onSaveCleared?.({
+          reason,
+          ...(requestId === undefined ? {} : { requestId })
+        })
+      } catch {
+        // 指引观察者异常不能改变预览保存结算。
+      }
+    },
+    [onSaveCleared]
   )
 
   const clearRejectedSave = useCallback(() => {
     if (saveStateRef.current.status === 'rejected') applySaveState({ status: 'idle' })
   }, [applySaveState])
 
+  const abandonUnsettled = useCallback(
+    (discardedDrafts = false) => {
+      if (!discardedDrafts && !unsettledRef.current && pendingSaveRef.current === null) return
+      const requestId = pendingSaveRef.current?.requestId ?? lastRequestIdRef.current ?? undefined
+      pendingSaveRef.current = null
+      unsettledRef.current = false
+      reportCleared('abandoned', requestId)
+      applySaveState({ status: 'idle' })
+    },
+    [applySaveState, reportCleared]
+  )
+
   const beginOpen = useCallback(() => {
-    setSaveState({ status: 'idle' })
+    applySaveState({ status: 'idle' })
     setSaveBlockedReason(null)
-  }, [])
+  }, [applySaveState])
 
   const markClosed = useCallback(() => {
-    setSaveState({ status: 'idle' })
-  }, [])
+    applySaveState({ status: 'idle' })
+  }, [applySaveState])
 
   const resetForSession = useCallback(() => {
     pendingSaveRef.current = null
+    unsettledRef.current = false
+    lastRequestIdRef.current = null
     saveInFlightRef.current = false
     settlementInFlightRef.current = false
     saveStateRef.current = { status: 'idle' }
     saveBlockedRef.current = null
     setSaveState({ status: 'idle' })
     setSaveBlockedReason(null)
-  }, [])
+  }, [saveInFlightRef])
 
   const syncStateRefs = useCallback(() => {
     saveStateRef.current = saveState
@@ -163,11 +256,14 @@ export function usePreviewSaveSettlement({
         currentDrafts[dialogueId] !== currentBaseline[dialogueId]
     )
     if (dirty.length === 0) {
+      lastRequestIdRef.current = null
+      reportCleared('unchanged')
       applySaveState({ status: 'idle' })
       return 'unchanged'
     }
     const blank = dirty.filter((dialogueId) => (currentDrafts[dialogueId] ?? '').trim() === '')
     if (blank.length > 0) {
+      reportUnsettled('failed')
       applySaveState({
         status: 'rejected',
         failure: {
@@ -186,6 +282,8 @@ export function usePreviewSaveSettlement({
     saveInFlightRef.current = true
     const previewTarget = selectedRef.current
     const requestId = createRequestId()
+    lastRequestIdRef.current = requestId
+    reportStarted(requestId)
     const edits = dirty.map((dialogueId) => ({
       dialogueId,
       text: currentDrafts[dialogueId] ?? ''
@@ -205,6 +303,7 @@ export function usePreviewSaveSettlement({
       })
       if (result.code !== ErrorCodes.success || result.data === undefined) {
         if (result.code === ErrorCodes.communicationFailed) {
+          reportUnsettled('unverified', requestId)
           pendingSaveRef.current = { requestId, previewTarget }
           applySaveState({
             status: 'pending',
@@ -219,6 +318,7 @@ export function usePreviewSaveSettlement({
           })
           return 'pending'
         }
+        reportUnsettled('failed', requestId)
         applySaveState({
           status: 'rejected',
           failure: { code: null, message: '保存没有完成，请重试。', recovery: 'retry' }
@@ -230,6 +330,7 @@ export function usePreviewSaveSettlement({
         resumeDrafts = true
       })
     } catch {
+      reportUnsettled('unverified', requestId)
       pendingSaveRef.current = { requestId, previewTarget }
       applySaveState({
         status: 'pending',
@@ -255,26 +356,32 @@ export function usePreviewSaveSettlement({
       allowDraftResume: () => void
     ): PreviewSaveOutcome {
       if (result.status === 'saved') {
+        unsettledRef.current = false
+        lastRequestIdRef.current = null
         adoptRuntimeGeneration(result.runtimeGeneration)
         acknowledgeSaved(result.committedEdits)
         commitSaved(result.committedEdits)
         replaceBasis(result.contentBasis)
         clearSaveBlock()
         applySaveState({ status: 'saved' })
-        publishSaved(savedRequestId, result.contentBasis, '已保存')
+        publishSaved(savedRequestId, result.contentBasis, '已保存', 'saved')
         applyPreviewUpdate(result.previewUpdate, target)
         allowDraftResume()
         return 'saved'
       }
       if (result.status === 'unchanged') {
+        lastRequestIdRef.current = null
         closeEditingState()
         replaceBasis(result.contentBasis)
         applySaveState({ status: 'unchanged' })
         clearPreviewUpdateNotice()
+        reportCleared('unchanged', savedRequestId)
         allowDraftResume()
         return 'unchanged'
       }
       if (result.status === 'pendingVerification') {
+        lastRequestIdRef.current = result.request.requestId
+        reportUnsettled('unverified', result.request.requestId)
         pendingSaveRef.current = {
           requestId: result.request.requestId,
           previewTarget: target
@@ -298,6 +405,7 @@ export function usePreviewSaveSettlement({
       } else {
         allowDraftResume()
       }
+      reportUnsettled('failed', savedRequestId)
       applySaveState({ status: 'rejected', failure: failureFromError(result.failure) })
       return 'rejected'
     }
@@ -315,6 +423,9 @@ export function usePreviewSaveSettlement({
     flushDraft,
     markLocked,
     publishSaved,
+    reportCleared,
+    reportStarted,
+    reportUnsettled,
     replaceBasis,
     waitForIdle
   ])
@@ -341,20 +452,24 @@ export function usePreviewSaveSettlement({
       }
       if (outcome.kind === 'saved') {
         const settlement = outcome.settlement
+        unsettledRef.current = false
+        lastRequestIdRef.current = null
         commitSaved(settlement.committedEdits)
         replaceBasis(settlement.contentBasis)
         const target = pendingSaveRef.current?.previewTarget ?? selectedRef.current
         pendingSaveRef.current = null
         applySaveState({ status: 'saved' })
-        publishSaved(pending.requestId, settlement.contentBasis, '保存已确认')
+        publishSaved(pending.requestId, settlement.contentBasis, '保存已确认', 'settlement')
         showSettlementSyncNotice(target)
         return
       }
       if (outcome.kind === 'unchanged') {
+        lastRequestIdRef.current = null
         closeEditingState()
         replaceBasis(outcome.settlement.contentBasis)
         pendingSaveRef.current = null
         applySaveState({ status: 'unchanged' })
+        reportCleared('unchanged', pending.requestId)
         return
       }
       if (outcome.kind === 'pending') {
@@ -386,6 +501,7 @@ export function usePreviewSaveSettlement({
               recovery: 'none'
             }
           : failureFromError(settlement.failure)
+      reportUnsettled('failed', pending.requestId)
       applySaveState({ status: 'rejected', failure })
     } catch {
       applySaveState({
@@ -403,6 +519,8 @@ export function usePreviewSaveSettlement({
     commitSaved,
     projectId,
     publishSaved,
+    reportCleared,
+    reportUnsettled,
     replaceBasis,
     sceneId,
     showSettlementSyncNotice
@@ -415,6 +533,7 @@ export function usePreviewSaveSettlement({
     save,
     checkSettlement,
     clearRejectedSave,
+    abandonUnsettled,
     beginOpen,
     markClosed,
     resetForSession,

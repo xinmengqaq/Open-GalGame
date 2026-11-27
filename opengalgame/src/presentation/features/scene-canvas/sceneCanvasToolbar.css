@@ -133,7 +133,6 @@
   text-align: center;
 }
 
-
 .toolbarGroup[data-group='create'] {
   gap: 2px;
   padding: 3px 4px 3px 10px;
@@ -296,17 +295,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toolbar .toolButton,
-  .toolbar .addButton,
-  .addIcon {
+  :root:not([data-reduced-motion='full']) .toolbar .toolButton,
+  :root:not([data-reduced-motion='full']) .toolbar .addButton,
+  :root:not([data-reduced-motion='full']) .addIcon {
     transition: none;
   }
 
-  .toolbar .toolButton:hover:not(:disabled),
-  .toolbar .toolButton:active:not(:disabled),
-  .toolbar .addButton:hover:not(:disabled),
-  .toolbar .addButton:active:not(:disabled),
-  .toolbar .addButton:hover .addIcon {
+  :root:not([data-reduced-motion='full']) .toolbar .toolButton:hover:not(:disabled),
+  :root:not([data-reduced-motion='full']) .toolbar .toolButton:active:not(:disabled),
+  :root:not([data-reduced-motion='full']) .toolbar .addButton:hover:not(:disabled),
+  :root:not([data-reduced-motion='full']) .toolbar .addButton:active:not(:disabled),
+  :root:not([data-reduced-motion='full']) .toolbar .addButton:hover .addIcon {
     transform: none;
   }
 }

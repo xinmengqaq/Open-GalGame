@@ -356,7 +356,6 @@ function CatalogListEmpty({
         <p className={styles.filterEmptyTitle} data-state-art="">
           没有匹配的来源或文件夹
         </p>
-        <p className={styles.filterEmptyHint}>换一个名称，或恢复来源分组与类型筛选。</p>
         <button type="button" className={styles.textButton} onClick={onClearFilters}>
           清除全部筛选
         </button>
@@ -379,7 +378,6 @@ function CatalogListEmpty({
       <p className={styles.folderEmptyTitle} data-state-art="">
         这个文件夹还是空的
       </p>
-      <p className={styles.folderEmptyHint}>把文件拖进当前文件夹，或从导入开始整理本场景的输入。</p>
       <div className={styles.folderEmptyActions}>
         <button type="button" className={styles.textButton} onClick={onImport}>
           <ImportIcon />

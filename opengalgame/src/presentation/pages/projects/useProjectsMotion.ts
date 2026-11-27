@@ -19,7 +19,11 @@ export function useProjectsMotion(
       if (!cards.length) return
       played.current = true
       if (prefersReducedMotion()) {
-        gsap.from(cards, { autoAlpha: 0, duration: 0.16 })
+        gsap.from(cards, {
+          autoAlpha: 0,
+          duration: 0.16,
+          onComplete: () => gsap.set(cards, { clearProps: 'opacity,visibility' })
+        })
         return
       }
       gsap.from(cards, {
@@ -27,7 +31,8 @@ export function useProjectsMotion(
         autoAlpha: 0,
         duration: 0.42,
         stagger: 0.04,
-        ease: 'power2.out'
+        ease: 'power2.out',
+        onComplete: () => gsap.set(cards, { clearProps: 'transform,opacity,visibility' })
       })
     },
     { scope: root, dependencies: [status] }

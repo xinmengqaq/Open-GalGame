@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { SceneGenerationReplyDTO } from '@application/scene-generation/dto/SceneGenerationDTO'
 import type {
@@ -72,8 +72,7 @@ type StartRequestOutcome =
   | { code: number; msg: string; data?: SceneGenerationRenderStatusVO }
 
 type RepairRequestOutcome =
-  | StartGateOutcome
-  | { code: number; msg: string; data?: SceneGenerationRenderStatusVO }
+  StartGateOutcome | { code: number; msg: string; data?: SceneGenerationRenderStatusVO }
 
 function actionFailureRecord(
   token: GenerationSelectionToken,
@@ -194,6 +193,23 @@ interface UseGenerationActionsOptions {
   readonly saveCanvas: () => Promise<SaveCanvasOutcome>
   readonly status: UseGenerationStatusResult
   readonly draft: GenerationDraft
+  /** 开始生成已被接受且启动前保存已确认；仅在成功写回后调用。 */
+  readonly onGenerationStarted?: (event: { operationId: string }) => void
+  /** 当前操作正式提交成功且带 commitId；只由权威状态上报，不以回复回执代替。 */
+  readonly onCandidateAccepted?: (event: {
+    operationId: string
+    candidateSnapshotId: string
+  }) => void
+  /** 修改回复已被确认写回，旧候选进入被替代状态。 */
+  readonly onCandidateRevised?: (event: {
+    operationId: string
+    candidateSnapshotId: string
+  }) => void
+  /** 丢弃回复已被确认写回。 */
+  readonly onCandidateDiscarded?: (event: {
+    operationId: string
+    candidateSnapshotId: string
+  }) => void
 }
 
 export type ForkFromHistoryOutcome =
@@ -253,13 +269,18 @@ export function useGenerationActions({
   canvasReady,
   saveCanvas,
   status,
-  draft
+  draft,
+  onGenerationStarted,
+  onCandidateAccepted,
+  onCandidateRevised,
+  onCandidateDiscarded
 }: UseGenerationActionsOptions): UseGenerationActionsResult {
   const [, setRequestVersion] = useState(0)
   const [startPhaseRecord, setStartPhaseRecord] = useState<StartPhaseRecord | null>(null)
   const [startNotice, setStartNotice] = useState<string | null>(null)
   const [actionError, setActionError] = useState<ActionFailureRecord | null>(null)
   const [requests] = useState(() => new GenerationActionRequestRegistry())
+  const committedCandidateReported = useRef<string | null>(null)
   const startPhaseId = useRef(0)
 
   const {
@@ -289,26 +310,42 @@ export function useGenerationActions({
       : null
   const visibleActionError = visibleActionFailure(actionError, isSelectionCurrent)
 
-  const beginStartPhase = useCallback(
-    (token: GenerationSelectionToken): number => {
-      const id = ++startPhaseId.current
-      setStartPhaseRecord({
-        id,
-        scope: token.scope,
-        operationId: token.operationId,
-        phase: 'saving'
+  // 接受只由当前操作的正式提交结算；回复本身、待执行回执和抽屉本地状态都不作数。
+  // 重挂载读到已经 succeeded 且带 commitId 的同一操作时，这里会重新上报一次。
+  useEffect(() => {
+    const status = visibleStatus
+    if (!status || status.state !== 'succeeded') return
+    const commitId = status.result?.commitId
+    const candidateSnapshotId = status.candidateSnapshotId
+    if (!commitId || !candidateSnapshotId) return
+    const identity = `${status.projectId}|${status.sceneId}|${status.operationId}`
+    const key = `${identity}|${candidateSnapshotId}|${commitId}`
+    if (committedCandidateReported.current === key) return
+    committedCandidateReported.current = key
+    try {
+      onCandidateAccepted?.({
+        operationId: status.operationId,
+        candidateSnapshotId
       })
-      return id
-    },
-    []
-  )
+    } catch {
+      // 指引观察者异常不能改变已经确认的提交结果。
+    }
+  }, [onCandidateAccepted, visibleStatus])
 
-  const updateStartPhase = useCallback(
-    (id: number, phase: 'saving' | 'preparing'): void => {
-      setStartPhaseRecord((record) => (record?.id === id ? { ...record, phase } : record))
-    },
-    []
-  )
+  const beginStartPhase = useCallback((token: GenerationSelectionToken): number => {
+    const id = ++startPhaseId.current
+    setStartPhaseRecord({
+      id,
+      scope: token.scope,
+      operationId: token.operationId,
+      phase: 'saving'
+    })
+    return id
+  }, [])
+
+  const updateStartPhase = useCallback((id: number, phase: 'saving' | 'preparing'): void => {
+    setStartPhaseRecord((record) => (record?.id === id ? { ...record, phase } : record))
+  }, [])
 
   const endStartPhase = useCallback((id: number): void => {
     setStartPhaseRecord((record) => (record?.id === id ? null : record))
@@ -327,13 +364,13 @@ export function useGenerationActions({
   // 修复等非 generate 模式不占生成位置；同一事实只对普通启动生效。
   const repairBlockedReason = startBlockedReason(blockerInput, 'repair')
   const startBlockedByGeneration =
-    blockingOperation !== null &&
-    blockedReason === startConflictBlockedReason(blockingOperation)
+    blockingOperation !== null && blockedReason === startConflictBlockedReason(blockingOperation)
 
   const runAction = useCallback(
     async (
       kind: GenerationActionKind,
-      request: () => Promise<{ code: number; msg: string; data?: SceneGenerationRenderStatusVO }>
+      request: () => Promise<{ code: number; msg: string; data?: SceneGenerationRenderStatusVO }>,
+      onConfirmed?: (status: SceneGenerationRenderStatusVO) => void
     ): Promise<void> => {
       const token = selectionToken()
       await performGenerationAction({
@@ -367,6 +404,11 @@ export function useGenerationActions({
             return
           }
           applyActionStatus(result.data)
+          try {
+            onConfirmed?.(result.data)
+          } catch {
+            // 指引观察者异常不能改变生成动作的确认与写回。
+          }
         },
         onFailure: (failure) => setActionError(actionFailureRecord(token, failure))
       })
@@ -463,6 +505,13 @@ export function useGenerationActions({
       setStartNotice(null)
       useWorkbenchSessionStore.getState().setPromptReferenceAlert(null)
       applyActionStatus(result.data)
+      if (result.data.failure?.unverified !== true && result.data.operationId) {
+        try {
+          onGenerationStarted?.({ operationId: result.data.operationId })
+        } catch {
+          // 指引观察者异常不能改变已确认的启动结果。
+        }
+      }
     }
 
     await performGenerationAction<StartRequestOutcome>({
@@ -558,6 +607,7 @@ export function useGenerationActions({
     client,
     endStartPhase,
     isSelectionCurrent,
+    onGenerationStarted,
     pageBlocked,
     projectClient,
     projectId,
@@ -580,24 +630,38 @@ export function useGenerationActions({
       const current = scopedStatus()
       const interaction = current?.interaction
       if (!current || !interaction || reply === null) return
-      await runAction('reply', () =>
-        client.reply({
-          projectId: current.projectId,
-          sceneId: current.sceneId,
-          operationId: current.operationId,
-          threadId: current.threadId,
-          branchId: current.branchId,
-          interactionId: interaction.interactionId,
-          checkpointId: interaction.checkpointId,
-          ...(interaction.candidateSnapshotId
-            ? { candidateSnapshotId: interaction.candidateSnapshotId }
-            : {}),
-          replyId: createReplyId(),
-          reply
-        })
+      const candidateSnapshotId = interaction.candidateSnapshotId
+      const operationId = current.operationId
+      const replyKind = reply.kind
+      await runAction(
+        'reply',
+        () =>
+          client.reply({
+            projectId: current.projectId,
+            sceneId: current.sceneId,
+            operationId: current.operationId,
+            threadId: current.threadId,
+            branchId: current.branchId,
+            interactionId: interaction.interactionId,
+            checkpointId: interaction.checkpointId,
+            ...(interaction.candidateSnapshotId
+              ? { candidateSnapshotId: interaction.candidateSnapshotId }
+              : {}),
+            replyId: createReplyId(),
+            reply
+          }),
+        (confirmed) => {
+          if (!candidateSnapshotId) return
+          if (confirmed.failure?.unverified === true) return
+          if (replyKind === 'discard') {
+            onCandidateDiscarded?.({ operationId, candidateSnapshotId })
+          } else if (replyKind === 'revise') {
+            onCandidateRevised?.({ operationId, candidateSnapshotId })
+          }
+        }
       )
     },
-    [client, runAction, scopedStatus]
+    [client, onCandidateDiscarded, onCandidateRevised, runAction, scopedStatus]
   )
 
   const currentInteraction = visibleStatus?.interaction
@@ -855,6 +919,19 @@ export function useGenerationActions({
           return
         }
         applyActionStatus(result.data)
+        if (
+          result.data.failure?.unverified !== true &&
+          result.data.operationId !== '' &&
+          result.data.state !== 'failed' &&
+          result.data.state !== 'cancelled' &&
+          result.data.state !== 'succeeded'
+        ) {
+          try {
+            onGenerationStarted?.({ operationId: result.data.operationId })
+          } catch {
+            // 指引观察者异常不能改变已确认的修复重跑结果。
+          }
+        }
       },
       onFailure: (failure) => setActionError(actionFailureRecord(token, failure))
     })
@@ -863,6 +940,7 @@ export function useGenerationActions({
     bumpRequests,
     client,
     isSelectionCurrent,
+    onGenerationStarted,
     projectClient,
     projectId,
     repairBlockedReason,

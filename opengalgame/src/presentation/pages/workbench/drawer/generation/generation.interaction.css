@@ -57,8 +57,8 @@
 .wb-gen-answered__detail,
 .wb-gen-answered__body {
   color: var(--wb-text-muted);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 .wb-gen-question__prompt {
   margin: 0;
@@ -73,8 +73,8 @@
 .wb-gen-question__detail {
   margin: 0;
   color: var(--wb-text-muted);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-question__detail {
@@ -240,8 +240,8 @@
 .wb-gen-review__detail,
 .wb-gen-review__hint {
   color: var(--wb-text-muted);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-review__hint {
@@ -269,8 +269,8 @@
   border-radius: var(--wb-radius-control);
   background: var(--wb-wash-cream);
   color: var(--wb-text-muted);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-review__facts {
@@ -304,8 +304,8 @@
   border-radius: var(--wb-radius-control);
   background: var(--wb-wash-warning);
   color: var(--wb-warning);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-issues li::marker {
@@ -348,8 +348,8 @@
   border-radius: 0 var(--wb-radius-control) var(--wb-radius-control) 0;
   background: var(--wb-surface-solid);
   color: var(--wb-text);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -382,8 +382,8 @@
 .wb-gen-retry__note {
   margin: 0;
   color: var(--wb-text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-retry__error {
@@ -392,8 +392,8 @@
   gap: 7px;
   margin: 0;
   color: var(--wb-danger-strong);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-retry__error svg {
@@ -412,14 +412,14 @@
 
 .wb-gen-paused__note {
   color: var(--wb-text-faint);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-user-message {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -437,8 +437,8 @@
   border-radius: var(--wb-radius-control);
   background: var(--wb-wash-rose);
   color: var(--wb-danger-strong);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
 }
 
 .wb-gen-interaction__error svg {

@@ -49,6 +49,13 @@
   letter-spacing: 0.01em;
 }
 
+.versionActions {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  align-items: center;
+}
+
 .channel {
   display: inline-flex;
   flex: none;
@@ -290,7 +297,7 @@
   padding-bottom: 2px;
   border-bottom: 1px dashed #c9aede;
   color: #7b4f96;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   text-decoration: none;
   transition:
@@ -359,7 +366,7 @@
   margin: 10px 2px 0;
   overflow: auto;
   color: #6f6584;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.72;
   white-space: pre-wrap;
   -webkit-user-select: text;
@@ -434,22 +441,41 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dialSpin,
-  .dialPulse,
-  .dialSpark,
-  .progress[data-kind='indeterminate'] .progressFill,
-  .progress[data-kind='installing'] .progressFill {
+  :root:not([data-reduced-motion='full']) .dialSpin,
+  :root:not([data-reduced-motion='full']) .dialPulse,
+  :root:not([data-reduced-motion='full']) .dialSpark,
+  :root:not([data-reduced-motion='full']) .progress[data-kind='indeterminate'] .progressFill,
+  :root:not([data-reduced-motion='full']) .progress[data-kind='installing'] .progressFill {
     animation: none;
   }
 
-  .progress[data-kind='indeterminate'] .progressFill {
+  :root:not([data-reduced-motion='full']) .progress[data-kind='indeterminate'] .progressFill {
     width: 100%;
     opacity: 0.55;
     transform: none;
   }
 
-  .progressFill,
-  .notesChevron {
+  :root:not([data-reduced-motion='full']) .progressFill,
+  :root:not([data-reduced-motion='full']) .notesChevron {
     transition: none;
   }
+}
+
+:root[data-reduced-motion='reduce'] .dialSpin,
+:root[data-reduced-motion='reduce'] .dialPulse,
+:root[data-reduced-motion='reduce'] .dialSpark,
+:root[data-reduced-motion='reduce'] .progress[data-kind='indeterminate'] .progressFill,
+:root[data-reduced-motion='reduce'] .progress[data-kind='installing'] .progressFill {
+  animation: none;
+}
+
+:root[data-reduced-motion='reduce'] .progress[data-kind='indeterminate'] .progressFill {
+  width: 100%;
+  opacity: 0.55;
+  transform: none;
+}
+
+:root[data-reduced-motion='reduce'] .progressFill,
+:root[data-reduced-motion='reduce'] .notesChevron {
+  transition: none;
 }

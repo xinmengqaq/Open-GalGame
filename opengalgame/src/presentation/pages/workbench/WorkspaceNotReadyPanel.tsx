@@ -46,7 +46,7 @@ export function WorkspaceNotReadyPanel({
       </div>
       <div className={styles.copy} data-motion="copy">
         <h2>工程还没准备好</h2>
-        <p>重新构建会补齐缺失的工程内容，不会删除已有作品。</p>
+        <p>重新构建会补齐缺失内容，不会删除已有作品。</p>
       </div>
       {failed ? (
         <p className={styles.failure} data-motion="failure" role="alert">

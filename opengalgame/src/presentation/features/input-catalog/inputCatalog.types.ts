@@ -9,6 +9,7 @@ import type {
   ProjectInputSourceSummaryVO
 } from '@application/project-files/vo/ProjectInputSourceVO'
 import type { FailureState } from '../../feedback/failure'
+import type { ImportedSourceAction } from '../workbench-session/workbenchActionObservers'
 import type { WorkspaceLoadStatus } from '../workbench-session/workbenchSession.types'
 import type { CatalogClipboard } from './useCatalogClipboard'
 
@@ -17,6 +18,23 @@ export type CatalogGroup = 'all' | 'text' | 'asset'
 export type CatalogTypeFilter = 'all' | 'document' | ProjectFileAssetKind
 
 export type CatalogFolderId = string | null
+
+export type CatalogImportOptions = {
+  mediaKinds?: readonly ProjectFileAssetKind[]
+}
+
+/** 本次导入回执：保留通用来源身份，并带上文件区候选规则派生的素材类别。 */
+export type CatalogImportedSource = ImportedSourceAction & {
+  candidateKind: ProjectFileAssetKind | null
+}
+
+export type CatalogImportOutcome =
+  | { status: 'cancelled' }
+  | { status: 'imported'; sources: readonly CatalogImportedSource[] }
+  | { status: 'none' }
+  | { status: 'unconfirmed' }
+  | { status: 'failed' }
+  | { status: 'not-started' }
 
 export type CatalogMenuState =
   | { kind: 'file'; x: number; y: number; sourceId: string }
@@ -68,7 +86,7 @@ export interface UseInputCatalog {
   openFolderMenu: (event: { clientX: number; clientY: number }, folderId: string) => void
   openBlankMenu: (event: { clientX: number; clientY: number }) => void
   closeMenu: () => void
-  importFiles: () => Promise<void>
+  importFiles: (options?: CatalogImportOptions) => Promise<CatalogImportOutcome>
   acceptDroppedFiles: (event: DragEvent, parentFolderId?: CatalogFolderId) => void
   allowExternalDrop: (event: DragEvent) => void
   useOnCanvas: (sourceId: string) => void

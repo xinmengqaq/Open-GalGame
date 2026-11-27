@@ -39,6 +39,21 @@ function failureNoticeForCode(code: number, message: string, title: string): App
   }
 }
 
+function failureMessageForKind(kind: UpdateFailureVO['kind']): string {
+  switch (kind) {
+    case 'download-failed':
+      return '下载没有完成，请重试或手动下载安装包。'
+    case 'install-failed':
+      return '安装没有完成，请重试或手动下载安装包。'
+    case 'source-unavailable':
+      return '暂时无法连接更新源，请检查网络后重试。'
+    case 'unsupported':
+      return '当前运行方式不支持应用内更新，可以手动下载安装版。'
+    case 'invalid-state':
+      return '更新状态已经变化，请重新检查更新。'
+  }
+}
+
 function failureNoticeFromPush(
   phase: 'downloading' | 'installing',
   failure: UpdateFailureVO
@@ -46,7 +61,7 @@ function failureNoticeFromPush(
   const retryableKind = failure.kind !== 'unsupported' && failure.kind !== 'invalid-state'
   return {
     title: phase === 'downloading' ? '更新下载失败' : '更新安装失败',
-    message: failure.message,
+    message: failureMessageForKind(failure.kind),
     showManualDownload: retryableKind,
     retryable: failure.kind !== 'unsupported'
   }
@@ -56,7 +71,7 @@ async function settleRequest<T>(request: Promise<AjaxResult<T>>): Promise<AjaxRe
   try {
     return await request
   } catch {
-    return { code: ErrorCodes.communicationFailed, msg: '与主进程通信失败，操作结果待确认' }
+    return { code: ErrorCodes.communicationFailed, msg: '无法连接更新服务，操作结果待确认' }
   }
 }
 
@@ -254,7 +269,7 @@ export function useAppUpdate(client: AppUpdateClient): AppUpdateFlow {
         setAwaitingInitialAcknowledgement(true)
         presentFailure({
           title: '更新安装失败',
-          message: snapshot.failure.message,
+          message: failureMessageForKind(snapshot.failure.kind),
           showManualDownload: snapshot.failure.kind !== 'unsupported',
           retryable: snapshot.failure.kind !== 'unsupported'
         })

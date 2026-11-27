@@ -13,11 +13,12 @@ import {
   type DevUserDirectoryRecoveryResult
 } from '../devUserDirectoryRecovery'
 import { createSceneExport } from '../sceneExport'
+import { ManageAppearanceSettings } from '@application/settings/appearance/services/impl/ManageAppearanceSettings'
 import { OpenDirectory } from '@application/system-path/services/impl/OpenDirectory'
 import { LocalDirectoryOpenGateway } from '@infrastructure/system-path/LocalDirectoryOpenGateway'
 import { SystemPathController } from '@interfaces/system-path/ipc/SystemPathController'
 import { createScenePreview } from '../scenePreview'
-import type { ConnectionSettingsInfo } from '@domain/connections/models/ConnectionSettings'
+import type { ConnectionSettingsInfo } from '@domain/settings/connections/models/ConnectionSettings'
 import type { PreviewRuntimeEventVO } from '@application/scene-preview/vo/PreviewRuntimeVO'
 import type {
   SceneGenerationCandidatePreviewEventVO,
@@ -41,7 +42,9 @@ import { diagnosticReference } from '../sceneGenerationFailureFacts'
 import { GitCandidatePreviewGatewayImpl } from '@infrastructure/scene-generation/preview/GitCandidatePreviewGatewayImpl'
 import { WebgalRuntimeHostImpl } from '@infrastructure/webgal/runtime/WebgalRuntimeHostImpl'
 import type { SecretCipher } from '@infrastructure/security/SecretCipher'
-import { ConnectionSettingsController } from '@interfaces/ipc/controllers/ConnectionSettingsController'
+import { AppearanceSettingsGatewayImpl } from '@infrastructure/settings/AppearanceSettingsGatewayImpl'
+import { AppearanceSettingsController } from '@interfaces/settings/appearance/ipc/AppearanceSettingsController'
+import { ConnectionSettingsController } from '@interfaces/settings/connections/ipc/ConnectionSettingsController'
 import { ProjectController } from '@interfaces/ipc/controllers/ProjectController'
 import { IpcErrorMapper } from '@interfaces/ipc/errors/IpcErrorMapper'
 import { IpcExceptionHandler } from '@interfaces/ipc/errors/IpcExceptionHandler'
@@ -138,6 +141,7 @@ export async function createDevFileBackend(
   let generationController: SceneGenerationController | undefined
   let generationClose: (() => Promise<void>) | undefined
   let connectionsController: ConnectionSettingsController | undefined
+  let appearanceController: AppearanceSettingsController | undefined
   let loadConnectionSettings: (() => Promise<ConnectionSettingsInfo | null>) | undefined
   let previewController: ScenePreviewController | undefined
   let exportController: SceneExportController | undefined
@@ -149,11 +153,13 @@ export async function createDevFileBackend(
   async function ensureConnections(): Promise<ConnectionSettingsController> {
     if (connectionsController) return connectionsController
     const { ManageConnectionSettings } =
-      await import('@application/connections/services/impl/ManageConnectionSettings')
+      await import('@application/settings/connections/services/impl/ManageConnectionSettings')
     const { EncryptedConnectionSettingsGatewayImpl } =
       await import('@infrastructure/connections/EncryptedConnectionSettingsGatewayImpl')
-    const { LangChainModelConnectionGatewayImpl } =
-      await import('@infrastructure/connections/LangChainModelConnectionGatewayImpl')
+    // 连接设置在首次打开时才装配；Pi 适配模块随这条懒加载链进入，不拖慢启动。
+    const { PiModelConnectionGatewayImpl } =
+      await import('@infrastructure/ai/pi/PiModelConnectionGatewayImpl')
+    const { PiModelFactory } = await import('@infrastructure/ai/pi/PiModelFactory')
     const gateway = new EncryptedConnectionSettingsGatewayImpl(
       userDirectory,
       new BrowserDevSecretCipher(browserCipherKey(userDirectory)),
@@ -163,11 +169,26 @@ export async function createDevFileBackend(
     connectionsController = new ConnectionSettingsController(
       new ManageConnectionSettings({
         settings: gateway,
-        model: new LangChainModelConnectionGatewayImpl(config.requestTimeoutMs)
+        model: new PiModelConnectionGatewayImpl(
+          new PiModelFactory(() => gateway.loadSettings()),
+          config.requestTimeoutMs
+        )
       }),
       exceptions
     )
     return connectionsController
+  }
+
+  function ensureAppearance(): AppearanceSettingsController {
+    if (appearanceController) return appearanceController
+    appearanceController = new AppearanceSettingsController(
+      new ManageAppearanceSettings({
+        settings: new AppearanceSettingsGatewayImpl(userDirectory),
+        logger
+      }),
+      exceptions
+    )
+    return appearanceController
   }
 
   async function ensureGeneration(): Promise<SceneGenerationController> {
@@ -401,6 +422,8 @@ export async function createDevFileBackend(
       (await ensureConnections()).testConnection(input, access),
     saveSettings: async (input, access) => (await ensureConnections()).saveSettings(input, access),
     listModels: async (input, access) => (await ensureConnections()).listModels(input, access),
+    readAppearance: (input, access) => ensureAppearance().readAppearance(input, access),
+    saveAppearance: (input, access) => ensureAppearance().saveAppearance(input, access),
     startSceneGeneration: async (input, access) => (await ensureGeneration()).start(input, access),
     retrySceneGenerationRepair: async (input, access) =>
       (await ensureGeneration()).retryRepair(input, access),
@@ -418,8 +441,7 @@ export async function createDevFileBackend(
       (await ensureGeneration()).listHistory(input, access),
     readSceneGenerationCheckpoint: async (input, access) =>
       (await ensureGeneration()).readCheckpoint(input, access),
-    forkSceneGeneration: async (input, access) =>
-      (await ensureGeneration()).fork(input, access),
+    forkSceneGeneration: async (input, access) => (await ensureGeneration()).fork(input, access),
     openSceneGenerationPreview: async (input, access) =>
       (await ensureGeneration()).openPreview(input, access),
     closeSceneGenerationPreview: async (input, access) =>

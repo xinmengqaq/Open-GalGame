@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { AppException } from '@common/errors/AppException'
+import { ErrorCodes } from '@common/errors/ErrorCodes'
 import type { SystemPathClient } from '@interfaces/system-path/client/SystemPathClient'
 import {
   exportNoticeOf,
   exportRequestOf,
   formatExportBytes,
+  isDefiniteExportFailure,
   openExportDirectory
 } from '@presentation/pages/workbench/shell/sceneTaskPresentation'
 
@@ -92,22 +95,41 @@ describe('工作台场景工具呈现', () => {
     })
   })
 
-  it('打开产物目录只把绝对路径交给 client', async () => {
-    const openDirectory = vi.fn(async () => ({ code: 2000, msg: '已打开目录', data: null }))
+  it('只有明确业务失败才让教程宣告导出失败，通信中断与响应缺失保持未知', () => {
+    expect(
+      isDefiniteExportFailure(
+        new AppException({ code: ErrorCodes.communicationFailed, msg: '通信中断' })
+      )
+    ).toBe(false)
+    expect(
+      isDefiniteExportFailure(new AppException({ code: ErrorCodes.internalError, msg: '打包失败' }))
+    ).toBe(true)
+    expect(
+      isDefiniteExportFailure(new AppException({ code: ErrorCodes.invalidRequest, msg: '请求无效' }))
+    ).toBe(true)
+    expect(isDefiniteExportFailure(new Error('响应缺失'))).toBe(false)
+  })
+
+  it('打开产物目录只把绝对路径交给 client，并带回“已交给系统”的提示', async () => {
+    const openDirectory = vi.fn(async () => ({
+      code: 2000,
+      msg: '目录已交给系统打开',
+      data: null
+    }))
     const client: Pick<SystemPathClient, 'openDirectory'> = { openDirectory }
 
-    await openExportDirectory(client, directoryPath)
+    await expect(openExportDirectory(client, directoryPath)).resolves.toBe('目录已交给系统打开')
 
     expect(openDirectory).toHaveBeenCalledTimes(1)
     expect(openDirectory).toHaveBeenCalledWith({ path: directoryPath })
   })
 
-  it('打开产物目录失败时不吞错误', async () => {
+  it('打开产物目录失败时不吞具体原因', async () => {
     const client: Pick<SystemPathClient, 'openDirectory'> = {
-      openDirectory: vi.fn(async () => ({ code: 4101, msg: '不允许打开该目录' }))
+      openDirectory: vi.fn(async () => ({ code: 4701, msg: '只能打开本机已有的目录' }))
     }
 
-    await expect(openExportDirectory(client, directoryPath)).rejects.toThrow('不允许打开该目录')
+    await expect(openExportDirectory(client, directoryPath)).rejects.toThrow('只能打开本机已有的目录')
   })
 
   it('文件大小只用于展示，极小文件也显示为 1 KB 以上', () => {

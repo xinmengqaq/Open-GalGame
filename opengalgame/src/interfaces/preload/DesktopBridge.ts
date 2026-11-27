@@ -140,8 +140,8 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
       transport.invoke(invokeChannels.saveSceneCanvasArrangement, request) as ReturnType<
         DesktopBridge['saveSceneCanvasArrangement']
       >,
-    chooseProjectFiles: () =>
-      transport.invoke(invokeChannels.chooseProjectFiles, {}) as ReturnType<
+    chooseProjectFiles: (request) =>
+      transport.invoke(invokeChannels.chooseProjectFiles, request ?? {}) as ReturnType<
         DesktopBridge['chooseProjectFiles']
       >,
     importProjectFiles: (request) =>
@@ -215,6 +215,14 @@ export function createDesktopBridge(transport: DesktopTransport): DesktopBridge 
         return Promise.resolve({ code: ErrorCodes.invalidRequest, msg: '不是磁盘文件' })
       }
     },
+    readAppearance: () =>
+      transport.invoke(invokeChannels.readAppearance) as ReturnType<
+        DesktopBridge['readAppearance']
+      >,
+    saveAppearance: (request) =>
+      transport.invoke(invokeChannels.saveAppearance, request) as ReturnType<
+        DesktopBridge['saveAppearance']
+      >,
     getSettingsSummary: () =>
       transport.invoke(invokeChannels.getSettingsSummary) as ReturnType<
         DesktopBridge['getSettingsSummary']

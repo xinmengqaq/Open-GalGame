@@ -1,7 +1,7 @@
 .surface {
-  --state-accent: var(--wb-accent);
-  --state-deep: var(--wb-accent-strong);
-  --state-glow: color-mix(in srgb, var(--wb-accent) 13%, transparent);
+  --state-accent: var(--content-image);
+  --state-deep: var(--content-focus);
+  --state-glow: color-mix(in srgb, var(--content-image) 13%, transparent);
   position: relative;
   z-index: 2;
   display: grid;
@@ -9,7 +9,7 @@
   padding: clamp(24px, 5vw, 56px);
   place-items: center;
   isolation: isolate;
-  color: var(--wb-text);
+  color: var(--content-text);
   font-family: var(--wb-font);
 }
 
@@ -22,7 +22,7 @@
     radial-gradient(ellipse 46% 44% at 50% 40%, var(--state-glow) 0%, transparent 68%),
     radial-gradient(
       ellipse 62% 58% at 50% 46%,
-      color-mix(in srgb, var(--wb-surface-solid) 26%, transparent) 0%,
+      color-mix(in srgb, var(--content-surface) 26%, transparent) 0%,
       transparent 74%
     );
   content: '';
@@ -30,9 +30,9 @@
 }
 
 .surface[data-kind='damaged'] {
-  --state-accent: var(--wb-danger);
-  --state-deep: color-mix(in srgb, var(--wb-danger-strong) 88%, var(--wb-text-strong));
-  --state-glow: color-mix(in srgb, var(--wb-danger) 15%, transparent);
+  --state-accent: var(--content-video);
+  --state-deep: color-mix(in srgb, var(--content-video) 64%, var(--content-text));
+  --state-glow: color-mix(in srgb, var(--content-video) 15%, transparent);
 }
 
 .halo {
@@ -59,7 +59,6 @@
   text-align: center;
 }
 
-
 .orb {
   position: relative;
   display: grid;
@@ -71,7 +70,7 @@
   background:
     radial-gradient(
       circle at 46% 34%,
-      color-mix(in srgb, var(--wb-surface-solid) 62%, transparent) 0%,
+      color-mix(in srgb, var(--content-surface) 62%, transparent) 0%,
       transparent 62%
     ),
     radial-gradient(circle at 50% 54%, var(--state-glow) 0%, transparent 74%);
@@ -112,7 +111,7 @@
 
 .eyebrow {
   margin: 0;
-  color: color-mix(in srgb, var(--state-accent) 82%, var(--wb-text-muted));
+  color: color-mix(in srgb, var(--state-accent) 82%, var(--content-text-muted));
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -120,7 +119,7 @@
 
 .composition h2 {
   margin: 0;
-  color: var(--wb-text-strong);
+  color: var(--content-text);
   font-family: var(--wb-font);
   font-size: clamp(22px, 2.4vw, 27px);
   font-weight: 800;
@@ -131,7 +130,7 @@
 .detail {
   max-width: 430px;
   margin: 0;
-  color: var(--wb-text-muted);
+  color: var(--content-text-muted);
   font-size: 14px;
   line-height: 1.75;
   overflow-wrap: anywhere;
@@ -148,7 +147,7 @@
   padding: 9px 17px;
   border-radius: var(--wb-radius-pill);
   background: color-mix(in srgb, var(--state-accent) 8%, transparent);
-  color: var(--wb-text);
+  color: var(--content-text);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -164,7 +163,7 @@
 .policy {
   max-width: 430px;
   margin: 0;
-  color: var(--wb-text-faint);
+  color: var(--content-text-muted);
   font-size: 12px;
   line-height: 1.65;
 }
@@ -182,7 +181,6 @@
   display: inline-flex;
   min-width: 0;
 }
-
 
 .actions button {
   display: inline-flex;
@@ -204,13 +202,13 @@
 .actions [data-motion='retry-action'] button {
   background: var(--state-accent);
   box-shadow: 0 18px 34px -24px color-mix(in srgb, var(--state-accent) 84%, transparent);
-  color: var(--wb-surface-solid);
+  color: var(--content-surface);
 }
 
 .actions [data-motion='state-action'] button {
-  background: color-mix(in srgb, var(--wb-surface-solid) 44%, transparent);
+  background: color-mix(in srgb, var(--content-surface) 44%, transparent);
   box-shadow: none;
-  color: var(--wb-text-strong);
+  color: var(--content-text);
 }
 
 .actions button:hover:not(:disabled) {
@@ -218,11 +216,11 @@
 }
 
 .actions [data-motion='retry-action'] button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--state-accent) 86%, var(--wb-text-strong));
+  background: color-mix(in srgb, var(--state-accent) 86%, var(--content-text));
 }
 
 .actions [data-motion='state-action'] button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--wb-surface-solid) 66%, transparent);
+  background: color-mix(in srgb, var(--content-surface) 66%, transparent);
 }
 
 .actions button:active:not(:disabled) {
@@ -278,15 +276,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .halo {
+  :root:not([data-reduced-motion='full']) .halo {
     opacity: 0.28;
   }
 
-  .actions button {
+  :root:not([data-reduced-motion='full']) .actions button {
     transition: none;
   }
 
-  .actions button:hover:not(:disabled) {
+  :root:not([data-reduced-motion='full']) .actions button:hover:not(:disabled) {
     transform: none;
   }
 }

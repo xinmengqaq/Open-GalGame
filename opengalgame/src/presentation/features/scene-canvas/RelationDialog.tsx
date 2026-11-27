@@ -145,9 +145,7 @@ function RelationForm({
               <span className={dialogStyles.stateMark} aria-hidden="true" />
               {stateText}
             </span>
-            <p className={dialogStyles.introNote}>
-              连线不分方向。名称与记录都由你填写，系统不推断关系。
-            </p>
+            <p className={dialogStyles.introNote}>连线不分方向；关系由你命名，系统不推断。</p>
           </div>
           <div className={dialogStyles.endpoints}>
             <span className={dialogStyles.endpointChip} data-motion="relation-dialog-chip">
@@ -165,6 +163,7 @@ function RelationForm({
         <FormField label="名称" optional="选填" htmlFor="relation-name">
           <TextInput
             id="relation-name"
+            data-relation-id={relation.relationId}
             autoFocus
             value={name}
             placeholder="例如：青梅竹马、同一场景"
@@ -179,7 +178,7 @@ function RelationForm({
           <header className={dialogStyles.sectionHeader}>
             <div>
               <h3>关系记录</h3>
-              <p>把文档卡或提示词卡外侧的菱形端口拖到线上标签，即可装载。</p>
+              <p>只有文档卡和提示词卡可以装载。</p>
             </div>
             {relation.recordCardId ? (
               <Button

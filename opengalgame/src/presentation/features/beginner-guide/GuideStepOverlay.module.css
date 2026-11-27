@@ -1,0 +1,836 @@
+/* 共享指引目标：由 useGuideMarkers 写 box-shadow 内联值，进入时短脉动一次，
+   随后保持柔和的静态光环。这里不再叠 2px 硬描边，也不覆盖元素自己的
+   悬停、焦点或业务反馈；减少动态时由脚本保留同一光环。 */
+
+/* 步骤签：工作台右下角的玻璃操作签。表面、圆角、阴影与焦点都取局部
+   --wb-* 主题；画布保持主角，教程只呈现当前动作。 */
+.layer {
+  position: fixed;
+  /* 教程是只读讲解层：生成抽屉打开时也要保持在最上层，避免候选返回后
+     文字被 z-50 的抽屉盖住；全屏层自身不接收指针，只有面板命中。 */
+  z-index: 60;
+  inset: 0;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  pointer-events: none;
+}
+
+.panel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  width: min(352px, calc(100vw - 32px));
+  max-height: min(calc(100vh - 48px), 640px);
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--wb-text) 8%, transparent);
+  border-radius: var(--wb-radius-panel);
+  background-color: color-mix(in srgb, var(--wb-surface-solid) 88%, transparent);
+  background-image:
+    radial-gradient(
+      120% 72% at 0% 0%,
+      color-mix(in srgb, var(--wb-accent) 13%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(92% 58% at 100% 0%, var(--wb-wash-cream) 0%, transparent 62%),
+    radial-gradient(
+      100% 64% at 100% 100%,
+      color-mix(in srgb, var(--wb-positive) 12%, transparent) 0%,
+      transparent 66%
+    );
+  box-shadow:
+    var(--wb-shadow-float),
+    inset 0 1px 0 color-mix(in srgb, #fff 64%, transparent);
+  color: var(--wb-text);
+  pointer-events: auto;
+  backdrop-filter: blur(26px) saturate(1.08);
+  -webkit-backdrop-filter: blur(26px) saturate(1.08);
+}
+
+.panel:focus {
+  outline: none;
+}
+
+.panel::before {
+  position: absolute;
+  top: 0;
+  right: 22px;
+  left: 22px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, #fff 72%, transparent) 18%,
+    color-mix(in srgb, #fff 72%, transparent) 82%,
+    transparent
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.top {
+  display: flex;
+  min-height: 28px;
+  flex: none;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 16px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.top[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.grip {
+  width: 10px;
+  height: 14px;
+  flex: none;
+  color: var(--wb-text-faint);
+  opacity: 0.72;
+}
+
+.top[data-dragging='true'] .grip {
+  color: var(--wb-accent);
+  opacity: 1;
+}
+
+.progress {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stepText {
+  color: var(--wb-text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rail {
+  display: flex;
+  width: 86px;
+  gap: 3px;
+}
+
+.segment {
+  height: 2px;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--wb-hairline);
+}
+
+.segment[data-state='past'] {
+  background: color-mix(in srgb, var(--wb-accent) 38%, transparent);
+}
+
+.segment[data-state='current'] {
+  background: var(--wb-accent);
+  box-shadow: 0 0 0 2px var(--wb-wash-lilac);
+}
+
+.topSpacer {
+  flex: 1;
+}
+
+.collapseButton {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.collapseButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+.collapseButton:hover {
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.collapseButton:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.content {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow-y: auto;
+  /* 只在窄屏/矮窗真正需要滚动时保留滚动条槽位，避免聚焦或悬停时
+     滚动条出现造成内容横向跳动。普通 1920×945 客户区内容不溢出。 */
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+  overscroll-behavior: contain;
+  scrollbar-color: color-mix(in srgb, var(--wb-accent) 32%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wb-accent) 28%, transparent);
+}
+
+.live {
+  display: flex;
+  flex-direction: column;
+}
+
+.textGroup {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 只在同时给出「下一步」时标出当前动作，避免每一步都多一行标签。 */
+.actionLabel {
+  align-self: flex-start;
+  color: var(--wb-text-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.3;
+}
+
+.title {
+  margin: 0;
+  color: var(--wb-text-strong);
+  font-size: 18px;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+  line-height: 1.42;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.body {
+  margin: 0;
+  color: var(--wb-text);
+  font-size: var(--body-text-size, 15px);
+  line-height: var(--body-line-height, 24px);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.body[data-tone='waiting'] {
+  color: color-mix(in srgb, var(--wb-text) 88%, var(--wb-accent-strong));
+}
+
+/* 动作名是正文里的重点，不给整段文字加底色或字重；
+   窄宽时整段按钮名换到下一行，不在名称中间断开。 */
+.emphasis {
+  color: var(--wb-accent-strong);
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+/* 六拍：只显示当前拍和当前位置，不把整张练习表一次铺开。 */
+.arrangeHeader {
+  margin-bottom: 12px;
+}
+
+.arrangeTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  row-gap: 7px;
+}
+
+.beatCount {
+  color: var(--wb-accent-strong);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.beatRail {
+  display: flex;
+  min-width: 34px;
+  flex: 1;
+  gap: 2px;
+}
+
+.beatSegment {
+  height: 3px;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--wb-hairline);
+}
+
+.beatSegment[data-state='past'] {
+  background: color-mix(in srgb, var(--wb-accent) 36%, transparent);
+}
+
+.beatSegment[data-state='current'] {
+  background: var(--wb-accent);
+  box-shadow: 0 0 0 2px var(--wb-wash-lilac);
+}
+
+.kindChip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.32;
+}
+
+.kindGlyph {
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  place-items: center;
+}
+
+.kindGlyph svg {
+  width: 14px;
+  height: 14px;
+}
+
+.boundRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 11px;
+}
+
+.boundLabel {
+  color: var(--wb-text-faint);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.boundChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--wb-radius-pill);
+  background: var(--wb-wash-mint);
+  color: var(--wb-positive-strong);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.boundChipEmpty {
+  color: var(--wb-text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.boundDot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--wb-positive);
+}
+
+.relationMap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--wb-hairline);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--wb-surface-solid) 48%, transparent);
+}
+
+.endpoint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--wb-text-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.endpoint[data-bound='true'] {
+  color: var(--wb-accent-strong);
+}
+
+.connector {
+  width: auto;
+  min-width: 24px;
+  height: 12px;
+  flex: 1;
+  color: var(--wb-text-faint);
+}
+
+.connectorLine {
+  stroke: currentcolor;
+  stroke-dasharray: 3 4;
+  stroke-linecap: round;
+  stroke-width: 1.4;
+}
+
+.relationMap[data-connected='true'] .connectorLine {
+  stroke: var(--wb-accent);
+  stroke-dasharray: none;
+}
+
+.connectorNode {
+  fill: var(--wb-surface-solid);
+  stroke: currentcolor;
+  stroke-width: 1.4;
+}
+
+.relationMap[data-connected='true'] .connectorNode {
+  fill: var(--wb-wash-lilac);
+  stroke: var(--wb-accent);
+}
+
+.mediaBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.importStatus {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.importStatus[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--wb-positive) 22%, transparent);
+  background: var(--wb-wash-mint);
+  color: var(--wb-positive-strong);
+}
+
+.importStatus[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--wb-warning) 24%, transparent);
+  background: var(--wb-wash-warning);
+  color: color-mix(in srgb, var(--wb-warning) 76%, var(--wb-text-strong));
+}
+
+.importStatus[data-tone='error'] {
+  border-color: color-mix(in srgb, var(--wb-danger) 24%, transparent);
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.importStatus[data-tone='info'] {
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+/* 下一步独立成浅紫说明区，和上面的当前动作拉开层级；窄宽时先换行，
+   不缩成难读的一行。 */
+.next {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 13px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--wb-accent) 14%, transparent);
+  border-radius: 12px;
+  background: var(--wb-wash-lilac-soft);
+}
+
+.nextLabel {
+  color: var(--wb-accent-strong);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+}
+
+.nextText {
+  margin: 0;
+  color: var(--wb-text-muted);
+  font-size: 12.5px;
+  line-height: 1.65;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.blockAction {
+  width: 100%;
+}
+
+.actions > button,
+.mediaBlock > button {
+  width: 100%;
+}
+
+.pauseActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.pauseActions > button {
+  min-width: 0;
+  flex: 1 1 0;
+  padding-inline: 12px;
+}
+
+.foot {
+  flex: none;
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px solid var(--wb-hairline);
+}
+
+.nav {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.navButton {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--wb-hairline-strong);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--wb-surface-solid) 62%, transparent);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    border-color var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease);
+}
+
+.navButton:hover:not([aria-disabled='true']) {
+  border-color: color-mix(in srgb, var(--wb-accent) 34%, var(--wb-hairline-strong));
+  background: color-mix(in srgb, var(--wb-surface-solid) 86%, transparent);
+  color: var(--wb-accent-strong);
+}
+
+.navButton:active:not([aria-disabled='true']) {
+  transform: translateY(1px);
+}
+
+.navButton:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+.navButton[aria-disabled='true'] {
+  border-color: var(--wb-hairline);
+  background: color-mix(in srgb, var(--wb-surface-solid) 38%, transparent);
+  color: var(--wb-text-faint);
+  cursor: not-allowed;
+}
+
+.navButton svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.footRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  row-gap: 2px;
+}
+
+.footSpacer {
+  flex: 1;
+}
+
+.textButton {
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wb-text-faint);
+  font-family: var(--wb-font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.textButton:hover {
+  background: var(--wb-wash-lilac);
+  color: var(--wb-accent-strong);
+}
+
+.textButton:focus-visible {
+  outline: none;
+  box-shadow: var(--wb-focus);
+}
+
+/* 折叠胶囊：保留当前阅读位置，展开后仍回到原来的拖放点。
+   展开按钮与退出按钮同处一个胶囊，但各自是独立原生按钮，读屏名称和命中区不重叠。 */
+.pillGroup {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid color-mix(in srgb, var(--wb-text) 8%, transparent);
+  border-radius: var(--wb-radius-pill);
+  background: color-mix(in srgb, var(--wb-surface-solid) 86%, transparent);
+  box-shadow:
+    var(--wb-shadow-float),
+    inset 0 1px 0 color-mix(in srgb, #fff 68%, transparent);
+  pointer-events: auto;
+  backdrop-filter: blur(24px) saturate(1.06);
+  -webkit-backdrop-filter: blur(24px) saturate(1.06);
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    border-color var(--wb-duration-fast) var(--wb-ease),
+    box-shadow var(--wb-duration-fast) var(--wb-ease);
+}
+
+.pillGroup:hover {
+  border-color: color-mix(in srgb, var(--wb-accent) 30%, var(--wb-hairline-strong));
+  background: color-mix(in srgb, var(--wb-surface-solid) 95%, transparent);
+  box-shadow:
+    var(--wb-shadow-float),
+    0 0 0 1px color-mix(in srgb, var(--wb-accent) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 76%, transparent);
+}
+
+.pill {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 13px 5px 7px;
+  border: 0;
+  border-radius: var(--wb-radius-pill) 0 0 var(--wb-radius-pill);
+  background: transparent;
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background var(--wb-duration-fast) var(--wb-ease);
+}
+
+.pill:hover {
+  background: color-mix(in srgb, var(--wb-accent) 8%, transparent);
+}
+
+.pill:active {
+  background: color-mix(in srgb, var(--wb-accent) 13%, transparent);
+}
+
+.pill:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--wb-accent-strong) 72%, transparent);
+}
+
+.pillExit {
+  display: grid;
+  width: 42px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--wb-hairline);
+  border-radius: 0 var(--wb-radius-pill) var(--wb-radius-pill) 0;
+  background: transparent;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background var(--wb-duration-fast) var(--wb-ease),
+    color var(--wb-duration-fast) var(--wb-ease);
+}
+
+.pillExit svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pillExit:hover {
+  background: var(--wb-wash-rose);
+  color: var(--wb-danger-strong);
+}
+
+.pillExit:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--wb-danger) 62%, transparent);
+}
+
+.pillRing {
+  position: relative;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+}
+
+.pillRing svg {
+  position: absolute;
+  inset: 0;
+  width: 28px;
+  height: 28px;
+}
+
+.pillRingTrack {
+  stroke: var(--wb-hairline-strong);
+}
+
+.pillRingValue {
+  stroke: var(--wb-accent);
+  stroke-linecap: round;
+}
+
+.pillRingNumber {
+  position: relative;
+  color: var(--wb-accent-strong);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.pillText {
+  color: var(--wb-text-strong);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.pillIcon {
+  width: 14px;
+  height: 14px;
+  color: var(--wb-text-muted);
+}
+
+/* 预览页是整屏舞台：教程停靠左下，不压右侧舞台画面、顶部返回/保存和舞台控制条。 */
+.layer[data-layout='preview'] {
+  z-index: 1300;
+}
+
+.layer[data-layout='preview'] .panel {
+  right: auto;
+  bottom: 22px;
+  left: 26px;
+  width: min(370px, calc(100vw - 52px));
+  max-height: min(calc(100vh - 128px), 560px);
+}
+
+.layer[data-layout='preview'] .pillGroup {
+  right: auto;
+  bottom: 22px;
+  left: 26px;
+}
+
+@media (max-width: 720px) {
+  .panel,
+  .pillGroup {
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .panel {
+    width: min(352px, calc(100vw - 32px));
+  }
+
+  .layer[data-layout='preview'] .panel,
+  .layer[data-layout='preview'] .pillGroup {
+    right: auto;
+    bottom: 16px;
+    left: 16px;
+  }
+
+  .layer[data-layout='preview'] .panel {
+    width: min(352px, calc(100vw - 32px));
+    max-height: min(calc(100vh - 104px), 520px);
+  }
+}
+
+@media (max-height: 560px) {
+  .panel {
+    max-height: calc(100vh - 32px);
+  }
+
+  .layer[data-layout='preview'] .panel {
+    max-height: calc(100vh - 44px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduced-motion='full']) .collapseButton,
+  :root:not([data-reduced-motion='full']) .textButton,
+  :root:not([data-reduced-motion='full']) .navButton,
+  :root:not([data-reduced-motion='full']) .pillGroup,
+  :root:not([data-reduced-motion='full']) .pill,
+  :root:not([data-reduced-motion='full']) .pillExit {
+    transition: none;
+  }
+
+  :root:not([data-reduced-motion='full']) .navButton:active:not([aria-disabled='true']),
+  :root:not([data-reduced-motion='full']) .pill:active {
+    transform: none;
+  }
+}

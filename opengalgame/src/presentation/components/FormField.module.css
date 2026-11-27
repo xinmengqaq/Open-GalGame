@@ -7,6 +7,24 @@
   font-weight: 600;
 }
 
+.labelRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 20px;
+}
+
+.labelRow > label {
+  flex: 1;
+  min-width: 0;
+}
+
+.labelAccessory {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
 .optional {
   margin-left: 8px;
   color: #8a829c;
@@ -124,11 +142,72 @@
   line-height: 1.5;
 }
 
-:global([data-theme='workbench']) .error::before {
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: 50%;
-  background: currentColor;
-  content: '';
+:global([data-theme='home']) .field {
+  gap: 7px;
+  margin: 0 0 16px;
+  color: var(--ink-strong);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+:global([data-theme='home']) .optional {
+  margin-left: 7px;
+  color: var(--muted-soft);
+  font-weight: 550;
+}
+
+:global([data-theme='home']) .control {
+  min-height: 44px;
+  padding: 11px 14px;
+  border-color: transparent;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper-strong) 62%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 72%, transparent);
+  caret-color: var(--purple);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 500;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+:global([data-theme='home']) .control::placeholder {
+  color: var(--muted-soft);
+}
+
+:global([data-theme='home']) .control:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--paper-strong) 78%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+:global([data-theme='home']) .control:focus {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--paper-strong) 88%, transparent);
+  box-shadow:
+    0 0 0 2px var(--paper-strong),
+    0 0 0 5px color-mix(in srgb, var(--purple) 44%, transparent);
+  outline: none;
+}
+
+:global([data-theme='home']) .control:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+:global([data-theme='home']) .textarea {
+  min-height: 104px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+:global([data-theme='home']) .error {
+  color: var(--error);
+  font-size: 12px;
+  font-weight: 600;
 }
